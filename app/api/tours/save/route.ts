@@ -4,6 +4,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { foreignRateIds } from '@/lib/tours/org-scope'
 
 // Service-role client (route is session-gated by middleware). Previously used
 // the raw anon key inline — its WRITES to tours/tour_days/tour_pricing only
@@ -12,12 +14,28 @@ const supabase = createServerClient()
 
 export async function POST(request: NextRequest) {
   try {
+    // A tour is one company's (20261207): stamped with the caller's, and its
+    // days may only name that company's hotels, meals and guides.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { tour, pax, is_euro_passport, pricing } = await request.json()
+
+    const days: any[] = Array.isArray(tour?.days) ? tour.days : []
+    const foreign = await foreignRateIds(supabase, orgId, days.flatMap((day: any) => [
+      day.accommodation?.id, day.lunch_meal?.id, day.dinner_meal?.id, day.guide?.id,
+    ]))
+    if (foreign.length) {
+      return NextResponse.json(
+        { success: false, error: "A rate on this tour is not this company's", rate_ids: foreign },
+        { status: 400 }
+      )
+    }
 
     // 1. Save main tour
     const { data: tourData, error: tourError } = await supabase
       .from('tours')
       .insert({
+        org_id: orgId,
         tour_code: tour.tour_code,
         tour_name: tour.tour_name,
         duration_days: tour.duration_days,
@@ -39,6 +57,7 @@ export async function POST(request: NextRequest) {
     }
 
     const savedTourId = tourData.id
+    let activitiesNotSaved = 0
 
     // 2. Save tour days
     if (tour.days && tour.days.length > 0) {
@@ -55,7 +74,7 @@ export async function POST(request: NextRequest) {
         notes: day.notes || null
       }))
 
-      const { data: daysData, error: daysError } = await supabase
+      const { error: daysError } = await supabase
         .from('tour_days')
         .insert(daysToInsert)
         .select()
@@ -63,36 +82,25 @@ export async function POST(request: NextRequest) {
       if (daysError) {
         console.error('Error saving tour days:', daysError)
         // Rollback: delete the tour
-        await supabase.from('tours').delete().eq('id', savedTourId)
+        await supabase.from('tours').delete().eq('id', savedTourId).eq('org_id', orgId)
         return NextResponse.json(
           { success: false, error: clientMessage(daysError, 'Internal server error') },
           { status: 500 }
         )
       }
 
-      // 3. Save activities for each day
-      for (let i = 0; i < tour.days.length; i++) {
-        const day = tour.days[i]
-        const savedDay = daysData[i]
-
-        if (day.activities && day.activities.length > 0) {
-          const activitiesToInsert = day.activities.map((activity: any) => ({
-            tour_day_id: savedDay.id,
-            activity_order: activity.activity_order,
-            entrance_id: activity.entrance?.id || null,
-            transportation_id: activity.transportation?.id || null,
-            activity_notes: activity.activity_notes || null
-          }))
-
-          const { error: activitiesError } = await supabase
-            .from('tour_day_activities')
-            .insert(activitiesToInsert)
-
-          if (activitiesError) {
-            console.error('Error saving activities:', activitiesError)
-          }
-        }
-      }
+      // 3. Activities are NOT saved. This used to insert { tour_day_id,
+      //    activity_order, entrance_id, transportation_id, activity_notes }
+      //    into tour_day_activities — none of those columns exist: that table
+      //    is the TOUR MANAGER's day plan, keyed by template_id (NOT NULL,
+      //    → tour_templates) and day_number, and a legacy tour is no
+      //    template. Every insert failed and was only logged, so the
+      //    builder's activities were always lost. There is no table for a
+      //    legacy tour's activities; the response now says so instead of
+      //    reporting a full save. (The legacy builder, /tour-builder, is in
+      //    no menu — the tour manager, /tours/manage, replaced it.)
+      activitiesNotSaved = tour.days.reduce(
+        (n: number, day: any) => n + (Array.isArray(day.activities) ? day.activities.length : 0), 0)
     }
 
     // 4. Save pricing if provided
@@ -118,7 +126,13 @@ export async function POST(request: NextRequest) {
         tour_code: tour.tour_code,
         tour_name: tour.tour_name
       },
-      message: 'Tour saved successfully!'
+      message: 'Tour saved successfully!',
+      ...(activitiesNotSaved > 0
+        ? {
+            activities_not_saved: activitiesNotSaved,
+            warning: `The tour, its days and pricing were saved; its ${activitiesNotSaved} activit${activitiesNotSaved === 1 ? 'y was' : 'ies were'} not (the legacy builder has nowhere to keep them — build programmes in Tours › Manage).`,
+          }
+        : {}),
     })
 
   } catch (error) {

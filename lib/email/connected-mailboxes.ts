@@ -11,20 +11,30 @@
 //
 // A conversation whose address could not be worked out (mailbox_email NULL)
 // follows the user who synced it: shown while that user has a connection.
+//
+// Which company: email_conversations.org_id and gmail_tokens.org_id
+// (migration 20261204). Every list filters .eq('org_id', orgId) itself; this
+// adds "and its mailbox is connected IN THIS COMPANY" — the connections that
+// serve the organisation (gmail_tokens.org_id), not those of its members, so
+// a person in both companies has their mailbox in the one it serves only.
 
-type Db = { from: (table: string) => unknown }
-type TokenQuery = { select: (cols: string) => PromiseLike<{ data: Array<{ user_id: string | null; email: string | null }> | null; error: unknown }> }
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type Db = { from: (table: string) => any }
 
 export interface ConnectedMailboxes {
   emails: string[]
   userIds: string[]
 }
 
-export async function connectedMailboxes(db: Db): Promise<ConnectedMailboxes> {
-  const { data } = await (db.from('gmail_tokens') as TokenQuery).select('user_id, email')
+/** The organisation's connected mailboxes; none without an organisation or
+ *  when the read fails (a database error never widens what is shown). */
+export async function connectedMailboxes(db: Db, orgId: string | null): Promise<ConnectedMailboxes> {
+  if (!orgId) return { emails: [], userIds: [] }
+  const { data, error } = await db.from('gmail_tokens').select('user_id, email').eq('org_id', orgId)
+  if (error) return { emails: [], userIds: [] }
   const emails = new Set<string>()
   const userIds = new Set<string>()
-  for (const t of data ?? []) {
+  for (const t of (data ?? []) as Array<{ user_id: string | null; email: string | null }>) {
     const e = String(t.email ?? '').trim().toLowerCase()
     if (e) emails.add(e)
     if (t.user_id) userIds.add(t.user_id)
@@ -43,25 +53,14 @@ export function connectedMailboxFilter(m: ConnectedMailboxes): string {
   return parts.length ? parts.join(',') : 'id.is.null'
 }
 
-/** Before migration 20261128 has run there is no mailbox_email column. */
-export function isMissingMailboxColumn(error: unknown): boolean {
-  const e = error as { message?: unknown; code?: unknown } | null
-  return !!e && /mailbox_email/.test(String(e.message ?? '')) && (e.code === '42703' || e.code === 'PGRST204' || /does not exist|could not find/i.test(String(e.message ?? '')))
-}
-
 /**
- * Runs `build` scoped to the connected mailboxes; if the column is not there
- * yet, runs it again unscoped (as before) rather than failing the page.
+ * Runs `build` with the "connected in this organisation" filter. `build`
+ * scopes its query to the organisation (.eq('org_id', orgId)) itself.
  */
 export async function scopedToConnectedMailboxes<R extends { error: unknown }>(
   db: Db,
-  build: (filter: string | null) => PromiseLike<R>
+  orgId: string | null,
+  build: (filter: string) => PromiseLike<R>
 ): Promise<R> {
-  const filter = connectedMailboxFilter(await connectedMailboxes(db))
-  const scoped = await build(filter)
-  if (scoped.error && isMissingMailboxColumn(scoped.error)) {
-    console.warn('[email] mailbox_email missing — run migration 20261128; listing unscoped')
-    return build(null)
-  }
-  return scoped
+  return build(connectedMailboxFilter(await connectedMailboxes(db, orgId)))
 }

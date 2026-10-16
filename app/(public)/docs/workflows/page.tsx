@@ -162,17 +162,6 @@ export default function WorkflowsPage() {
           <li>The system shows helpful error messages when something goes wrong</li>
         </ul>
       </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200">
-        <Link
-          href="/docs/team-settings"
-          className="inline-flex items-center gap-2 text-sm font-medium text-gray-500 hover:text-gray-700 transition-colors"
-        >
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          Team &amp; Settings
-        </Link>
-      </div>
     </div>
   )
 }

@@ -1,6 +1,7 @@
 'use client'
 import { EGYPT_CITIES } from '@/lib/constants/egypt-cities'
 import { sampleTemplateCsv } from '@/lib/tours/template-csv'
+import { templateSaveBody, variationPayloads } from '@/lib/tours/template-form'
 
 export const dynamic = 'force-dynamic'
 
@@ -161,6 +162,9 @@ interface Attraction {
   city: string
   eur_rate: number
   non_eur_rate: number
+  /** The currency THIS row's rates were entered in (entrance_fees.rate_currency);
+   *  null = the company's rate currency. */
+  rate_currency?: string | null
 }
 
 type ViewMode = 'table' | 'cards' | 'compact'
@@ -280,6 +284,10 @@ const TIER_CONFIG = {
  *  which is how it came to be missing from this picker in the first place.
  *  The defaults are Standard's — the middle of the ladder is the least
  *  surprising starting point for a rung nobody has described yet. */
+/** The most rows /api/rates/entrance-fees returns in one answer (the
+ *  database API's row cap). A list this long may be cut short. */
+const ATTRACTIONS_PAGE = 1000
+
 const CUSTOM_TIER_CONFIG = {
   label: '',
   icon: '⭐',
@@ -334,17 +342,40 @@ interface AttractionDropdownProps {
   selectedAttractions: string[]
   onSelect: (attractionName: string) => void
   onRemove: (index: number) => void
+  /** The loaded list hit the server's row cap: search the server too. */
+  capped?: boolean
 }
 
-function AttractionDropdown({ attractions, selectedAttractions, onSelect, onRemove }: AttractionDropdownProps) {
-  // Entrance rates are stored in EUR per passport type; show them converted.
+function AttractionDropdown({ attractions, selectedAttractions, onSelect, onRemove, capped }: AttractionDropdownProps) {
+  // Each fee row is stored in its OWN rate_currency (an EGP fee stays EGP);
+  // converted from that to the display currency. Labelling every row as the
+  // company's rate currency showed an EGP fee about 50 times too high.
   const { formatWithConversion, rateCurrency } = useCurrency()
   const [searchTerm, setSearchTerm] = useState('')
   const [isOpen, setIsOpen] = useState(false)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  // Rows the server found for the search that the capped list did not hold.
+  const [found, setFound] = useState<Attraction[]>([])
+
+  useEffect(() => {
+    const term = searchTerm.trim()
+    if (!capped || term.length < 2) { setFound([]); return }
+    const controller = new AbortController()
+    const timer = setTimeout(async () => {
+      try {
+        const res = await fetch(`/api/rates/entrance-fees?active_only=true&is_addon=false&search=${encodeURIComponent(term)}`, { signal: controller.signal })
+        const json = await res.json()
+        if (json.success && Array.isArray(json.data)) setFound(json.data)
+      } catch { /* the loaded list still shows */ }
+    }, 300)
+    return () => { clearTimeout(timer); controller.abort() }
+  }, [searchTerm, capped])
+
+  const loadedIds = new Set(attractions.map(a => a.id))
+  const pool = [...attractions, ...found.filter(a => !loadedIds.has(a.id))]
 
   // Filter attractions based on search term and exclude already selected
-  const filteredAttractions = attractions.filter(a => 
+  const filteredAttractions = pool.filter(a => 
     a.attraction_name.toLowerCase().includes(searchTerm.toLowerCase()) &&
     !selectedAttractions.includes(a.attraction_name)
   )
@@ -391,6 +422,11 @@ function AttractionDropdown({ attractions, selectedAttractions, onSelect, onRemo
             placeholder="Search attractions to add..."
           />
         </div>
+        {capped && (
+          <p className="mt-1 text-xs text-amber-700">
+            Only the first {attractions.length} fees are listed. Type at least two letters to search all of them.
+          </p>
+        )}
 
         {/* Dropdown */}
         {isOpen && (
@@ -415,7 +451,7 @@ function AttractionDropdown({ attractions, selectedAttractions, onSelect, onRemo
                       <div>
                         <p className="text-sm text-gray-900">{attr.attraction_name}</p>
                         <p className="text-xs text-gray-500">
-                          EU passport: {formatWithConversion(attr.eur_rate, rateCurrency)} / Non-EU: {formatWithConversion(attr.non_eur_rate, rateCurrency)}
+                          EU passport: {formatWithConversion(attr.eur_rate, attr.rate_currency || rateCurrency)} / Non-EU: {formatWithConversion(attr.non_eur_rate, attr.rate_currency || rateCurrency)}
                         </p>
                       </div>
                       <Plus className="w-4 h-4 text-gray-400 group-hover:text-green-600" />
@@ -459,6 +495,10 @@ function AttractionDropdown({ attractions, selectedAttractions, onSelect, onRemo
 interface ItineraryEditorProps {
   itinerary: ItineraryDay[]
   onChange: (itinerary: ItineraryDay[]) => void
+  /** The template being edited (none while creating) and the tour type on
+   *  screen: the preview prices a day tour as a day trip, like the engine. */
+  templateId?: string | null
+  tourType?: string
 }
 
 /** The choice model groups a stay by accommodation_type; a template day says
@@ -472,7 +512,7 @@ const stayDays = (days: ItineraryDay[]) =>
 const cruiseEmbark = (days: ItineraryDay[]) => days.find(d => d.is_cruise_day)?.city ?? null
 const cruiseNights = (days: ItineraryDay[]) => days.filter(d => d.is_cruise_day).length || null
 
-function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
+function ItineraryEditor({ itinerary, onChange, templateId, tourType }: ItineraryEditorProps) {
   const { confirmDelete } = useConfirmDialog()
   /** Which day is open for editing. A day used to be read-only once added,
    *  so correcting a typo meant deleting it and typing it again — with the
@@ -540,7 +580,10 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
           // derives accommodation_type the way pricing will. Handing it a
           // pre-derived one would put a hotel night on the departure day.
           // A template has no pax of its own — 2 is only for the costs shown.
-          body: JSON.stringify({ days: itinerary, num_pax: 2 }),
+          // The tour type on screen (and the template, when editing) make the
+          // preview read the package the way Calculate Price does: a one-day
+          // template is a day trip, with no airport transfers.
+          body: JSON.stringify({ days: itinerary, num_pax: 2, template_id: templateId || undefined, tour_type: tourType || undefined }),
           signal: controller.signal,
         })
         const json = await res.json()
@@ -554,7 +597,7 @@ function ItineraryEditor({ itinerary, onChange }: ItineraryEditorProps) {
       }
     }, 500)
     return () => { clearTimeout(timer); controller.abort() }
-  }, [itinerary])
+  }, [itinerary, templateId, tourType])
 
   /** Change one day, leaving every other day alone. */
   const patchDay = (index: number, patch: Partial<ItineraryDay>) =>
@@ -933,25 +976,18 @@ function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVaria
     }
 
     setSaving(true)
-    
-    const variations = Array.from(selectedTiers).map(tier => {
-      const config = TIER_CONFIG[tier as keyof typeof TIER_CONFIG]
-      const groupType = groupTypes[tier]
-      
-      return {
-        template_id: template.id,
-        variation_name: `${template.template_name} - ${config.label}`,
-        tier: tier,
-        group_type: groupType,
-        min_pax: config.defaults.min_pax,
-        max_pax: config.defaults.max_pax,
-        vehicle_type: config.defaults.vehicle_type,
-        accommodation_standard: config.defaults.accommodation_standard,
-        meal_quality: config.defaults.meal_quality
-      }
-    })
 
     try {
+      // Inside the try: whatever goes wrong is shown and the button frees.
+      const variations = variationPayloads({
+        templateId: template.id,
+        templateName: template.template_name,
+        tiers: selectedTiers,
+        groupTypes,
+        configFor: tier => TIER_CONFIG[tier as keyof typeof TIER_CONFIG],
+        fallback: CUSTOM_TIER_CONFIG.defaults,
+        labelFor: tier => tierOptions.find(o => o.value === tier)?.label ?? tier,
+      })
       const response = await fetch('/api/tours/variations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -968,7 +1004,7 @@ function AddVariationModal({ template, onClose, onSuccess, showToast }: AddVaria
         showToast('error', data.error || 'Failed to create variations')
       }
     } catch (error) {
-      showToast('error', 'Failed to create variations')
+      showToast('error', `Failed to create variations${error instanceof Error && error.message ? `: ${error.message}` : ''}`)
     } finally {
       setSaving(false)
     }
@@ -1123,17 +1159,18 @@ export default function TourManagerContent() {
   // ranges when the vocabulary is empty.
   const tourTypeRanges = tourTypeOptions.map(o => ({ key: o.value, meta: o.meta }))
   // Themes were the one picker 20261010 left out, on the mistaken reasoning
-  // that a table meant they were already customizable. /api/tours/categories
-  // has a POST that nothing calls and there was no screen to add, rename or
-  // remove a theme — see migration 20261011.
+  // that a table meant they were already customizable. There was no screen
+  // to add, rename or remove a theme — see migration 20261011. The table and
+  // its /api/tours/categories route are gone (20261207).
   const themeOptions = useVocabOptions('tour_theme', [])
   const physicalLevelOptions = useVocabOptions('physical_level', PHYSICAL_LEVELS)
   // "Best for" is label-valued — see the note on BEST_FOR_OPTIONS.
   const bestForOptions = useVocabOptions('tour_audience', BEST_FOR_OPTIONS.map(o => ({ value: o, label: o })))
-  const { confirmDelete } = useConfirmDialog()
+  const { confirmDelete, confirm } = useConfirmDialog()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [templates, setTemplates] = useState<TourTemplate[]>([])
   const [attractions, setAttractions] = useState<Attraction[]>([])  // NEW: Attractions from DB
+  const [attractionsCapped, setAttractionsCapped] = useState(false)
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedTheme, setSelectedTheme] = useState('all')  // Renamed from selectedCategory
@@ -1236,15 +1273,19 @@ export default function TourManagerContent() {
   }
 
 
-  // NEW: Fetch attractions from entrance_fees table
+  // The company's active entrance fees, add-ons left out by the server. It
+  // used to take the first 500 rows of ALL fees (add-ons included, ordered by
+  // city) and drop add-ons here — so a large fee table lost the attractions
+  // of cities late in the alphabet without a word. The server answers at
+  // most ATTRACTIONS_PAGE rows; when it does, the list says so and the
+  // dropdown searches the server for the rest.
   const fetchAttractions = async () => {
     try {
-      const response = await fetch('/api/rates/entrance-fees?limit=500')
+      const response = await fetch('/api/rates/entrance-fees?active_only=true&is_addon=false')
       const data = await response.json()
       if (data.success && data.data) {
-        // Filter out add-ons, keep only main attractions
-        const mainAttractions = data.data.filter((a: any) => !a.is_addon)
-        setAttractions(mainAttractions)
+        setAttractions(data.data)
+        setAttractionsCapped(data.data.length >= ATTRACTIONS_PAGE)
       }
     } catch (error) {
       console.error('Error fetching attractions:', error)
@@ -1392,13 +1433,6 @@ export default function TourManagerContent() {
       ...prev,
       itinerary
     }))
-  }
-
-  const generateTemplateCode = () => {
-    const city = formData.cities_covered[0] || 'EGYPT'
-    const type = formData.tour_type.toUpperCase().replace('_', '-')
-    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
-    return `${city.substring(0, 3).toUpperCase()}-${type.substring(0, 3)}-${random}`
   }
 
   // The sheet to start a bulk upload from: headers + one example row. Fill in a
@@ -1550,25 +1584,18 @@ export default function TourManagerContent() {
     setShowModal(true)
   }
 
+  // The server copies the whole programme — variations (with their costed
+  // services, day plans and translations), day activities and language
+  // versions — under a fresh code built from the SOURCE template's city and
+  // type. It used to POST the metadata only, under a code built from
+  // whatever the form last held, so the copy had no tiers to price.
   const handleDuplicate = async (template: TourTemplate) => {
     try {
-      const response = await fetch('/api/tours/templates', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...template,
-          id: undefined,
-          template_code: generateTemplateCode(),
-          template_name: `${template.template_name} (Copy)`,
-          created_at: undefined,
-          updated_at: undefined
-        })
-      })
-      
+      const response = await fetch(`/api/tours/templates/${template.id}/duplicate`, { method: 'POST' })
       const data = await response.json()
-      
       if (data.success) {
-        showToast('success', `Duplicated: ${template.template_name}`)
+        const n = data.data?.variations_copied ?? 0
+        showToast('success', `Duplicated: ${template.template_name} → ${data.data?.template_code} (${n} variation${n === 1 ? '' : 's'})`)
         fetchTemplates()
       } else {
         showToast('error', data.error || 'Failed to duplicate')
@@ -1580,91 +1607,120 @@ export default function TourManagerContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    const dataToSubmit = {
-      ...formData,
-      template_code: formData.template_code || generateTemplateCode()
-    }
-    
+
+    // Only the fields this form shows (lib/tours/template-form): a field it
+    // has no input for keeps its stored value. A blank code is generated by
+    // the server.
+    const dataToSubmit = templateSaveBody(formData)
+
+    let created: { id: string } | null = null
     try {
-      const url = editingTemplate 
+      const url = editingTemplate
         ? `/api/tours/templates/${editingTemplate.id}`
         : '/api/tours/templates'
-      
+
       const method = editingTemplate ? 'PUT' : 'POST'
-      
+
       const response = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataToSubmit)
       })
-      
-      const data = await response.json()
-      
-      if (data.success) {
-        // If creating new template AND variations are selected, create them
-        if (!editingTemplate && newTemplateVariations.size > 0 && data.data?.id) {
-          const variations = Array.from(newTemplateVariations).map(tier => {
-            const config = TIER_CONFIG[tier as keyof typeof TIER_CONFIG]
-            return {
-              template_id: data.data.id,
-              variation_name: `${formData.template_name} - ${config.label}`,
-              tier: tier,
-              group_type: newTemplateGroupTypes[tier],
-              min_pax: config.defaults.min_pax,
-              max_pax: config.defaults.max_pax,
-              vehicle_type: config.defaults.vehicle_type,
-              accommodation_standard: config.defaults.accommodation_standard,
-              meal_quality: config.defaults.meal_quality
-            }
-          })
 
-          const varResponse = await fetch('/api/tours/variations', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(variations)
-          })
-          
-          const varData = await varResponse.json()
-          
-          if (varData.success) {
-            showToast('success', `${formData.template_name} created with ${varData.data.length} variation(s)!`)
-          } else {
-            showToast('info', `Template created, but failed to create variations: ${varData.error}`)
-          }
-        } else {
-          showToast('success', editingTemplate 
-            ? `${formData.template_name} updated!` 
-            : `${formData.template_name} created!`)
-        }
-        
-        setShowModal(false)
-        fetchTemplates()
-      } else {
+      const data = await response.json()
+
+      if (!data.success) {
         showToast('error', data.error || 'Failed to save')
+        return
       }
+      if (!editingTemplate) created = data.data ?? null
+      if (data.warning) showToast('info', data.warning)
     } catch (error) {
       showToast('error', 'Failed to save template')
+      return
     }
+
+    // The template is saved. From here on the modal closes whatever happens,
+    // so a variation failure can never invite a second "Create" that makes a
+    // twin template — the missing tiers are added with + Add Variation.
+    if (created?.id && newTemplateVariations.size > 0) {
+      try {
+        const variations = variationPayloads({
+          templateId: created.id,
+          templateName: formData.template_name,
+          tiers: newTemplateVariations,
+          groupTypes: newTemplateGroupTypes,
+          configFor: tier => TIER_CONFIG[tier as keyof typeof TIER_CONFIG],
+          fallback: CUSTOM_TIER_CONFIG.defaults,
+          labelFor: tier => tierOptions.find(o => o.value === tier)?.label ?? tier,
+        })
+        const varResponse = await fetch('/api/tours/variations', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(variations)
+        })
+        const varData = await varResponse.json()
+        if (varData.success) {
+          showToast('success', `${formData.template_name} created with ${varData.data.length} variation(s)!`)
+        } else {
+          showToast('error', `Template created, but its variations were not: ${varData.error || 'unknown error'}. Add them with + Add Variation.`)
+        }
+      } catch (error) {
+        showToast('error', 'Template created, but its variations were not. Add them with + Add Variation.')
+      }
+    } else {
+      showToast('success', editingTemplate
+        ? `${formData.template_name} updated!`
+        : `${formData.template_name} created!`)
+    }
+
+    setShowModal(false)
+    fetchTemplates()
   }
 
+  // A template that quotes, departures, trips, partner prices or seat holds
+  // use is refused by the server (409, with the counts). The dialog then says
+  // why and offers Deactivate: the programme leaves the catalogue and the
+  // pickers, and every record that uses it keeps it.
   const handleDelete = async (id: string, name: string) => {
-    const confirmed = await confirmDelete(name, `This will permanently delete "${name}" including all its variations and days.`)
+    const confirmed = await confirmDelete(name, `This will permanently delete "${name}" including all its variations and days. A template that quotes, departures, trips or partner prices use cannot be deleted; you will be offered Deactivate instead.`)
     if (!confirmed) return
-    
+
     try {
       const response = await fetch(`/api/tours/templates/${id}`, {
         method: 'DELETE'
       })
-      
+
       const data = await response.json()
-      
+
       if (data.success) {
         showToast('success', `${name} deleted!`)
         fetchTemplates()
-      } else {
-        showToast('error', data.error || 'Failed to delete')
+        return
       }
+      if (response.status === 409 && data.can_deactivate) {
+        const deactivate = await confirm({
+          title: 'Cannot delete',
+          message: data.error,
+          confirmText: 'Deactivate',
+          variant: 'warning',
+        })
+        if (!deactivate) return
+        const res = await fetch(`/api/tours/templates/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ is_active: false }),
+        })
+        const put = await res.json()
+        if (put.success) {
+          showToast('success', `${name} deactivated`)
+          fetchTemplates()
+        } else {
+          showToast('error', put.error || 'Failed to deactivate')
+        }
+        return
+      }
+      showToast('error', data.error || 'Failed to delete')
     } catch (error) {
       showToast('error', 'Failed to delete template')
     }
@@ -2479,11 +2535,15 @@ export default function TourManagerContent() {
                       <span className="text-xs text-gray-700">Active</span>
                     </label>
                     <label className="flex items-center gap-2 cursor-pointer">
+                      {/* pricing_mode: 'auto' lets the engine price the
+                          template's "from" price; 'manual' keeps it off
+                          (lib/tours/cached-price). It was bound to
+                          uses_day_builder, which no save wrote. */}
                       <input
                         type="checkbox"
-                        name="uses_day_builder"
-                        checked={formData.uses_day_builder}
-                        onChange={handleCheckboxChange}
+                        name="pricing_mode"
+                        checked={formData.pricing_mode !== 'manual'}
+                        onChange={e => setFormData(prev => ({ ...prev, pricing_mode: e.target.checked ? 'auto' : 'manual' }))}
                         className="w-4 h-4 text-purple-600 border-gray-300 rounded"
                       />
                       <span className="text-xs text-gray-700">⚡ Auto-Pricing</span>
@@ -2527,13 +2587,14 @@ export default function TourManagerContent() {
                   <div>
                     <label className="block text-xs font-medium text-gray-600 mb-2">
                       Main Attractions
-                      <span className="ml-2 text-gray-400 font-normal">({attractions.length} available)</span>
+                      <span className="ml-2 text-gray-400 font-normal">({attractions.length}{attractionsCapped ? '+' : ''} available)</span>
                     </label>
                     <AttractionDropdown
                       attractions={attractions}
                       selectedAttractions={formData.main_attractions}
                       onSelect={addAttraction}
                       onRemove={removeAttraction}
+                      capped={attractionsCapped}
                     />
                   </div>
 
@@ -2542,6 +2603,8 @@ export default function TourManagerContent() {
                     <ItineraryEditor
                       itinerary={formData.itinerary}
                       onChange={handleItineraryChange}
+                      templateId={editingTemplate?.id ?? null}
+                      tourType={formData.tour_type}
                     />
                   </div>
 

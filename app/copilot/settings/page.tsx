@@ -37,7 +37,7 @@ export default function CopilotSettingsPage() {
     if (!user?.id) return
     const fetchSettings = async () => {
       try {
-        const res = await fetch(`/api/copilot/settings?user_id=${user.id}`)
+        const res = await fetch('/api/copilot/settings') // the signed-in user's, resolved server-side
         const data = await res.json()
         if (data.success && data.settings?.tone) {
           setTone(data.settings.tone)
@@ -60,7 +60,7 @@ export default function CopilotSettingsPage() {
       const res = await fetch('/api/copilot/settings', {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: user.id, tone: newTone }),
+        body: JSON.stringify({ tone: newTone }),
       })
       const data = await res.json()
       if (data.success) {

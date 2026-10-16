@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { orgAuth } from '@/lib/auth/org-auth'
-import { mergeCapacityEntry } from '@/lib/capacity-availability'
+import { capacityInputError, mergeCapacityEntry } from '@/lib/capacity-availability'
 
 // ============================================
 // SINGLE DATE CAPACITY API
@@ -128,13 +128,11 @@ export async function PUT(request: NextRequest, { params }: RouteParams) {
       )
     }
 
-    // Validate status if provided
-    const validStatuses = ['available', 'limited', 'busy', 'blackout']
-    if (body.status && !validStatuses.includes(body.status)) {
-      return NextResponse.json(
-        { success: false, error: `Invalid status. Must be one of: ${validStatuses.join(', ')}` },
-        { status: 400 }
-      )
+    // Status one of the four; counts whole numbers ≥ 0 (max guides and
+    // vehicles may be null — no limit). Nothing checked the counts.
+    const bad = capacityInputError(body && typeof body === 'object' ? body : {})
+    if (bad) {
+      return NextResponse.json({ success: false, error: bad }, { status: 400 })
     }
 
     // Prepare update data: what the body leaves out keeps the day's stored

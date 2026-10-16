@@ -97,7 +97,7 @@ describe('determineTransportNeeds with the operator\'s list', () => {
 })
 
 describe('pricing follows the list', () => {
-  const BASE = { templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0, numPax: 2 }
+  const BASE = { orgId: 'org-1', templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0, numPax: 2 }
   const transport = (r: any, dayNumber: number) =>
     (r.services ?? []).filter((s: any) => s.dayNumber === dayNumber && s.serviceType === 'transportation')
 

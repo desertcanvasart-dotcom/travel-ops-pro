@@ -1,9 +1,10 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { useConfirm } from '@/components/ConfirmDialog'
+import NotificationEmailPreferences from '@/components/NotificationEmailPreferences'
 import {
   Bell,
   Check,
@@ -36,6 +37,7 @@ interface Notification {
 
 export default function NotificationsPage() {
   const t = useTranslations('notifications')
+  const locale = useLocale()
   const confirmDialog = useConfirm()
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
@@ -123,6 +125,7 @@ export default function NotificationsPage() {
       case 'task_completed': return '✅'
       case 'whatsapp_assigned': return '💬'
       case 'whatsapp_new_message': return '📱'
+      case 'email_assigned': return '✉️'
       case 'whatsapp_mention': return '🔔'
       case 'invoice_paid': return '💰'
       case 'booking_confirmed': return '🎉'
@@ -139,6 +142,7 @@ export default function NotificationsPage() {
       case 'task_completed': return 'bg-green-50 border-l-green-500'
       case 'whatsapp_assigned': return 'bg-emerald-50 border-l-[#25D366]'
       case 'whatsapp_new_message': return 'bg-emerald-50 border-l-[#25D366]'
+      case 'email_assigned': return 'bg-blue-50 border-l-blue-500'
       case 'whatsapp_mention': return 'bg-emerald-50 border-l-[#25D366]'
       case 'invoice_paid': return 'bg-blue-50 border-l-blue-500'
       case 'booking_confirmed': return 'bg-purple-50 border-l-purple-500'
@@ -147,13 +151,12 @@ export default function NotificationsPage() {
     }
   }
 
+  // t() does not throw on a missing key — it renders the key path — so an
+  // unlabelled type is checked for, and spelled out from its name.
   const getTypeLabel = (type: string) => {
-    const typeKey = `types.${type}` as any
-    try {
-      return t(typeKey)
-    } catch {
-      return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
-    }
+    const typeKey = `types.${type}`
+    if (t.has(typeKey)) return t(typeKey as any)
+    return type.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
   }
 
   const formatDate = (dateStr: string) => {
@@ -169,7 +172,7 @@ export default function NotificationsPage() {
     if (diffHours < 24) return t('time.hoursAgo', { hours: diffHours })
     if (diffDays === 1) return t('time.yesterday')
     if (diffDays < 7) return t('time.daysAgo', { days: diffDays })
-    return date.toLocaleDateString('ja-JP', { month: 'short', day: 'numeric', year: 'numeric' })
+    return date.toLocaleDateString(locale === 'ja' ? 'ja-JP' : 'en-GB', { month: 'short', day: 'numeric', year: 'numeric' })
   }
 
   // Filter notifications
@@ -258,13 +261,11 @@ export default function NotificationsPage() {
             <option value="">{t('filters.allTypes')}</option>
             <optgroup label={t('groups.whatsapp')}>
               <option value="whatsapp_assigned">💬 {t('types.whatsapp_assigned')}</option>
-              <option value="whatsapp_new_message">📱 {t('types.whatsapp_new_message')}</option>
             </optgroup>
             <optgroup label={t('groups.tasks')}>
               <option value="task_assigned">📋 {t('types.task_assigned')}</option>
               <option value="task_due_soon">⏰ {t('types.task_due_soon')}</option>
               <option value="task_overdue">🚨 {t('types.task_overdue')}</option>
-              <option value="task_completed">✅ {t('types.task_completed')}</option>
             </optgroup>
             {types.filter(type => !type.startsWith('whatsapp_') && !type.startsWith('task_')).map(type => (
               <option key={type} value={type}>{getNotificationIcon(type)} {getTypeLabel(type)}</option>
@@ -272,6 +273,8 @@ export default function NotificationsPage() {
           </select>
         </div>
       </div>
+
+      <NotificationEmailPreferences />
 
       {/* Stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

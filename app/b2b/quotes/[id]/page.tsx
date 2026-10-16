@@ -17,8 +17,10 @@ import QuoteRevisions from '@/components/QuoteRevisions'
 import ConvertToBookingCard from '@/app/components/ConvertToBookingCard'
 import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
-import { useCurrency } from '@/app/contexts/PreferencesContext'
-import { useConfirm } from '@/components/ConfirmDialog'
+import { formatMoney } from '@/lib/currency-totals'
+import { readVat, totalWithVat } from '@/lib/vat'
+import { VatToken, VatToggle } from '@/app/components/Vat'
+import { useConfirm, useConfirmDialog } from '@/components/ConfirmDialog'
 import { quoteCompleteness, describeGaps } from '@/lib/pricing/quote-completeness'
 
 // ============================================
@@ -60,6 +62,12 @@ interface Quote {
   currency: string
   status: string
   converted_to_itinerary_id: string | null
+  /** 'converted' or 'booked': only the notes can change any more. */
+  locked?: 'converted' | 'booked' | null
+  /** Recorded VAT (lib/vat.ts): on top of selling_price when applied. */
+  vat_applied?: boolean
+  vat_rate?: number | null
+  vat_amount?: number
   valid_until: string
   notes: string | null
   created_at: string
@@ -103,11 +111,12 @@ interface Quote {
 }
 
 export default function QuoteDetailPage() {
-  const { rateSymbol } = useCurrency()
   const params = useParams()
   const quoteId = params?.id as string
   const t = useTranslations('b2bQuotes')
+  const tVat = useTranslations('vat')
   const confirmDialog = useConfirm()
+  const dialog = useConfirmDialog()
 
   const [quote, setQuote] = useState<Quote | null>(null)
   const [loading, setLoading] = useState(true)
@@ -148,10 +157,51 @@ export default function QuoteDetailPage() {
       })
       const data = await res.json()
       if (data.success) {
-        setQuote({ ...quote, status: newStatus })
+        setQuote({ ...quote, status: data.data?.status ?? newStatus, valid_until: data.data?.valid_until ?? quote.valid_until })
+      } else {
+        // Refused (expired offer, converted or booked quote): the reason.
+        await dialog.alert(t('updateStatus'), data.error || t('updateStatus'), 'warning')
       }
     } catch (err) {
       console.error('Failed to update status:', err)
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  // VAT on or off. The server records the company's rate and the amount on
+  // this quote's net; a converted or booked quote keeps the VAT it had.
+  const updateVat = async (on: boolean) => {
+    if (!quote) return
+    setUpdating(true)
+    try {
+      const res = await fetch(`/api/b2b/quotes/${quoteId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vat_applied: on, change_reason: on ? 'VAT applied' : 'VAT removed' })
+      })
+      const data = await res.json()
+      if (data.success) setQuote({ ...quote, vat_applied: data.data.vat_applied, vat_rate: data.data.vat_rate, vat_amount: data.data.vat_amount })
+      else await dialog.alert(t('pricing'), data.error || t('pricing'), 'warning')
+    } finally {
+      setUpdating(false)
+    }
+  }
+
+  // How long the offer stands. Extending it is how an expired offer is
+  // reopened; the server refuses to accept one past its date.
+  const updateValidUntil = async (value: string) => {
+    if (!quote || !value || value === quote.valid_until) return
+    setUpdating(true)
+    try {
+      const res = await fetch(`/api/b2b/quotes/${quoteId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ valid_until: value, change_reason: 'Valid-until changed' })
+      })
+      const data = await res.json()
+      if (data.success) setQuote({ ...quote, valid_until: data.data.valid_until, status: data.data.status })
+      else await dialog.alert(t('validUntil'), data.error || t('validUntil'), 'warning')
     } finally {
       setUpdating(false)
     }
@@ -211,9 +261,12 @@ export default function QuoteDetailPage() {
       if (data.success) {
         // Refresh quote to get the new version
         fetchQuote()
+      } else {
+        await dialog.alert(t('versionFailed'), data.error || t('versionFailed'), 'warning')
       }
     } catch (err) {
       console.error('Failed to create version:', err)
+      await dialog.alert(t('versionFailed'), t('versionFailed'), 'warning')
     }
   }
 
@@ -230,9 +283,13 @@ export default function QuoteDetailPage() {
         // Refresh quote to get the new version
         fetchQuote()
         setActiveLanguage(lang)
+      } else {
+        // A failed translation used to leave the button doing nothing.
+        await dialog.alert(t('versionFailed'), data.error || t('versionFailed'), 'warning')
       }
     } catch (err) {
       console.error('Failed to copy and translate:', err)
+      await dialog.alert(t('versionFailed'), t('versionFailed'), 'warning')
     }
   }
 
@@ -259,6 +316,7 @@ export default function QuoteDetailPage() {
       accepted: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle2, label: t('statusAccepted') },
       rejected: { bg: 'bg-red-100', text: 'text-red-700', icon: XCircle, label: t('statusRejected') },
       converted: { bg: 'bg-purple-100', text: 'text-purple-700', icon: ArrowRightCircle, label: t('statusConverted') },
+      expired: { bg: 'bg-amber-100', text: 'text-amber-700', icon: Clock, label: t('statusExpired') },
     }
     const style = styles[status] || styles.draft
     const Icon = style.icon
@@ -277,6 +335,7 @@ export default function QuoteDetailPage() {
       accepted: t('statusAccepted'),
       rejected: t('statusRejected'),
       converted: t('statusConverted'),
+      expired: t('statusExpired'),
     }
     return labels[status] || status
   }
@@ -327,6 +386,9 @@ export default function QuoteDetailPage() {
   const itinerarySource = quote.itineraries
   const services = quote.services_snapshot || []
   const completeness = quoteCompleteness(services)
+  // Every amount in the quote's own currency and that currency's decimals —
+  // not the org's current rate currency (which can change after the quote).
+  const money = (v: number | null | undefined) => formatMoney(Number(v) || 0, quote.currency || 'EUR')
 
   const downloadPdf = async () => {
     const url = `/api/b2b/quotes/${quote.id}/pdf`
@@ -471,7 +533,7 @@ export default function QuoteDetailPage() {
                           badge={gaps > 0 && (
                             <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">{t('dayGaps', { count: gaps })}</span>
                           )}
-                          total={`${rateSymbol}${total.toFixed(2)}`}
+                          total={money(total)}
                           hasGaps={gaps > 0}
                         />
                         {group.lines.map((service: any, idx: number) => (
@@ -486,8 +548,8 @@ export default function QuoteDetailPage() {
                               )}
                             </td>
                             <td className="px-4 py-2 text-right">{service.quantity || 1}</td>
-                            <td className={`px-4 py-2 text-right ${service.unpriced ? 'text-red-700' : ''}`}>{rateSymbol}{(service.unit_cost || 0).toFixed(2)}</td>
-                            <td className={`px-4 py-2 text-right font-medium ${service.unpriced ? 'text-red-700' : ''}`}>{rateSymbol}{(service.line_total || 0).toFixed(2)}</td>
+                            <td className={`px-4 py-2 text-right ${service.unpriced ? 'text-red-700' : ''}`}>{money(service.unit_cost)}</td>
+                            <td className={`px-4 py-2 text-right font-medium ${service.unpriced ? 'text-red-700' : ''}`}>{money(service.line_total)}</td>
                           </tr>
                         ))}
                       </Fragment>
@@ -533,16 +595,16 @@ export default function QuoteDetailPage() {
             <div className="space-y-3">
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">{t('subtotal')}</span>
-                <span>{rateSymbol}{quote.total_cost?.toFixed(2)}</span>
+                <span>{money(quote.total_cost)}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-gray-600">{t('margin')} ({quote.margin_percent}%)</span>
-                <span className="text-green-600">{rateSymbol}{quote.margin_amount?.toFixed(2)}</span>
+                <span className="text-green-600">{money(quote.margin_amount)}</span>
               </div>
               {quote.tour_leader_included && quote.tour_leader_cost && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">{t('tourLeaderCost')}</span>
-                  <span className="text-blue-600">{rateSymbol}{quote.tour_leader_cost.toFixed(2)}</span>
+                  <span className="text-blue-600">{money(quote.tour_leader_cost)}</span>
                 </div>
               )}
               {/* Without this line the three figures above do not add up to the
@@ -555,21 +617,39 @@ export default function QuoteDetailPage() {
                       percent: quote.season_uplift_percent ?? 0,
                     })}
                   </span>
-                  <span className="text-[#4a5c35]">{rateSymbol}{quote.season_uplift_amount.toFixed(2)}</span>
+                  <span className="text-[#4a5c35]">{money(quote.season_uplift_amount)}</span>
                 </div>
               )}
               <div className="pt-3 border-t">
                 <div className="flex justify-between">
                   <span className="font-medium">{t('sellingPrice')}</span>
-                  <span className="text-xl font-bold text-[#647C47]">{rateSymbol}{quote.selling_price?.toFixed(2)}</span>
+                  <span className="text-xl font-bold text-[#647C47]">{money(quote.selling_price)}</span>
                 </div>
-                <p className="text-xs text-gray-500 text-right mt-1">{rateSymbol}{quote.price_per_person?.toFixed(2)} {t('perPersonLong')}</p>
+                <p className="text-xs text-gray-500 text-right mt-1">{money(quote.price_per_person)} {t('perPersonLong')}</p>
+              </div>
+              {/* VAT, always stated (lib/vat.ts): on top of the selling price. */}
+              <div className="pt-3 border-t space-y-2">
+                <VatToken vat={readVat(quote)} currency={quote.currency} />
+                {readVat(quote).vat_applied && (
+                  <div className="flex justify-between">
+                    <span className="font-medium">{tVat('totalInclVat')}</span>
+                    <span className="text-lg font-bold text-[#647C47]">{money(totalWithVat(quote.selling_price, readVat(quote), quote.currency))}</span>
+                  </div>
+                )}
+                {!quote.locked && quote.status !== 'converted' && (
+                  <VatToggle
+                    checked={readVat(quote).vat_applied}
+                    rate={readVat(quote).vat_applied ? readVat(quote).vat_rate : undefined}
+                    disabled={updating}
+                    onChange={updateVat}
+                  />
+                )}
               </div>
               {quote.single_supplement && quote.single_supplement > 0 && (
                 <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                   <div className="flex justify-between text-sm">
                     <span className="text-amber-800">{t('singleSupplement')}</span>
-                    <span className="font-medium text-amber-700">{rateSymbol}{quote.single_supplement.toFixed(2)}</span>
+                    <span className="font-medium text-amber-700">{money(quote.single_supplement)}</span>
                   </div>
                 </div>
               )}
@@ -610,7 +690,7 @@ export default function QuoteDetailPage() {
                 <button
                   key={status}
                   onClick={() => updateStatus(status)}
-                  disabled={updating || quote.status === status || quote.status === 'converted'}
+                  disabled={updating || quote.status === status || quote.status === 'converted' || !!quote.locked}
                   className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors ${
                     quote.status === status
                       ? 'bg-[#647C47] text-white'
@@ -677,6 +757,16 @@ export default function QuoteDetailPage() {
               <Calendar className="w-4 h-4 text-gray-400" />
               {formatDate(quote.valid_until, 'long')}
             </p>
+            {!quote.locked && quote.status !== 'converted' && (
+              <input
+                type="date"
+                aria-label={t('validUntil')}
+                defaultValue={quote.valid_until?.slice(0, 10) ?? ''}
+                disabled={updating}
+                onBlur={(e) => updateValidUntil(e.target.value)}
+                className="mt-2 w-full border rounded-lg px-2 py-1 text-sm bg-white"
+              />
+            )}
           </div>
 
           {/* Revision history */}

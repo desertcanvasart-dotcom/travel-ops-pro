@@ -368,7 +368,7 @@ describe('the grid surfaces what the gate found', () => {
   })
 
   it('the rates route sends the dates the grid needs to show them', () => {
-    const src = readFileSync(join(process.cwd(), 'app/api/pricing-grid/rates/route.ts'), 'utf8')
+    const src = readFileSync(join(process.cwd(), 'app/api/pricing-grid/rate-options.ts'), 'utf8')
     // Every option carries its periods WITH their prices — hotels, cruises and
     // flights alike. A flight's single rate_valid_from/to pair is only the
     // first period's mirror since migration 20261025.

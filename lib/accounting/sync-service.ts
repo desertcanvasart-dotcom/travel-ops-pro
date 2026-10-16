@@ -26,8 +26,12 @@ function getSupabaseAdmin() {
  *
  * Keyed on org, not user: the connection belongs to the tenant whose books it
  * writes to (accounting_tokens.org_id is NOT NULL, stamped by the OAuth
- * callback from the org the user had active). Returns null when the org has
- * no active connection — callers must then skip, never borrow another org's.
+ * callback from the org the user had active). Since 20270104 a company has
+ * one row per provider and at most ONE active row (a partial unique index),
+ * so this reads THE company's connection, whoever connected it — the order
+ * below only matters on a database that predates that index. Returns null
+ * when the org has no active connection — callers must then skip, never
+ * borrow another org's.
  */
 export async function getAuthenticatedProvider(orgId: string): Promise<{
   provider: AccountingProvider

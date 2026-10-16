@@ -16,6 +16,11 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // the mutations (below) and in-route, not on the pages: a manager opens
   // Settings and User Management, reads the Activity Log, and cannot invite,
   // change a role, edit the vocabulary or the company identity.
+  // An agent's own pages under Settings: their preferences, their Gmail and
+  // signatures, and their profile and password. Before '/settings' (first match).
+  '/settings/preferences': ['admin', 'manager', 'agent'],
+  '/settings/email': ['admin', 'manager', 'agent'],
+  '/settings/profile': ['admin', 'manager', 'agent'],
   '/settings': ['admin', 'manager'],
   '/activity': ['admin', 'manager'],
   '/users': ['admin', 'manager'],
@@ -23,6 +28,9 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // Admin and Manager
   '/team-members': ['admin', 'manager'],
   '/departments': ['admin', 'manager'],
+  // People › Partners: the managers' screen. With no entry here any member —
+  // an agent included — opened it by URL.
+  '/b2b/partners': ['admin', 'manager'],
   '/financial-reports': ['admin', 'manager'],
   '/receipts': ['admin', 'manager'],
   '/supplier-invoices': ['admin', 'manager'],
@@ -31,6 +39,9 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/accounts-receivable': ['admin', 'manager'],
   '/accounts-payable': ['admin', 'manager'],
   '/rates': ['admin', 'manager'],
+  // Suppliers & Rates: the supplier roster is the managers' screen; with no
+  // entry here any member opened it by URL.
+  '/suppliers': ['admin', 'manager'],
   '/hotels': ['admin', 'manager'],
   '/restaurants': ['admin', 'manager'],
   '/guides': ['admin', 'manager'],
@@ -40,6 +51,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // Admin, Manager, Agent
   '/clients': ['admin', 'manager', 'agent'],
   '/itineraries': ['admin', 'manager', 'agent'],
+  '/bookings': ['admin', 'manager', 'agent'],
   '/invoices': ['admin', 'manager', 'agent'],
   '/payments': ['admin', 'manager', 'agent'],
   '/tasks': ['admin', 'manager', 'agent'],
@@ -48,14 +60,60 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/whatsapp-parser': ['admin', 'manager', 'agent'],
   '/contacts': ['admin', 'manager', 'agent'],
   '/followups': ['admin', 'manager', 'agent'],
+  // Tours. Tour Manager (templates, variations, their options) and Transport
+  // Packages are the managers' screens; '/tours' (Ready-made Packages) is
+  // every staff role's — agents start a B2B quote there ("Quote this tour").
+  // The specific keys come BEFORE '/tours' (the first matching key wins).
+  '/tours/manage': ['admin', 'manager'],
+  '/tours/variations': ['admin', 'manager'],
+  '/b2b/pricing-rules': ['admin', 'manager'],
   '/tours': ['admin', 'manager', 'agent'],
   '/expenses': ['admin', 'manager'],
   '/reminders': ['admin', 'manager', 'agent'],
-  
+  // Customer conversations and the AI copilot's drafts — the menu shows these
+  // to agent and above; a viewer opened them by URL.
+  '/communications': ['admin', 'manager', 'agent'],
+  '/copilot': ['admin', 'manager', 'agent'],
+  '/copilot-knowledge': ['admin', 'manager', 'agent'],
+  '/concierge-briefs': ['admin', 'manager', 'agent'],
+  // Message templates send to real customers and partners — the menu shows
+  // the screen to agents and above; a viewer opened it by URL.
+  '/templates': ['admin', 'manager', 'agent'],
+  // Content library and writing rules (/content-library/rules): the menu
+  // shows them to managers and above, and their API is admin/manager.
+  '/content-library': ['admin', 'manager'],
+  // Sell. The menu shows Pricing Grid, B2B Quotes and Order Intake to agents
+  // and above (decided 2026-10-13: agents price and quote, reaching the grid
+  // from the inboxes and the trip editor, and the B2B calculator from the
+  // WhatsApp parser), B2C Quotes to managers and above. With no entry here a
+  // viewer opened all of them by URL.
+  '/pricing-grid': ['admin', 'manager', 'agent'],
+  '/b2b/quotes': ['admin', 'manager', 'agent'],
+  '/b2b/calculator': ['admin', 'manager', 'agent'],
+  '/intake/order': ['admin', 'manager', 'agent'],
+  '/b2c/quotes': ['admin', 'manager'],
+  // Operate. Departures, Capacity, Documents and Guest Surveys are the
+  // managers' screens in the menu; with no entry here any member opened them
+  // by URL. Agents still open a single voucher, contract, invoice or receipt
+  // from a trip, booking or payment — those pages come BEFORE '/documents'
+  // (the first matching key wins).
+  '/departures': ['admin', 'manager'],
+  '/capacity': ['admin', 'manager'],
+  '/surveys': ['admin', 'manager'],
+  '/documents/supplier': ['admin', 'manager', 'agent'],
+  '/documents/contract': ['admin', 'manager', 'agent'],
+  '/documents/invoice': ['admin', 'manager', 'agent'],
+  '/documents/receipt': ['admin', 'manager', 'agent'],
+  '/documents': ['admin', 'manager'],
+
   // All authenticated users (including viewer)
   '/dashboard': ['admin', 'manager', 'agent', 'viewer'],
   '/analytics': ['admin', 'manager'],
-  '/calendar': ['admin', 'manager', 'agent', 'viewer'],
+  // The menu shows it to agents and above; with no entry here a viewer could
+  // open it by URL (its data is behind the staff-only /api/copilot gate).
+  '/copilot-analytics': ['admin', 'manager', 'agent'],
+  // The menu shows the Calendar (Sell) to agents and above.
+  '/calendar': ['admin', 'manager', 'agent'],
   '/notifications': ['admin', 'manager', 'agent', 'viewer'],
 }
 
@@ -71,9 +129,14 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   { prefix: '/api/payments', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/commissions', roles: ['admin', 'manager'] },
   { prefix: '/api/supplier-invoices', roles: ['admin', 'manager'] },
-  { prefix: '/api/expenses', roles: ['admin', 'manager', 'agent'] },
+  { prefix: '/api/expenses', roles: ['admin', 'manager'] },
   // The season calendar sets what customers are charged on the operator's own
   // high dates — a pricing decision, same audience as the rate tables.
+  // The Pricing Grid prices and saves a trip from the stored rates: agents
+  // and above, like the menu (Sell). It writes no rate. MUST precede
+  // '/api/pricing' — .find() takes the first match, and that prefix also
+  // matches '/api/pricing-grid'.
+  { prefix: '/api/pricing-grid', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/pricing', roles: ['admin', 'manager'] },
 
   // ---- Cost base (manager and above) ----
@@ -84,7 +147,6 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   // tables the whole pricing engine reads from.
   { prefix: '/api/rates', roles: ['admin', 'manager'] },
   { prefix: '/api/supplier-rates', roles: ['admin', 'manager'] },
-  { prefix: '/api/pricing-grid', roles: ['admin', 'manager'] },
   { prefix: '/api/suppliers', roles: ['admin', 'manager'] },
   { prefix: '/api/vehicles', roles: ['admin', 'manager'] },
   { prefix: '/api/guides', roles: ['admin', 'manager'] },
@@ -109,10 +171,20 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   // own second workspace. The route is still membership-checked in itself.
   { prefix: '/api/organizations/mine', roles: ['owner', 'admin', 'manager', 'agent', 'viewer'] },
   { prefix: '/api/organization', roles: ['admin'] },
+  // Connecting or disconnecting Xero/QuickBooks decides where every invoice,
+  // payment and expense is pushed: an admin's decision (Settings audit).
+  { prefix: '/api/auth/accounting', roles: ['admin'] },
+  // The company's own words (44 lists): admin-only, as the page renders.
+  { prefix: '/api/vocabulary', roles: ['admin'] },
   { prefix: '/api/invitations', roles: ['admin'] },
   // Email, notification and WhatsApp-AI settings are operating configuration,
   // not organisation administration: manager and above, like the rate
   // tables. Payment terms keep their own owner-only check in-route.
+  // Except your OWN notification email preferences: every role gets
+  // notifications, so every role chooses whether they also arrive by email
+  // (the /notifications page). The route writes only the caller's row. MUST
+  // precede '/api/settings' — .find() takes the first match.
+  { prefix: '/api/settings/notifications', roles: ['admin', 'manager', 'agent', 'viewer'] },
   { prefix: '/api/settings', roles: ['admin', 'manager'] },
   { prefix: '/api/integrations', roles: ['admin'] },
   { prefix: '/api/partners', roles: ['admin', 'manager'] },
@@ -129,18 +201,46 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   // the general '/api/b2b' entry below — .find() takes the first match.
   { prefix: '/api/b2b/pricing-rules', roles: ['admin', 'manager'] },
   { prefix: '/api/b2b/transport-packages', roles: ['admin', 'manager'] },
+  // Editing, deactivating and deleting a partner are the managers' (People ›
+  // Partners). Creating one stays agent-and-above — the WhatsApp parser's
+  // quick-create — and is the bare '/api/b2b/partners', which this prefix
+  // (with its trailing slash) does not match. MUST precede '/api/b2b'.
+  { prefix: '/api/b2b/partners/', roles: ['admin', 'manager'] },
   { prefix: '/api/b2b', roles: ['admin', 'manager', 'agent'] },
-  { prefix: '/api/b2c', roles: ['admin', 'manager', 'agent'] },
+  // B2C offers are the managers' (the menu's B2C Quotes).
+  { prefix: '/api/b2c', roles: ['admin', 'manager'] },
+  // Order Intake turns an order into a client, a quote and seat holds; the
+  // Email Inbox lists and dismisses website orders. It had no entry, so a
+  // viewer could do all of it.
+  { prefix: '/api/intake', roles: ['admin', 'manager', 'agent'] },
+  // Rates › Extras is a manager screen; the B2B calculator only reads it.
+  { prefix: '/api/extras-catalogue', roles: ['admin', 'manager'] },
   { prefix: '/api/itineraries', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/bookings', roles: ['admin', 'manager', 'agent'] },
+  // Building the catalogue — templates, variations, their days and the bulk
+  // CSV — is Tour Manager's, which the menu gives to managers and above (RLS
+  // on these tables requires it too). Agents browse and price ready-made
+  // tours (Tour Inventory) through the general entry below.
+  { prefix: '/api/tours/templates', roles: ['admin', 'manager'] },
+  { prefix: '/api/tours/variations', roles: ['admin', 'manager'] },
+  { prefix: '/api/tours/days', roles: ['admin', 'manager'] },
+  { prefix: '/api/tours/bulk', roles: ['admin', 'manager'] },
   { prefix: '/api/tours', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/templates', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/tasks', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/reminders', roles: ['admin', 'manager', 'agent'] },
-  { prefix: '/api/content-library', roles: ['admin', 'manager', 'agent'] },
+  // Content library, writing rules and prompts are the Communicate menu's
+  // manager-and-above screens, and their tables' RLS lets only a manager write
+  // (20261208) — an agent's write would fail there anyway; refuse it here
+  // with a clear 403. Reads stay open: generation reads them for every role.
+  { prefix: '/api/content-library', roles: ['admin', 'manager'] },
   { prefix: '/api/itinerary-resources', roles: ['admin', 'manager', 'agent'] },
-  { prefix: '/api/capacity', roles: ['admin', 'manager', 'agent'] },
-  { prefix: '/api/departures', roles: ['admin', 'manager', 'agent'] },
+  // Operate's Capacity and Departures are the managers' screens; agents used
+  // neither but could write both (and delete a whole range of capacity).
+  { prefix: '/api/capacity', roles: ['admin', 'manager'] },
+  { prefix: '/api/departures', roles: ['admin', 'manager'] },
+  { prefix: '/api/surveys', roles: ['admin', 'manager'] },
+  { prefix: '/api/followups', roles: ['admin', 'manager', 'agent'] },
 
   // ---- Outbound messaging (agent and above) ----
   // Anything that puts a message in front of a real customer, supplier or
@@ -151,6 +251,8 @@ const API_MUTATION_PERMISSIONS: Array<{ prefix: string; roles: string[] }> = [
   { prefix: '/api/email', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/gmail', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/copilot', roles: ['admin', 'manager', 'agent'] },
+  // Reviewing an AI Concierge brief is staff work.
+  { prefix: '/api/concierge-briefs', roles: ['admin', 'manager', 'agent'] },
   { prefix: '/api/supplier-documents', roles: ['admin', 'manager', 'agent'] },
 ]
 // Deliberately NOT listed, and therefore session-only for every role: the
@@ -175,10 +277,14 @@ const FINANCIAL_API_PREFIXES = [
   '/api/supplier-invoices',
   '/api/accounts-receivable',
   '/api/accounts-payable',
+  // Reads a supplier bill to fill the Bills form: that screen is manager-and-above.
+  '/api/ai/parse-supplier-invoice',
   '/api/analytics',
   // The accounting integration's chart of accounts and sync status are
   // financial data — manager and above, reads included.
   '/api/accounting',
+  // Which accounting company the org syncs to.
+  '/api/auth/accounting/status',
   // Rate management — supplier costs. The Rates pages are manager-and-above,
   // but their APIs answered any signed-in account (operator, 2026-10-11).
   // Only what the Rates screens use: the pickers agents need to build a trip
@@ -197,6 +303,18 @@ const FINANCIAL_API_PREFIXES = [
   '/api/rates/cruises',
   '/api/suppliers/export',
   '/api/suppliers/import',
+  // B2C offers: cost, margin and the client's details. The B2C Quotes screen
+  // is the only reader, and the menu shows it to managers and above.
+  '/api/b2c',
+  // Transport packages: supplier costs, read only by the managers' Tours ›
+  // Transport Packages screen and server-side by the pricing engine.
+  '/api/b2b/transport-packages',
+  // Operate's manager screens: departure prices, margins and internal notes,
+  // the capacity calendar, and every guest's survey answers (with the token
+  // that lets the answers be overwritten). No agent screen reads them.
+  '/api/departures',
+  '/api/capacity',
+  '/api/surveys',
   // B2B margins and markups. The Pricing Rules page is manager-and-above;
   // its API answered any member, viewers included (AUDIT H16).
   '/api/b2b/pricing-rules',
@@ -213,19 +331,67 @@ const STAFF_ONLY_API_PREFIXES = [
   '/api/whatsapp',
   '/api/unified',
   '/api/copilot',
+  // Concierge briefs: the visitor name, contact details, medical and
+  // religious constraints — PII, like the conversations above.
+  '/api/concierge-briefs',
   '/api/email',
   '/api/gmail',
   '/api/ai',
   '/api/translate',
+  // Message templates: the wording staff send to customers and partners, and
+  // the template-data routes fill them with client and trip details. The
+  // /templates screen is agent-and-above.
+  '/api/templates',
   // Rates, suppliers and pricing: costs. Agents price trips with them; a
   // viewer's pages (dashboard, calendar, notifications) use none of them.
-  // (/api/guides and /api/vehicles stay open: the calendar lists them.)
+  // /api/guides and /api/vehicles: guide contacts and rates, per-guide trip
+  // revenue and clients. They were left viewer-open for the calendar, which
+  // is agent-and-above now.
   '/api/rates',
   '/api/pricing',
   '/api/pricing-grid',
   '/api/suppliers',
   '/api/resources',
   '/api/cruises',
+  '/api/guides',
+  '/api/vehicles',
+  // Read by the Email Inbox and Communicate (agent and above) only: the
+  // signed-in user's mailbox status and signature, and the partner contacts
+  // the inbox's "insert partner" picker lists. Writes stay manager-and-above
+  // (the '/api/settings' and '/api/partners' entries above).
+  '/api/settings/email',
+  '/api/partners',
+  // Sell: trips, bookings, quotes and orders carry cost, margin and customer
+  // details. Only writes were gated, so a viewer — whose screens (dashboard,
+  // notifications) read none of these — could GET them all.
+  '/api/itineraries',
+  '/api/bookings',
+  '/api/itinerary-resources',
+  '/api/trip-events',
+  '/api/b2b',
+  '/api/intake',
+  '/api/extras-catalogue',
+  // Operate: tasks (assignee emails, booking checklists), follow-ups (client
+  // phone and email), supplier vouchers (costs, supplier contacts), the
+  // 日程表 / ops sheet, and payments (the invoice and receipt pages). Only
+  // writes were gated; a viewer could read them all.
+  '/api/tasks',
+  '/api/followups',
+  // People: client records (date of birth, dietary and accessibility needs,
+  // passport type) and the roster (phone, email, notes). Only writes were
+  // gated; a viewer, whose screens read none of these, could GET them all.
+  '/api/clients',
+  '/api/team-members',
+  '/api/departments',
+  // The tour catalogue: templates, the bulk CSV export and variation
+  // services carry supplier costs. A viewer's screens read none of it.
+  '/api/tours',
+  '/api/supplier-documents',
+  '/api/documents',
+  '/api/payments',
+  // Invoices: client emails, balances and reminders. Agents issue them, a
+  // viewer's screens read none of it.
+  '/api/invoices',
 ]
 
 export async function middleware(request: NextRequest, event: NextFetchEvent) {
@@ -506,6 +672,22 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     }
   }
 
+  // The roster, pending invitations and members list (names, emails, roles)
+  // are read by the admin and manager screens only. EXACT paths: /api/profiles/[id]
+  // stays self-service, and invitation accept/verify are self-auth.
+  const ADMIN_MANAGER_READ_PATHS = new Set(['/api/profiles', '/api/organization/members', '/api/invitations'])
+  if (
+    isApiRoute &&
+    user &&
+    !isSelfAuthApi &&
+    request.method === 'GET' &&
+    ADMIN_MANAGER_READ_PATHS.has(request.nextUrl.pathname)
+  ) {
+    if (!roleAllows(await membershipRole(user.id), ['admin', 'manager'])) {
+      return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+    }
+  }
+
   // Role-gate financial API MUTATIONS (the routes use the RLS-bypassing
   // service-role key, so this is the authorization layer for them).
   if (
@@ -519,23 +701,6 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
   }
 
   if (isApiRoute && user && MUTATING_METHODS.has(request.method)) {
-    // AUDIT TRAIL: every authenticated mutating API call is recorded here —
-    // the one chokepoint no screen or code path can route around. Deferred
-    // via waitUntil so the request never waits on the log write.
-    event.waitUntil(
-      recordActivity({
-        user_id: user.id,
-        user_email: user.email ?? null,
-        method: request.method,
-        path: request.nextUrl.pathname,
-        ip: clientIp(request.headers),
-        user_agent: request.headers.get('user-agent'),
-        // The workspace the request acts in (the same cookie the role gate
-        // and getCurrentOrgId() honour), not an arbitrary first membership.
-        active_org_id: request.cookies.get(ACTIVE_ORG_COOKIE)?.value ?? null,
-      })
-    )
-
     const matched = API_MUTATION_PERMISSIONS.find(p =>
       request.nextUrl.pathname.startsWith(p.prefix)
     )
@@ -556,6 +721,24 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
         return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
       }
     }
+
+    // AUDIT TRAIL: every authenticated mutating API call that PASSES the role
+    // gate above is recorded here (a refused request changed nothing) —
+    // the one chokepoint no screen or code path can route around. Deferred
+    // via waitUntil so the request never waits on the log write.
+    event.waitUntil(
+      recordActivity({
+        user_id: user.id,
+        user_email: user.email ?? null,
+        method: request.method,
+        path: request.nextUrl.pathname,
+        ip: clientIp(request.headers),
+        user_agent: request.headers.get('user-agent'),
+        // The workspace the request acts in (the same cookie the role gate
+        // and getCurrentOrgId() honour), not an arbitrary first membership.
+        active_org_id: request.cookies.get(ACTIVE_ORG_COOKIE)?.value ?? null,
+      })
+    )
   }
 
   // If user is not logged in and trying to access a protected page

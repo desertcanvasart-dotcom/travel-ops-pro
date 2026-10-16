@@ -81,8 +81,13 @@ export function periodTitle(
 /** The rate fields each catalog's periods carry, in display order.
  *  `guide_rate` is the property's special per-night rate for a throughout
  *  guide travelling with the group (the operator's "+1") — one number, no
- *  passport split, because the guide is Egyptian either way. 0 = not
- *  entered, which prices as a HOLE, never a free bed. */
+ *  passport split, because the guide is Egyptian either way. BLANK IS NOT
+ *  ZERO: a blank guide rate is left out of the period's rates (guideRateOf
+ *  reads it as null), 0 is stored as 0. For a hotel or ship, null is an
+ *  unpriced hole and 0 is a bed the supplier gives free; for a flight, null
+ *  means the guide pays the customer fare and 0 is a free seat. Storing
+ *  blank as 0 made the two indistinguishable — and a flight guide's seat
+ *  cost nothing (2026-12). */
 export const RATE_FIELDS = {
   accommodation: [
     'pp_double_eur', 'single_supp_eur', 'triple_red_eur',
@@ -119,9 +124,47 @@ export const SUPPLEMENT_FIELD = /^supp:([a-z0-9][a-z0-9_]{0,59}):(eur|non_eur)$/
 
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
+/** The guide's rate on a period, or null when none was entered. 0 is a real
+ *  number here (free), never "blank" — see RATE_FIELDS. */
+export function guideRateOf(rates: Record<string, unknown> | null | undefined): number | null {
+  const v = rates?.guide_rate
+  if (v === null || v === undefined || v === '') return null
+  const n = Number(v)
+  return Number.isFinite(n) && n >= 0 ? n : null
+}
+
+/** Why a seasons payload from a form or API body cannot be saved, or null when
+ *  it can. A save path calls this BEFORE sanitizeSeasons: sanitizeSeasons is
+ *  tolerant (it also reads stored rows), and its tolerance used to turn one
+ *  backwards period into "no periods at all" — the whole list erased and the
+ *  save reported as a success. Refused instead, with the period named. */
+export function seasonsPayloadError(input: unknown, entity: RateSeasonEntity): string | null {
+  if (input === null || input === undefined) return null
+  if (!Array.isArray(input)) return 'Rate periods must be a list.'
+  for (const raw of input) {
+    if (!raw || typeof raw !== 'object') return 'Each rate period must be an object.'
+    const s = raw as Record<string, unknown>
+    const from = typeof s.from === 'string' ? s.from.trim() : ''
+    const to = typeof s.to === 'string' ? s.to.trim() : ''
+    if (!ISO_DATE.test(from) || !ISO_DATE.test(to)) continue
+    const label = typeof s.name === 'string' && s.name.trim() ? `"${s.name.trim()}"` : `${from} – ${to}`
+    if (to < from) return `Rate period ${label} ends (${to}) before it starts (${from}). Fix its dates, then save again.`
+    const src = (s.rates && typeof s.rates === 'object' ? s.rates : {}) as Record<string, unknown>
+    for (const [field, value] of Object.entries(src)) {
+      if (!(RATE_FIELDS[entity] as readonly string[]).includes(field) && !SUPPLEMENT_FIELD.test(field)) continue
+      if (value === null || value === undefined || value === '') continue
+      const n = Number(value)
+      if (!Number.isFinite(n)) return `Rate period ${label}: ${field} is not a number.`
+      if (n < 0) return `Rate period ${label}: ${field} cannot be negative.`
+    }
+  }
+  return null
+}
+
 /** Parse/validate a seasons payload from a form or API body. Returns null when
  *  the input is absent or unusable (never throws — a bad payload should read as
- *  "no periods entered", falling back to the legacy columns, not a 500). */
+ *  "no periods entered", falling back to the legacy columns, not a 500).
+ *  Save paths refuse a bad payload first with seasonsPayloadError. */
 export function sanitizeSeasons(input: unknown, entity: RateSeasonEntity): RateSeason[] | null {
   if (!Array.isArray(input) || input.length === 0) return null
   const seasons: RateSeason[] = []
@@ -144,7 +187,12 @@ export function sanitizeSeasons(input: unknown, entity: RateSeasonEntity): RateS
       const n = value === null || value === undefined || value === '' ? 0 : Number(value)
       return Number.isFinite(n) && n >= 0 ? n : 0
     }
-    for (const field of RATE_FIELDS[entity]) rates[field] = readRate(src[field])
+    for (const field of RATE_FIELDS[entity]) {
+      // A blank guide rate stays OUT of the period (see RATE_FIELDS): 0 would
+      // read as "free" for a hotel bed and as a free flight seat.
+      if (field === 'guide_rate' && guideRateOf(src) === null) continue
+      rates[field] = readRate(src[field])
+    }
     // The agency's supplements, keyed by vocabulary key. Only well-formed
     // fields survive: the shape is the contract, the list is the agency's.
     for (const field of Object.keys(src)) {
@@ -323,6 +371,9 @@ export function seasonsFromFlightColumns(input: object): RateSeason[] {
   const to = typeof row.rate_valid_to === 'string' ? row.rate_valid_to.slice(0, 10) : ''
   const rates: Record<string, number> = {}
   for (const field of RATE_FIELDS.flight) {
+    // A NULL guide_rate is "the guide pays the customer fare" — Number(null)
+    // is 0, which read as a free seat.
+    if (field === 'guide_rate' && guideRateOf(row) === null) continue
     const value = Number(row[field])
     if (Number.isFinite(value)) rates[field] = value
   }
@@ -408,7 +459,7 @@ export function periodRatesFor(
 export function legacyColumnMirror(
   seasons: RateSeason[] | null,
   entity: RateSeasonEntity
-): Record<string, string | number> {
+): Record<string, string | number | null> {
   const first = seasons?.[0]
   if (!first) return {}
   if (entity === 'accommodation') {
@@ -432,7 +483,8 @@ export function legacyColumnMirror(
       tax_eur: first.rates.tax_eur,
       base_rate_non_eur: first.rates.base_rate_non_eur,
       tax_non_eur: first.rates.tax_non_eur,
-      guide_rate: first.rates.guide_rate,
+      // Blank stays NULL (guide pays the customer fare), never 0.
+      guide_rate: guideRateOf(first.rates),
     }
   }
   return {
@@ -451,4 +503,47 @@ export function legacyColumnMirror(
     rate_double_eur: first.rates.double_eur,
     rate_triple_eur: first.rates.triple_eur,
   }
+}
+
+/** The columns that let a hotel or ship's OLD low/high/peak windows price
+ *  again, set to NULL. Written when an edit removes every period: without
+ *  it `seasons` went null, seasonsForRow fell back to the legacy windows the
+ *  form re-sends from the row (and the default windows a new rate carries),
+ *  and "Low / High / Peak Season" came back at their old prices. With these
+ *  cleared the row has no periods and no base rate — every night is an
+ *  unpriced hole until periods are entered again, which is what the
+ *  operator asked for. Flights keep {}: their single window is the period. */
+export function clearedLegacyColumns(entity: RateSeasonEntity): Record<string, null> {
+  const cols = entity === 'accommodation'
+    ? [
+        'low_season_from', 'low_season_to', 'high_season_from', 'high_season_to',
+        'peak_season_from', 'peak_season_to', 'peak_season_2_from', 'peak_season_2_to',
+        'pp_double_eur', 'single_supp_eur', 'triple_red_eur',
+        'pp_double_non_eur', 'single_supp_non_eur', 'triple_red_non_eur',
+      ]
+    : entity === 'cruise'
+      ? [
+          'low_season_start', 'low_season_end', 'high_season_start', 'high_season_end',
+          'peak_season_1_start', 'peak_season_1_end', 'peak_season_2_start', 'peak_season_2_end',
+          'rate_low_single_eur', 'rate_low_double_eur', 'rate_low_triple_eur', 'rate_low_suite_eur',
+          'rate_low_single_non_eur', 'rate_low_double_non_eur', 'rate_low_triple_non_eur', 'rate_low_suite_non_eur',
+          'rate_single_eur', 'rate_double_eur', 'rate_triple_eur',
+        ]
+      : []
+  return Object.fromEntries(cols.map(c => [c, null]))
+}
+
+/** Everything a hotel or ship save writes for the periods a body SENT: the
+ *  list, plus the first period mirrored onto the base columns — or, when
+ *  the list is empty, `seasons: []` and the legacy columns cleared (see
+ *  clearedLegacyColumns). Call only when the body carries `seasons`, after
+ *  seasonsPayloadError. */
+export function seasonsWrite(
+  input: unknown,
+  entity: 'accommodation' | 'cruise'
+): Record<string, unknown> {
+  const seasons = sanitizeSeasons(input, entity)
+  return seasons?.length
+    ? { seasons, ...legacyColumnMirror(seasons, entity) }
+    : { seasons: [], ...clearedLegacyColumns(entity) }
 }

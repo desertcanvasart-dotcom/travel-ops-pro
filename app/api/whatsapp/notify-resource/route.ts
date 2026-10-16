@@ -49,6 +49,7 @@ export async function POST(request: NextRequest) {
       const { data: rate, error: rateError } = await supabase
         .from('transportation_rates')
         .select('*, supplier:supplier_id (id, name, contact_phone, whatsapp, contact_email)')
+        .eq('org_id', orgId)
         .eq('id', resourceId)
         .single()
 
@@ -65,6 +66,7 @@ export async function POST(request: NextRequest) {
           .from('suppliers')
           .select('*')
           .eq('id', resourceId)
+          .eq('org_id', orgId)
           .single()
 
         if (supplierData) {
@@ -81,6 +83,7 @@ export async function POST(request: NextRequest) {
       const { data: meal } = await supabase
         .from('meal_rates')
         .select('restaurant_name, supplier:supplier_id (id, name, contact_phone, whatsapp, phone2)')
+        .eq('org_id', orgId)
         .eq('id', resourceId)
         .maybeSingle()
       const supplier = (meal as { supplier?: any } | null)?.supplier
@@ -91,13 +94,14 @@ export async function POST(request: NextRequest) {
         const { data: contact } = await supabase
           .from('restaurant_contacts')
           .select('name, phone, whatsapp')
+          .eq('org_id', orgId)
           .eq('id', resourceId)
           .maybeSingle()
         if (contact) {
           resource = { name: contact.name }
           resourcePhone = contact.whatsapp || contact.phone || null
         } else {
-          const { data: supplierData } = await supabase.from('suppliers').select('*').eq('id', resourceId).maybeSingle()
+          const { data: supplierData } = await supabase.from('suppliers').select('*').eq('id', resourceId).eq('org_id', orgId).maybeSingle()
           if (supplierData) {
             resource = supplierData
             resourcePhone = supplierData.contact_phone || supplierData.whatsapp || supplierData.phone2
@@ -111,6 +115,7 @@ export async function POST(request: NextRequest) {
         .from('suppliers')
         .select('*')
         .eq('id', resourceId)
+        .eq('org_id', orgId) // the caller's company's (suppliers.org_id, 20261205)
         .single()
 
       if (resourceError || !supplierData) {

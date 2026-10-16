@@ -8,10 +8,11 @@
 //
 // The office's addresses: the office rule (lib/email/office-addresses — the
 // connected mailboxes, Settings → Email → Office addresses, and the mailbox's
-// own domain unless a public one), plus every team member's and every member
-// of the organisation's own login email. Ported from autoura-saas (#611).
+// own domain unless a public one), plus the organisation's own team members'
+// and members' login emails — never another company's staff (team_members
+// carries org_id since 20261203). Ported from autoura-saas (#611).
 
-import { bareAddress, isOfficeAddress, type OfficeRule } from './office-addresses'
+import { bareAddress, isOfficeAddress, officeRule, type OfficeRule } from './office-addresses'
 import { loadOfficeRule } from './office-addresses-server'
 
 export interface OwnAddresses {
@@ -33,8 +34,8 @@ type Db = { from(table: string): any; rpc(fn: string, args: Record<string, unkno
 /** The office's addresses for an organisation. A read that fails adds nothing. */
 export async function loadOwnAddresses(db: Db, orgId: string | null): Promise<OwnAddresses> {
   const [rule, team, members] = await Promise.all([
-    loadOfficeRule(db),
-    db.from('team_members').select('email'),
+    orgId ? loadOfficeRule(db, orgId) : Promise.resolve(officeRule([], [])),
+    orgId ? db.from('team_members').select('email').eq('org_id', orgId) : Promise.resolve({ data: [] }),
     orgId ? db.from('organization_members').select('user_id').eq('org_id', orgId) : Promise.resolve({ data: [] }),
   ])
   const ids = ((members?.data ?? []) as { user_id: string | null }[]).map(m => m.user_id).filter(Boolean) as string[]

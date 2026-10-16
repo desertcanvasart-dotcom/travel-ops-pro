@@ -2,17 +2,14 @@
 
 import { useState, useCallback } from 'react'
 import { CopilotThreadList, CopilotReviewPanel } from '@/components/copilot'
-import { useCopilotPoller } from '@/lib/hooks/use-copilot-poller'
-import { useAuth } from '@/app/contexts/AuthContext'
 import type { CopilotThreadWithLatest } from '@/types/copilot'
 
 export default function CopilotPage() {
-  const { user } = useAuth()
   const [selectedThread, setSelectedThread] = useState<CopilotThreadWithLatest | null>(null)
   const [refreshKey, setRefreshKey] = useState(0)
 
-  // Poll for draft_pending messages and trigger generation
-  useCopilotPoller({ userId: user?.id || null, enabled: !!user })
+  // Drafts for new messages are written on the server every minute
+  // (app/api/cron/copilot-drafts), whether or not this screen is open.
 
   const handleSelectThread = useCallback((thread: CopilotThreadWithLatest) => {
     setSelectedThread(thread)

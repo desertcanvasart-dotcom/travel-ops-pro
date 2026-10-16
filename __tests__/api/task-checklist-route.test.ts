@@ -35,6 +35,11 @@ vi.mock('@supabase/supabase-js', () => ({
   }),
 }))
 
+vi.mock('@/lib/auth/current-org', () => ({
+  getCurrentOrgId: async () => 'org-a',
+  noOrgResponse: () => new Response(null, { status: 403 }),
+}))
+
 const { PATCH } = await import('@/app/api/tasks/[id]/checklist/route')
 
 const row = (key: string, booked = false) => ({
@@ -46,7 +51,7 @@ const call = (body: unknown) =>
   PATCH({ json: async () => body } as never, { params: Promise.resolve({ id: 't1' }) })
 
 beforeEach(() => {
-  task = { id: 't1', status: 'todo', updated_at: 'v1', completed_at: null, checklist: [row('A'), row('B')] }
+  task = { id: 't1', org_id: 'org-a', status: 'todo', updated_at: 'v1', completed_at: null, checklist: [row('A'), row('B')] }
   interleave = null
   writes = 0
 })
@@ -81,5 +86,12 @@ describe('task checklist PATCH', () => {
     expect((await call({ key: 'Z', booked: true })).status).toBe(404)
     task!.checklist = null
     expect((await call({ key: 'A', booked: true })).status).toBe(400)
+  })
+
+  it("another company's task is 404 and unchanged", async () => {
+    task!.org_id = 'org-b'
+    expect((await call({ key: 'A', booked: true })).status).toBe(404)
+    expect(task!.checklist[0].booked).toBe(false)
+    expect(writes).toBe(0)
   })
 })

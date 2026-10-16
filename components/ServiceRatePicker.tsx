@@ -40,10 +40,10 @@ interface ServiceRatePickerProps {
 // HELPERS
 // ============================================
 
-function normalizeRates(serviceType: string, data: any[], paxCount: number): RateItem[] {
+export function normalizeRates(serviceType: string, data: any[], paxCount: number): RateItem[] {
   switch (serviceType) {
     case 'meal':
-      return data.map(r => ({
+      return data.filter(convertible).map(r => ({
         id: r.id,
         name: `${r.restaurant_name}${r.meal_type ? ` - ${r.meal_type}` : ''}${r.tier ? ` (${r.tier})` : ''}`,
         city: r.city || null,
@@ -51,7 +51,7 @@ function normalizeRates(serviceType: string, data: any[], paxCount: number): Rat
         rate_non_eur: r.base_rate_non_eur || r.base_rate_eur || 0,
         supplier_id: r.supplier_id || null,
         supplier_name: r.supplier_name || r.supplier?.name || null,
-        details: [r.cuisine_type, r.meal_type].filter(Boolean).join(' · ')
+        details: [r.cuisine_type, r.meal_type, r.per_person_rate === false ? 'per group' : null].filter(Boolean).join(' · ')
       }))
 
     case 'transportation':
@@ -71,7 +71,7 @@ function normalizeRates(serviceType: string, data: any[], paxCount: number): Rat
       }).filter(r => r.rate_eur > 0)
 
     case 'guide':
-      return data.map(r => ({
+      return data.filter(convertible).map(r => ({
         id: r.id,
         name: `${r.guide_language || 'Guide'} ${r.guide_type || ''} - ${r.tour_duration || 'full_day'}`,
         city: r.city || null,
@@ -83,7 +83,7 @@ function normalizeRates(serviceType: string, data: any[], paxCount: number): Rat
       }))
 
     case 'entrance':
-      return data.map(r => ({
+      return data.filter(convertible).map(r => ({
         id: r.id,
         name: r.attraction_name,
         city: r.city || null,
@@ -95,7 +95,7 @@ function normalizeRates(serviceType: string, data: any[], paxCount: number): Rat
       }))
 
     case 'activity':
-      return data.map(r => ({
+      return data.filter(convertible).map(r => ({
         id: r.id,
         name: r.activity_name,
         city: r.city || null,
@@ -111,16 +111,23 @@ function normalizeRates(serviceType: string, data: any[], paxCount: number): Rat
   }
 }
 
-function getApiUrl(serviceType: string): string {
+// The Guides & Services lists come back in the company's rate currency
+// (in_rate_currency, lib/rates/rows-in-rate-currency): each row is entered in
+// its own currency, and this picker labels and hands on the amount as a
+// rate-currency one — an EGP guide rate of 1500 became 1500 USD on the trip.
+export function getApiUrl(serviceType: string): string {
   switch (serviceType) {
-    case 'meal': return '/api/rates/meals?active_only=true'
+    case 'meal': return '/api/rates/meals?active_only=true&in_rate_currency=true'
     case 'transportation': return '/api/rates/transportation'
-    case 'guide': return '/api/rates/guides?active_only=true'
-    case 'entrance': return '/api/rates/attractions?active_only=true'
-    case 'activity': return '/api/rates/activities?active_only=true'
+    case 'guide': return '/api/rates/guides?active_only=true&in_rate_currency=true'
+    case 'entrance': return '/api/rates/attractions?active_only=true&in_rate_currency=true'
+    case 'activity': return '/api/rates/activities?active_only=true&in_rate_currency=true'
     default: return ''
   }
 }
+
+/** A row no exchange rate could convert has no price to offer. */
+const convertible = (r: { rate_unconvertible?: boolean }) => r.rate_unconvertible !== true
 
 // ============================================
 // COMPONENT

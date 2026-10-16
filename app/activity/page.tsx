@@ -3,16 +3,22 @@
 // ============================================
 // ACTIVITY — the audit trail, for the owner's eyes
 // ============================================
-// Every authenticated mutating API call, captured in middleware, append-only
-// in the database. This page only reads.
+// Authenticated mutating API calls, captured in middleware, plus the
+// before/after rows routes add for roles, memberships and season premiums
+// (lib/activity-detail). Append-only in the database. This page only reads.
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { ScrollText, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { readDetail, type ActivityChange } from '@/lib/activity-detail'
 
 interface Entry {
   id: string
+  user_id: string
   user_email: string | null
+  /** The email, else the person's profile email or name (the route fills it). */
+  user_label?: string | null
+  detail?: unknown
   method: string
   path: string
   action: string
@@ -20,6 +26,16 @@ interface Entry {
   entity_id: string | null
   ip: string | null
   created_at: string
+}
+
+const FIELD_KEY: Record<string, string> = {
+  role: 'fieldRole',
+  is_active: 'fieldActive',
+  uplift_percent: 'fieldPremium',
+  name: 'fieldName',
+  membership: 'fieldMembership',
+  account: 'fieldAccount',
+  dates: 'fieldDates',
 }
 
 const ACTION_STYLE: Record<string, string> = {
@@ -44,6 +60,10 @@ export default function ActivityPage() {
     try {
       const qs = new URLSearchParams({ page: String(page) })
       for (const [k, v] of Object.entries(filters)) if (v) qs.set(k, v)
+      // From/To are this viewer's days, like the times in the table.
+      if (filters.from || filters.to) {
+        try { qs.set('tz', Intl.DateTimeFormat().resolvedOptions().timeZone) } catch { /* UTC days */ }
+      }
       const res = await fetch(`/api/activity?${qs.toString()}`)
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)
@@ -65,6 +85,13 @@ export default function ActivityPage() {
   const setF = (k: keyof typeof filters, v: string) => {
     setPage(1)
     setFilters(prev => ({ ...prev, [k]: v }))
+  }
+
+  const value = (c: ActivityChange, v: ActivityChange['from']) => {
+    if (v === null) return '—'
+    if (typeof v === 'boolean') return v ? t('valueYes') : t('valueNo')
+    if (c.field === 'uplift_percent') return `${v}%`
+    return String(v)
   }
 
   const inputClass = 'px-3 py-2 border border-gray-300 rounded-lg text-sm'
@@ -117,7 +144,7 @@ export default function ActivityPage() {
                   <td className="px-4 py-2 whitespace-nowrap text-gray-600">
                     {new Date(e.created_at).toLocaleString()}
                   </td>
-                  <td className="px-4 py-2 text-gray-900">{e.user_email ?? e.id.slice(0, 8)}</td>
+                  <td className="px-4 py-2 text-gray-900">{e.user_label ?? e.user_email ?? e.user_id.slice(0, 8)}</td>
                   <td className="px-4 py-2">
                     <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${ACTION_STYLE[e.action] ?? ACTION_STYLE.action}`}>
                       {e.action}
@@ -127,6 +154,21 @@ export default function ActivityPage() {
                     <span className="text-gray-900">{e.entity_type ?? '—'}</span>
                     {e.entity_id && <span className="text-gray-400"> · {e.entity_id.slice(0, 8)}</span>}
                     <div className="text-[11px] text-gray-400 font-mono">{e.method} {e.path}</div>
+                    {(() => {
+                      const d = readDetail(e.detail)
+                      if (!d || d.changes.length === 0) return null
+                      return (
+                        <div className="mt-1 text-xs text-gray-700">
+                          {d.target && <span className="font-medium">{d.target}: </span>}
+                          {d.changes.map((c, i) => (
+                            <span key={c.field}>
+                              {i > 0 && '; '}
+                              {FIELD_KEY[c.field] ? t(FIELD_KEY[c.field]) : c.field} {value(c, c.from)} → {value(c, c.to)}
+                            </span>
+                          ))}
+                        </div>
+                      )
+                    })()}
                   </td>
                   <td className="px-4 py-2 text-gray-500 text-xs">{e.ip ?? '—'}</td>
                 </tr>

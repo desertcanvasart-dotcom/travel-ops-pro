@@ -74,7 +74,10 @@ describe('supplier-documents routes stay inside the org', () => {
   it('lists only the org’s vouchers', async () => {
     db.state.rows.supplier_documents = []
     await list(req(undefined, 'http://x/api/supplier-documents'))
-    expect(orgFilters()).toEqual(['org-A'])
+    // The list, then the tiles' counts (one per status and the total) — every
+    // read filtered by the caller's org.
+    expect(orgFilters().length).toBe(7)
+    expect(orgFilters().every(o => o === 'org-A')).toBe(true)
   })
 
   it('opens, edits and deletes by id only within the org', async () => {
@@ -201,25 +204,36 @@ describe('sending a voucher', () => {
 })
 
 describe('orgGmailSenderId', () => {
-  const db = (members: string[], connected: string[]) => ({
-    from: (t: string) => {
-      const data = t === 'organization_members' ? members.map(user_id => ({ user_id })) : connected.map(user_id => ({ user_id }))
-      const b: any = { select: () => b, eq: () => b, order: () => b, in: () => b, then: (r: any) => r({ data }) }
+  // gmail_tokens rows: each connection serves ONE organisation (org_id,
+  // 20261204). The fake answers .eq('org_id') and .order('created_at').
+  type Tok = { user_id: string; org_id: string; created_at: string; id: string }
+  const db = (tokens: Tok[]) => ({
+    from: () => {
+      let rows = [...tokens]
+      let sorted = false // the first order() is the primary key, as in SQL
+      const b: any = {
+        select: () => b,
+        eq: (c: keyof Tok, v: string) => { rows = rows.filter(r => r[c] === v); return b },
+        order: (c: keyof Tok) => { if (!sorted) rows = [...rows].sort((x, y) => x[c].localeCompare(y[c])); sorted = true; return b },
+        limit: () => b,
+        then: (r: any) => r({ data: rows, error: null }),
+      }
       return b
     },
   })
+  const tok = (user_id: string, org_id: string, created_at: string): Tok => ({ user_id, org_id, created_at, id: user_id })
 
   it('prefers the user’s own mailbox', async () => {
-    expect(await orgGmailSenderId(db(['owner', 'me'], ['owner', 'me']), 'org', 'me')).toBe('me')
+    expect(await orgGmailSenderId(db([tok('owner', 'org', '1'), tok('me', 'org', '2')]), 'org', 'me')).toBe('me')
   })
 
-  it('falls back to the longest-standing member’s mailbox', async () => {
-    expect(await orgGmailSenderId(db(['owner', 'agent', 'me'], ['agent', 'owner']), 'org', 'me')).toBe('owner')
+  it('falls back to the organisation’s longest-standing connection', async () => {
+    expect(await orgGmailSenderId(db([tok('agent', 'org', '2026-02'), tok('owner', 'org', '2026-01')]), 'org', 'me')).toBe('owner')
   })
 
-  it('never picks a mailbox outside the org', async () => {
-    // The tokens query is limited to members; an outsider's row cannot match.
-    expect(await orgGmailSenderId(db(['me'], ['outsider']), 'org', 'me')).toBeNull()
-    expect(await orgGmailSenderId(db([], ['outsider']), 'org', 'me')).toBeNull()
+  it('never picks a mailbox that serves another organisation — the user’s own included', async () => {
+    expect(await orgGmailSenderId(db([tok('outsider', 'other', '1')]), 'org', 'me')).toBeNull()
+    // A person in both companies who connected their mailbox to the other one.
+    expect(await orgGmailSenderId(db([tok('me', 'other', '1'), tok('owner', 'org', '2')]), 'org', 'me')).toBe('owner')
   })
 })

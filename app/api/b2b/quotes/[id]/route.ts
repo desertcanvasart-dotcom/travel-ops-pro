@@ -1,6 +1,10 @@
 import { createClient } from '@supabase/supabase-js'
-import { quoteInOrg, quoteNotFound, quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
-import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { quoteInOrg, quoteNotFound } from '@/lib/b2b/quote-scope'
+import { getCurrentOrgId, getCurrentUserId, getCurrentUserRole, noOrgResponse } from '@/lib/auth/current-org'
+import { updateB2bQuote } from '@/lib/b2b/update-quote'
+import { deleteQuote } from '@/lib/quotes/delete-quote'
+import { bookingsFromQuote, quoteLockReason } from '@/lib/quotes/lock'
+import { withEffectiveStatus } from '@/lib/quotes/validity'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 
@@ -80,7 +84,8 @@ export async function GET(
       return NextResponse.json({
         success: true,
         data: {
-          ...fallbackData,
+          ...withEffectiveStatus(fallbackData),
+          locked: quoteLockReason(fallbackData, await bookingsFromQuote(supabaseAdmin, 'b2b', id)),
           itineraries: null,
           available_languages: Object.keys(vMap),
           versions: vMap
@@ -105,7 +110,9 @@ export async function GET(
     return NextResponse.json({
       success: true,
       data: {
-        ...data,
+        ...withEffectiveStatus(data),
+        // 'converted' / 'booked': only the notes can change (lib/quotes/lock.ts).
+        locked: quoteLockReason(data, await bookingsFromQuote(supabaseAdmin, 'b2b', id)),
         available_languages: Object.keys(versionsMap),
         versions: versionsMap
       }
@@ -117,7 +124,10 @@ export async function GET(
   }
 }
 
-// PUT - Update quote
+// PUT - Update quote. Only what a person edits — status, client details,
+// notes, valid until — and nothing but notes once it is converted or booked
+// (lib/b2b/update-quote.ts). The price, the quote number and the conversion
+// fields are not the caller's to set.
 export async function PUT(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -127,44 +137,9 @@ export async function PUT(
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
     if (!(await quoteInOrg(supabaseAdmin, id, orgId))) return quoteNotFound()
-    const body = await request.json()
-
-    // Strip id, org_id and the authorship fields from the update: a caller must
-    // not re-home the quote to another org, nor stamp who last touched it. The
-    // actor is the signed-in user.
-    const { id: _, org_id: _dropOrg, changed_by: _c, last_modified_by: _l, created_by: _cb, ...updates } = body
-    if (!(await quoteRefsInOrg(supabaseAdmin, orgId, updates))) return quoteRefNotFound()
-    const actor = await getCurrentUserId()
-    updates.updated_at = new Date().toISOString()
-    updates.last_modified_by = actor
-
-    const { data, error } = await supabaseAdmin
-      .from('tour_quotes')
-      .update(updates)
-      .eq('id', id)
-      .eq('org_id', orgId)
-      .select()
-      .single()
-
-    if (error) {
-      console.error('Error updating quote:', error)
-      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
-    }
-
-    // Snapshot the updated state as a new revision (best-effort — never blocks
-    // the save). Reason can be supplied by the caller.
-    try {
-      await supabaseAdmin.rpc('create_quote_revision', {
-        p_quote_id: id,
-        // Authorship is the signed-in user — never a client-supplied changed_by.
-        p_changed_by: actor,
-        p_change_reason: body.change_reason ?? 'Quote updated',
-      })
-    } catch (revErr) {
-      console.warn('create_quote_revision failed (non-fatal):', revErr)
-    }
-
-    return NextResponse.json({ success: true, data })
+    const body = await request.json().catch(() => ({}))
+    const result = await updateB2bQuote(supabaseAdmin, { orgId, id, body, actor: await getCurrentUserId() })
+    return NextResponse.json(result.body, { status: result.status })
 
   } catch (error: any) {
     console.error('Error in PUT /api/b2b/quotes/[id]:', error)
@@ -172,7 +147,8 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete quote
+// DELETE - Delete quote. Manager and above (as bulk delete), and refused with
+// the reason for a quote that was converted or booked.
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -182,18 +158,7 @@ export async function DELETE(
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
     if (!(await quoteInOrg(supabaseAdmin, id, orgId))) return quoteNotFound()
-
-    const { error } = await supabaseAdmin
-      .from('tour_quotes')
-      .delete()
-      .eq('id', id)
-
-    if (error) {
-      console.error('Error deleting quote:', error)
-      return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
-    }
-
-    return NextResponse.json({ success: true })
+    return await deleteQuote(supabaseAdmin, { kind: 'b2b', orgId, id, role: await getCurrentUserRole() })
 
   } catch (error: any) {
     console.error('Error in DELETE /api/b2b/quotes/[id]:', error)

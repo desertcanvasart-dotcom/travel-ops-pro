@@ -19,6 +19,7 @@ import {
 } from 'lucide-react'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { useAuth } from '@/app/contexts/AuthContext'
+import { useRole } from '@/hooks/useRole'
 
 interface Department {
   id: string
@@ -69,6 +70,7 @@ export default function TeamMembersPage() {
     notes: ''
   })
   const [saving, setSaving] = useState(false)
+  const [formError, setFormError] = useState<string | null>(null)
 
   // ---- Bridge to User Management ----
   // Team members are the operational roster (assignment/routing) and have no
@@ -76,6 +78,11 @@ export default function TeamMembersPage() {
   // already has system access or a pending invitation — and lets an admin
   // send the invitation right from the roster card.
   const { profile } = useAuth()
+  // Invitations are admin-only on the server (the owner counts as admin): a
+  // manager would only meet the refusal after choosing a role.
+  const { isAdmin } = useRole()
+  // Why the last load / save / deactivate failed — shown at the top.
+  const [pageError, setPageError] = useState<string | null>(null)
   const [userEmails, setUserEmails] = useState<Set<string>>(new Set())
   const [pendingInviteEmails, setPendingInviteEmails] = useState<Set<string>>(new Set())
   const [inviteTarget, setInviteTarget] = useState<TeamMember | null>(null)
@@ -180,14 +187,15 @@ export default function TeamMembersPage() {
       if (!showInactive) params.append('active', 'true')
       
       const response = await fetch(`/api/team-members?${params}`)
-      if (response.ok) {
-        const result = await response.json()
-        if (result.success) {
-          setMembers(result.data)
-        }
+      const result = await response.json().catch(() => ({}))
+      if (response.ok && result.success) {
+        setMembers(result.data)
+      } else {
+        setPageError(result.error || t('failedToLoad'))
       }
     } catch (error) {
       console.error('Error fetching team members:', error)
+      setPageError(t('failedToLoad'))
     } finally {
       setLoading(false)
     }
@@ -196,6 +204,7 @@ export default function TeamMembersPage() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSaving(true)
+    setFormError(null)
 
     try {
       const url = editingMember 
@@ -212,10 +221,16 @@ export default function TeamMembersPage() {
         setShowModal(false)
         setEditingMember(null)
         resetForm()
+        setPageError(null)
         fetchMembers()
+      } else {
+        // Kept inside the open form: a duplicate email, a bad role, a refusal.
+        const result = await response.json().catch(() => ({}))
+        setFormError(result.error || t('failedToSave'))
       }
     } catch (error) {
       console.error('Error saving team member:', error)
+      setFormError(t('failedToSave'))
     } finally {
       setSaving(false)
     }
@@ -227,10 +242,12 @@ export default function TeamMembersPage() {
       name: member.name || '',
       email: member.email || '',
       phone: member.phone || '',
-      role: member.role || 'staff',
+      // An older free-text role the list no longer offers shows as Staff.
+      role: ROLES.some(r => r.value === member.role) ? member.role : 'staff',
       department_id: member.department_id || '',
       notes: member.notes || ''
     })
+    setFormError(null)
     setShowModal(true)
   }
 
@@ -242,10 +259,15 @@ export default function TeamMembersPage() {
         method: 'DELETE'
       })
       if (response.ok) {
+        setPageError(null)
         fetchMembers()
+      } else {
+        const result = await response.json().catch(() => ({}))
+        setPageError(result.error || t('failedToDeactivate'))
       }
     } catch (error) {
       console.error('Error deleting team member:', error)
+      setPageError(t('failedToDeactivate'))
     }
   }
 
@@ -257,10 +279,15 @@ export default function TeamMembersPage() {
         body: JSON.stringify({ is_active: true })
       })
       if (response.ok) {
+        setPageError(null)
         fetchMembers()
+      } else {
+        const result = await response.json().catch(() => ({}))
+        setPageError(result.error || t('failedToReactivate'))
       }
     } catch (error) {
       console.error('Error reactivating team member:', error)
+      setPageError(t('failedToReactivate'))
     }
   }
 
@@ -278,6 +305,7 @@ export default function TeamMembersPage() {
   const openAddModal = () => {
     setEditingMember(null)
     resetForm()
+    setFormError(null)
     setShowModal(true)
   }
 
@@ -323,6 +351,10 @@ export default function TeamMembersPage() {
           {t('addMember')}
         </button>
       </div>
+
+      {pageError && (
+        <div role="alert" className="p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{pageError}</div>
+      )}
 
       {/* Stats */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -456,7 +488,10 @@ export default function TeamMembersPage() {
                           {t('invitationSent')}
                         </span>
                       )}
-                      {accessStatus(member) === 'none' && (
+                      {accessStatus(member) === 'none' && !isAdmin && (
+                        <span className="text-xs text-gray-400">{t('inviteAdminOnly')}</span>
+                      )}
+                      {accessStatus(member) === 'none' && isAdmin && (
                         <button
                           onClick={() => { setInviteTarget(member); setInviteRole('agent'); setInviteError(null) }}
                           className="text-xs text-primary-600 hover:text-primary-700 font-medium"
@@ -594,6 +629,10 @@ export default function TeamMembersPage() {
                   placeholder="Additional notes..."
                 />
               </div>
+
+              {formError && (
+                <p role="alert" className="text-sm text-red-600">{formError}</p>
+              )}
 
               <div className="flex gap-3 pt-2">
                 <button

@@ -47,6 +47,7 @@ export async function notifyOrgManagers(
     const recipients = await orgManagerUserIds(db, orgId, n.excludeUserId)
     if (!recipients.length) return { created: 0, failed: 0 }
     return await createNotifications(recipients.map(user_id => ({
+      org_id: orgId,
       user_id,
       type: n.type ?? 'booking_change_request',
       title: n.title,

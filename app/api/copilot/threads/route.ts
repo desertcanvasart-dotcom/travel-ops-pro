@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -16,6 +17,8 @@ const supabase = createClient(
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status')
     const channel = searchParams.get('channel')
@@ -32,6 +35,8 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('communication_threads')
       .select('*, latest_inbox:communication_inbox(*), latest_draft:communication_drafts(*)', { count: 'exact' })
+      // The org's own threads (this listed every company's).
+      .eq('org_id', orgId)
       .order('last_message_at', { ascending: false })
       .order('received_at', { referencedTable: 'latest_inbox', ascending: false })
       .limit(1, { referencedTable: 'latest_inbox' })

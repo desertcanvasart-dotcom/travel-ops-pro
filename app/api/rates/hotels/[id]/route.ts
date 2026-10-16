@@ -1,10 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { sanitizeSeasons, legacyColumnMirror, datedPeriodCount, tooManyPeriodsMessage } from '@/lib/rates/rate-seasons'
+import { seasonsWrite, seasonsPayloadError, datedPeriodCount, tooManyPeriodsMessage } from '@/lib/rates/rate-seasons'
+import { validateRatePayload } from '@/lib/rate-validation'
+import { ownJoinedSupplier } from '@/lib/rates/joined-supplier'
+import { rateUsage, rateInUseMessage } from '@/lib/rates/rate-in-use'
+import { isForeignKeyViolation } from '@/lib/rates/accommodation-duplicates'
 import { sanitizeSupplements } from '@/lib/rates/supplements'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
@@ -14,14 +20,18 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'accommodation_rates', id, orgId))) return notFoundInOrg('Rate')
 
     const { data, error } = await supabaseAdmin
       .from('accommodation_rates')
       .select(`
         *,
-        supplier:suppliers(id, name, city, contact_phone, contact_email)
+        supplier:suppliers(id, name, city, contact_phone, contact_email, org_id)
       `)
+      .eq('org_id', orgId)
       .eq('id', id)
       .single()
 
@@ -30,7 +40,7 @@ export async function GET(
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data: ownJoinedSupplier([data], orgId)[0] })
   } catch (error: any) {
     console.error('GET accommodation_rates by id catch error:', error)
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -42,13 +52,22 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'accommodation_rates', id, orgId))) return notFoundInOrg('Rate')
     const body = await request.json()
-    // A malformed periods payload reads as "no periods" and the row keeps
-    // pricing off its base columns — never a 500 on a rate save.
+    // Too many periods, a period that ends before it starts, or a negative
+    // rate is refused (400) — never saved as "no periods".
     const periodLimit = tooManyPeriodsMessage(datedPeriodCount(body.seasons))
+      ?? seasonsPayloadError(body.seasons, 'accommodation')
     if (periodLimit) return NextResponse.json({ success: false, error: periodLimit }, { status: 400 })
-    const hotelSeasons = sanitizeSeasons(body.seasons, 'accommodation')
+
+    // The same money checks as the create (a negative legacy column saved here).
+    const rateCheck = validateRatePayload(body)
+    if (!rateCheck.ok) {
+      return NextResponse.json({ success: false, error: 'Invalid rate values', violations: rateCheck.errors }, { status: 400 })
+    }
 
     const supplierCheck = await validateAndResolveSupplierFields(body, supabaseAdmin)
     if (!supplierCheck.ok) {
@@ -128,11 +147,12 @@ export async function PUT(
       peak_single_supp_non_eur: parseFloat(body.peak_single_supp_non_eur) || 0,
       peak_triple_red_non_eur: parseFloat(body.peak_triple_red_non_eur) || 0,
       
-      // Dated rate periods (unlimited). When present these are what pricing
-      // reads; the first one is mirrored onto the base columns above for
-      // readers that have no travel date.
-      seasons: hotelSeasons,
-      ...legacyColumnMirror(hotelSeasons, 'accommodation'),
+      // Dated rate periods (up to six), only when the body sends them. The
+      // first is mirrored onto the base columns above for readers that have
+      // no travel date; an EMPTY list clears the old windows above, so
+      // removing every period sticks instead of bringing "Low / High / Peak
+      // Season" back at their old prices (rate-seasons seasonsWrite).
+      ...('seasons' in body ? seasonsWrite(body.seasons, 'accommodation') : {}),
       // The supplements the rate carries (their prices ride in the periods
       // above). Only when the body speaks of them: a caller that does not
       // (the bulk importer) leaves the list as it is.
@@ -151,6 +171,7 @@ export async function PUT(
     const { data, error } = await supabaseAdmin
       .from('accommodation_rates')
       .update(updateData)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select('*')
       .single()
@@ -172,13 +193,25 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'accommodation_rates', id, orgId))) return notFoundInOrg('Rate')
+
+    // Refused while a tour, programme or Pricing Grid line still uses it
+    // (lib/rates/rate-in-use): the reason, not "Internal server error".
+    const inUse = rateInUseMessage(await rateUsage(supabaseAdmin, 'accommodation_rates', id, orgId))
+    if (inUse) return NextResponse.json({ success: false, error: inUse }, { status: 409 })
 
     const { error } = await supabaseAdmin
       .from('accommodation_rates')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
+    if (isForeignKeyViolation(error)) {
+      return NextResponse.json({ success: false, error: 'This rate is still used elsewhere. Switch it off (untick Active) instead of deleting it.' }, { status: 409 })
+    }
     if (error) {
       console.error('DELETE accommodation_rates error:', error)
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })

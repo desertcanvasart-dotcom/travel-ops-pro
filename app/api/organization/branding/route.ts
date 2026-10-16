@@ -2,9 +2,10 @@
 // API: organization branding / company profile
 // ============================================
 // GET   any member — documents and client pages need it to render
-// PUT   admin/owner — company identity is theirs to state
-// POST  admin/owner — logo upload (multipart), stored in the public
-//       `documents` bucket under org-logos/, logo_url updated
+// PUT   admin/owner — company identity is theirs to state. Renaming the
+//       company is the OWNER's (as on the Organization page).
+// POST  admin/owner — logo upload (multipart, PNG/JPEG/WebP), stored in the
+//       public `documents` bucket under org-logos/, logo_url updated
 //
 // These are the details printed on customer-facing paper (letterhead,
 // invoices, the portal). Empty stays empty — a blank field renders as a blank
@@ -12,10 +13,12 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { normaliseMargin } from '@/lib/org-default-margin'
+import { DEFAULT_VAT_RATE, normaliseVatRate } from '@/lib/vat'
 import { createClient } from '@supabase/supabase-js'
 import { orgAuth } from '@/lib/auth/org-auth'
 import { currentUser, isPlatformAdmin } from '@/lib/blog/platform-admin'
-import { requireRole } from '@/lib/auth/current-org'
+import { getCurrentUserRole, requireRole } from '@/lib/auth/current-org'
+import { CURRENCY_REFUSED, LOGO_TYPES, parseProfileCurrency, renameNeedsOwner } from '@/lib/settings/company-profile'
 import { clientMessage } from '@/lib/api-errors'
 import { toWhatsAppE164, PHONE_NEEDS_COUNTRY_CODE } from '@/lib/whatsapp-phone'
 
@@ -53,13 +56,17 @@ const FIELDS = [
   // to it land in this org's inbox, and its replies go out from it
   // (lib/whatsapp-org). E.164, unique across organizations.
   'whatsapp_number',
+  // The company's VAT rate in percent (migration 20261214, default 14). A
+  // quote or invoice copies it when VAT is applied to it, so changing it here
+  // never re-prices a document already made (lib/vat.ts).
+  'vat_rate',
 ] as const
 
 /** The columns migration 20261115 adds. Until it is applied, reads and
  *  writes go on without them rather than failing the whole profile. */
 const CONTRACT_FIELDS = ['operating_country', 'contract_governing_law'] as const
-/** Likewise whatsapp_number (20261125). */
-const PENDING_FIELDS = [...CONTRACT_FIELDS, 'whatsapp_number'] as const
+/** Likewise whatsapp_number (20261125) and vat_rate (20261214). */
+const PENDING_FIELDS = [...CONTRACT_FIELDS, 'whatsapp_number', 'vat_rate'] as const
 function missingContractColumns(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false
   const undefinedColumn = error.code === '42703' || error.code === 'PGRST204'
@@ -142,6 +149,8 @@ export async function PUT(request: NextRequest) {
               : {}
             : field === 'default_margin_percent'
             ? normaliseMargin(body.default_margin_percent)
+            : field === 'vat_rate'
+            ? (body.vat_rate === '' || body.vat_rate === null ? DEFAULT_VAT_RATE : normaliseVatRate(body.vat_rate))
             : field === 'rate_change_alerts'
             ? (['off', 'in_app', 'in_app_email'].includes(body.rate_change_alerts) ? body.rate_change_alerts : 'in_app')
             : typeof body[field] === 'string'
@@ -149,8 +158,32 @@ export async function PUT(request: NextRequest) {
               : null
       }
     }
+    // A rate that is not a percentage is refused rather than stored as the
+    // default: the next quote would otherwise carry a VAT nobody chose.
+    if ('vat_rate' in update && update.vat_rate === null) {
+      return NextResponse.json({ success: false, error: 'VAT rate must be a percentage between 0 and 100' }, { status: 400 })
+    }
     // The org NAME is identity, not decoration — never blank it from here.
     if ('name' in update && !update.name) delete update.name
+    // …and changing it is the owner's, here exactly as on the Organization
+    // page: any admin could otherwise rename through this form what only the
+    // owner may rename there.
+    if ('name' in update) {
+      const { data: current } = await admin.from('organizations').select('name').eq('id', auth.org_id).maybeSingle()
+      if (renameNeedsOwner((current as { name?: string } | null)?.name, update.name) && (await getCurrentUserRole()) !== 'owner') {
+        return NextResponse.json(
+          { success: false, error: 'Only the organization owner can rename the company' },
+          { status: 403 }
+        )
+      }
+    }
+    // Both currencies are one of the app's five codes, or cleared.
+    for (const field of ['default_currency', 'rate_currency'] as const) {
+      if (!(field in update)) continue
+      const parsed = parseProfileCurrency(body[field])
+      if (!parsed.ok) return NextResponse.json({ success: false, error: CURRENCY_REFUSED }, { status: 400 })
+      update[field] = parsed.value
+    }
 
     // Stored as toWhatsAppE164 makes it, the form the webhook matches Twilio's
     // `To` against; blank clears it. A number that is not international is
@@ -229,16 +262,12 @@ export async function POST(request: NextRequest) {
     if (file.size > 2 * 1024 * 1024) {
       return NextResponse.json({ success: false, error: 'Logo must be under 2MB' }, { status: 400 })
     }
-    const ALLOWED: Record<string, string> = {
-      'image/png': 'png',
-      'image/jpeg': 'jpg',
-      'image/svg+xml': 'svg',
-      'image/webp': 'webp',
-    }
-    const ext = ALLOWED[file.type]
+    // No SVG: the bucket is public and an SVG opened by its URL runs script
+    // (lib/settings/company-profile LOGO_TYPES).
+    const ext = LOGO_TYPES[file.type]
     if (!ext) {
       return NextResponse.json(
-        { success: false, error: 'Logo must be PNG, JPEG, SVG, or WebP' },
+        { success: false, error: 'Logo must be PNG, JPEG or WebP' },
         { status: 400 }
       )
     }

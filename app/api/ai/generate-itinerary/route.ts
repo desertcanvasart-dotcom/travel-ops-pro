@@ -47,12 +47,13 @@ import { buildInclusionsExclusions, extractItineraryDetails } from '@/lib/inclus
 import { getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { createLanguageVersions } from '@/lib/ai/language-versions'
 import { getUserPreferences } from '@/lib/ai/user-preferences'
+import { foreignTripRef, TRIP_REF_LABELS } from '@/lib/itineraries/trip-refs'
+import { insertItineraryWithCode, itineraryCode } from '@/lib/itineraries/itinerary-code'
 import { loadVocabularyForOrg } from '@/lib/vocabulary-server'
 import { activeInOrder } from '@/lib/vocabulary'
 import { applyDayRules } from '@/lib/ai/day-rules-engine'
 import { reconcileWithParserData } from '@/lib/ai/reconciliation'
 import { getMemoriesForPrompt, logAgentRun } from '@/lib/agent-memory'
-import { newItineraryCode } from '@/lib/itineraries/itinerary-code'
 
 
 // Admin client for bypassing RLS on content library
@@ -88,11 +89,26 @@ export async function POST(request: NextRequest) {
     // resolution never throws — any failure means Egypt, exactly as before
     // destinations existed. Multi-destination plan, Phase 2.
     const requestedDestinationId: string | null = body.destination_id || null
-    const destinationContext = await loadDestinationPromptContext(supabaseAdmin, requestedDestinationId)
+    // Every id the caller names must be this company's own: a client, partner,
+    // destination or conversation thread of the other company was stored on
+    // the trip as given (and the thread lookup below answered with the other
+    // company's itinerary, code and price). Refused before any AI work runs.
+    if (orgId) {
+      const foreign = await foreignTripRef(supabaseAdmin, orgId, {
+        client_id: body.client_id,
+        partner_id: body.partner_id,
+        destination_id: requestedDestinationId,
+        thread_id: body.thread_id,
+      })
+      if (foreign) {
+        return NextResponse.json({ success: false, error: `${TRIP_REF_LABELS[foreign]} not found` }, { status: 404 })
+      }
+    }
+    const destinationContext = await loadDestinationPromptContext(supabaseAdmin, orgId, requestedDestinationId)
     let resolvedDestinationId: string | null = requestedDestinationId
     if (!resolvedDestinationId) {
       const { data: defaultDest } = await supabaseAdmin
-        .from('destinations').select('id').eq('is_default', true).maybeSingle()
+        .from('destinations').select('id').eq('org_id', orgId).eq('is_default', true).maybeSingle()
       resolvedDestinationId = defaultDest?.id ?? null
     }
     if (!orgId) {
@@ -201,7 +217,8 @@ export async function POST(request: NextRequest) {
         .from('itineraries')
         .select('id, itinerary_code, trip_name, tier, package_type, currency, total_days, total_cost, supplier_cost, status')
         .eq('idempotency_key', idempotency_key)
-        .single()
+        .eq('org_id', orgId)
+        .maybeSingle()
 
       if (existing) {
         debugLog(`\u267B\uFE0F Idempotency hit: returning existing itinerary ${existing.id}`)
@@ -252,6 +269,7 @@ export async function POST(request: NextRequest) {
         .from('itineraries')
         .select('id, itinerary_code, trip_name, tier, package_type, currency, total_days, total_cost, supplier_cost, status')
         .eq('thread_id', resolvedThreadId)
+        .eq('org_id', orgId)
         .maybeSingle()
       if (existingByThread) {
         debugLog(`♻️ Thread idempotency hit: returning existing itinerary ${existingByThread.id} for thread ${resolvedThreadId}`)
@@ -420,8 +438,12 @@ export async function POST(request: NextRequest) {
     const endDate = new Date(startDateObj)
     endDate.setUTCDate(startDateObj.getUTCDate() + duration_days - 1)
 
+    // The code is drawn at insert time and drawn again if it is taken (see
+    // lib/itineraries/itinerary-code) — a clash used to surface as a 500 only
+    // after the whole AI run.
+    const year = new Date().getFullYear()
     const tierPrefix = tier.charAt(0).toUpperCase()
-    const itinerary_code = newItineraryCode(`ITN-${tierPrefix}`)
+    const newItineraryCode = () => itineraryCode(year, tierPrefix)
 
     // ============================================
     // CRUISE PATH (creative mode ONLY, cruise-package or cruise-land)
@@ -431,7 +453,7 @@ export async function POST(request: NextRequest) {
     if (cruiseDetection.isCruise && inputMode === 'creative' && !is_structured_input && (effectivePackageType === 'cruise-package' || effectivePackageType === 'cruise-land')) {
       debugLog(`🚢 Processing as ${effectivePackageType} itinerary (creative mode, no structured input)...`)
       
-      const cruiseContent = await findCruiseContent(supabaseAdmin, cruiseDetection, tier, duration_days)
+      const cruiseContent = await findCruiseContent(supabaseAdmin, orgId, cruiseDetection, tier, duration_days)
       
       if (cruiseContent.found && cruiseContent.dayByDay.length > 0) {
         debugLog(`📚 Using Content Library cruise: ${cruiseContent.content.name}`)
@@ -456,7 +478,9 @@ export async function POST(request: NextRequest) {
           totalPax,
           nights,
           startDate: start_date,
-          isEuroPassport
+          isEuroPassport,
+          // This company's ships.
+          orgId,
         })
         debugLog(`💰 Cruise rate: ${cruiseRate.totalPerNight}/night total on ${cruiseRate.shipName} (${cruiseRate.season})`)
         if (cruiseRate.cabinAllocation.length > 0) {
@@ -464,7 +488,7 @@ export async function POST(request: NextRequest) {
         }
 
         // Quick transport lookup for inclusions vehicle type (actual rate fetched inside module)
-        const cruiseTransportRulesForInc = await fetchCruiseTransportPricingRules()
+        const cruiseTransportRulesForInc = await fetchCruiseTransportPricingRules(orgId)
         const cruiseTransportRuleForInc = findCruiseTransportRule(cruiseTransportRulesForInc, duration_days)
         const cruiseTransportVehicle = cruiseTransportRuleForInc
           ? getCruiseTransportRate(cruiseTransportRuleForInc, totalPax).vehicleType
@@ -512,10 +536,7 @@ export async function POST(request: NextRequest) {
         })
 
         // Create itinerary with cabin_allocation AND inclusions/exclusions in INSERT
-        const { data: itinerary, error: itineraryError } = await supabase
-          .from('itineraries')
-          .insert({
-            itinerary_code,
+        const { data: itinerary, error: itineraryError } = await insertItineraryWithCode<any>(supabase, {
             org_id: orgId,
             destination_id: resolvedDestinationId,
             client_name,
@@ -547,9 +568,7 @@ export async function POST(request: NextRequest) {
             source: partner_id ? 'b2b_custom' : source,
             // Idempotency
             idempotency_key: idempotency_key || null,
-          })
-          .select()
-          .single()
+          }, newItineraryCode)
 
         if (itineraryError) throw new Error(`Failed to create itinerary: ${itineraryError.message}`)
         // Prod drops client_id on INSERT — see lib/itineraries/reassert-client.ts
@@ -559,6 +578,7 @@ export async function POST(request: NextRequest) {
 
         // Delegate day + service creation to the extracted cruise module
         const cruiseServiceResult = await createCruiseItineraryServices(supabase, {
+          orgId,
           itineraryId: itinerary.id,
           cruiseContent,
           cruiseRate,
@@ -604,7 +624,7 @@ export async function POST(request: NextRequest) {
 
         // Log content library usage for cruise path
         if (cruiseContent.found && cruiseContent.content?.id) {
-          logContentUsage(supabaseAdmin, [cruiseContent.content.id], tier, itinerary.id, 'cruise_generation')
+          logContentUsage(supabaseAdmin, orgId, [cruiseContent.content.id], tier, itinerary.id, 'cruise_generation')
         }
 
         // Auto-create language version
@@ -674,15 +694,15 @@ export async function POST(request: NextRequest) {
       attractionsWithCity,
       { aliasToCanonical },
     ] = await Promise.all([
-      fetchContentLibrary(supabaseAdmin, tier, searchCities, interests),
-      fetchWritingRules(supabaseAdmin),
-      fetchAttractionsList(supabase),
-      fetchAttractionsWithCity(supabase),
-      // DB aliases for service-creation matching
-      fetchAttractionAliases(supabase),
+      fetchContentLibrary(supabaseAdmin, orgId, tier, searchCities, interests),
+      fetchWritingRules(supabaseAdmin, orgId),
+      fetchAttractionsList(supabase, orgId),
+      fetchAttractionsWithCity(supabase, orgId),
+      // DB aliases for service-creation matching — this company's
+      fetchAttractionAliases(supabase, orgId),
     ])
     const attractionMenu = formatAttractionMenuForPrompt(attractionsWithCity)
-    setAliasCache(aliasToCanonical)
+    setAliasCache(orgId, aliasToCanonical)
 
     // Build rich content map (full descriptions, not truncated) and format for prompts
     const contentMap = buildAttractionContentMap(contentLibrary)
@@ -704,6 +724,8 @@ export async function POST(request: NextRequest) {
       language: guideLanguage,
       hotelName: hotel_name || null,
       includeAccommodation: includeAccommodationFinal,
+      // This company's rates.
+      orgId,
       // Rows entered in another currency are converted into the org's rate
       // currency at the fetch boundary (lib/rates/rate-currency.ts).
       rateCurrency,
@@ -859,6 +881,7 @@ export async function POST(request: NextRequest) {
         tier,
         primaryCity: effectiveCity,
         primaryHotelName: rates.hotelName,
+        orgId,
       })
 
       hotelsPerCity = []
@@ -901,10 +924,7 @@ export async function POST(request: NextRequest) {
     })
 
     // Create itinerary record WITH inclusions/exclusions included in INSERT
-    const { data: itinerary, error: itineraryError } = await supabase
-      .from('itineraries')
-      .insert({
-        itinerary_code,
+    const { data: itinerary, error: itineraryError } = await insertItineraryWithCode<any>(supabase, {
         org_id: orgId,
         destination_id: resolvedDestinationId,
         client_name,
@@ -940,9 +960,7 @@ export async function POST(request: NextRequest) {
         thread_id: resolvedThreadId,
         // Idempotency
         idempotency_key: idempotency_key || null,
-      })
-      .select()
-      .single()
+      }, newItineraryCode)
 
     if (itineraryError) {
       console.error('❌ Failed to create itinerary:', itineraryError)
@@ -955,6 +973,7 @@ export async function POST(request: NextRequest) {
 
     // Create days and services using extracted module
     const serviceResult = await createLandItineraryServices(supabase, {
+      orgId,
       itineraryId: itinerary.id,
       itineraryData,
       rates,
@@ -1043,7 +1062,7 @@ export async function POST(request: NextRequest) {
 
     // Log content library usage for land path
     if (matchedContentIds.length > 0) {
-      logContentUsage(supabaseAdmin, matchedContentIds, tier, itinerary.id, 'land_generation')
+      logContentUsage(supabaseAdmin, orgId, matchedContentIds, tier, itinerary.id, 'land_generation')
     }
 
     // Auto-create language version

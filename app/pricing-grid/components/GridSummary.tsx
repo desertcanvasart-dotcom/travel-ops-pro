@@ -4,7 +4,7 @@ import { Save, ExternalLink, Loader2 } from 'lucide-react'
 import { PACKAGE_TYPE_CONFIGS } from '@/lib/package-types'
 import type { GridTotals, GridConfig } from '../types'
 import { convertAmount } from '../lib/calculator'
-import { currencySymbol } from '@/lib/currency-totals'
+import { shownDecimals, shownSymbol } from '../lib/display-fx'
 
 interface GridSummaryProps {
   totals: GridTotals
@@ -20,9 +20,10 @@ interface GridSummaryProps {
 }
 
 export default function GridSummary({ totals, config, dayCount, onSave, isSaving, savedItineraryId, savedItineraryCode, savedQuoteId, savedQuoteNumber, saveMessage }: GridSummaryProps) {
-  const { pax, marginPercent, currency } = config
-  const sym = currencySymbol(currency)
-  const fmt = (n: number) => n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const { pax, marginPercent } = config
+  const sym = shownSymbol(config)
+  const decimals = shownDecimals(config)
+  const fmt = (n: number) => n.toLocaleString('en', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
   const cv = (n: number) => convertAmount(n, config.exchangeRate)
 
   const isB2B = config.clientType === 'b2b'
@@ -66,16 +67,17 @@ export default function GridSummary({ totals, config, dayCount, onSave, isSaving
       <div className="px-4 py-2.5 flex flex-wrap items-center gap-x-6 gap-y-2">
         {/* Numbers */}
         <div className="flex flex-wrap items-end gap-x-5 gap-y-1">
-          <SummaryCell label="Cost / person" value={cv(totals.costPerPerson)} symbol={sym} />
-          <SummaryCell label="Total cost" value={cv(totals.totalCost)} symbol={sym} />
+          <SummaryCell label="Cost / person" value={cv(totals.costPerPerson)} symbol={sym} decimals={decimals} />
+          <SummaryCell label="Total cost" value={cv(totals.totalCost)} symbol={sym} decimals={decimals} />
           <SummaryCell
             label={`Margin (${marginPercent}%)`}
             value={cv(totals.marginAmount)}
             symbol={sym}
+            decimals={decimals}
             color={totals.marginAmount > 0 ? 'text-amber-600' : 'text-red-500'}
           />
-          <SummaryCell label="Selling / person" value={cv(totals.sellingPricePerPerson)} symbol={sym} color="text-green-600" />
-          <SummaryCell label="Selling total" value={cv(totals.sellingPriceTotal)} symbol={sym} color="text-green-700" strong />
+          <SummaryCell label="Selling / person" value={cv(totals.sellingPricePerPerson)} symbol={sym} decimals={decimals} color="text-green-600" />
+          <SummaryCell label="Selling total" value={cv(totals.sellingPriceTotal)} symbol={sym} decimals={decimals} color="text-green-700" strong />
         </div>
 
         {/* Save + links */}
@@ -118,14 +120,14 @@ export default function GridSummary({ totals, config, dayCount, onSave, isSaving
   )
 }
 
-function SummaryCell({ label, value, symbol, color, strong }: {
-  label: string; value: number; symbol: string; color?: string; strong?: boolean
+function SummaryCell({ label, value, symbol, decimals = 2, color, strong }: {
+  label: string; value: number; symbol: string; decimals?: number; color?: string; strong?: boolean
 }) {
   return (
     <div>
       <div className="text-[10px] text-gray-400 uppercase tracking-wider font-medium">{label}</div>
       <div className={`${strong ? 'text-lg' : 'text-sm'} font-bold tabular-nums ${color || 'text-gray-900'}`}>
-        {symbol}{value.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+        {symbol}{value.toLocaleString('en', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })}
       </div>
     </div>
   )

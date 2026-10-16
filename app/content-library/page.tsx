@@ -99,6 +99,7 @@ export default function ContentLibraryPage() {
   const [error, setError] = useState<string | null>(null)
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [includeInactive, setIncludeInactive] = useState(false)
 
   const supabase = createClient()
 
@@ -125,7 +126,7 @@ export default function ContentLibraryPage() {
   useEffect(() => {
     fetchContent()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedCategory, debouncedSearch])
+  }, [selectedCategory, debouncedSearch, includeInactive])
 
   async function fetchCategories() {
     try {
@@ -148,6 +149,7 @@ export default function ContentLibraryPage() {
       let url = '/api/content-library?'
       if (selectedCategory) url += `category_id=${selectedCategory}&`
       if (debouncedSearch) url += `search=${encodeURIComponent(debouncedSearch)}&`
+      if (includeInactive) url += 'active_only=false&'
 
       const response = await fetch(url, { signal: controller.signal })
       if (!response.ok) throw new Error('Failed to fetch content')
@@ -278,6 +280,15 @@ export default function ContentLibraryPage() {
 
         {/* Search Bar */}
         <div className="mb-6">
+          <label className="mb-3 inline-flex items-center gap-2 text-sm text-gray-600">
+            <input
+              type="checkbox"
+              checked={includeInactive}
+              onChange={(e) => setIncludeInactive(e.target.checked)}
+              className="accent-[#647C47]"
+            />
+            {t('includeInactive')}
+          </label>
           <div className="relative">
             <input
               type="text"
@@ -341,7 +352,7 @@ export default function ContentLibraryPage() {
               return (
                 <div
                   key={item.id}
-                  className="bg-white rounded-xl border border-gray-200 hover:border-[#647C47]/50 hover:shadow-md transition-all group"
+                  className={`bg-white rounded-xl border border-gray-200 hover:border-[#647C47]/50 hover:shadow-md transition-all group ${item.is_active ? '' : 'opacity-60'}`}
                 >
                   <div className="p-5">
                     {/* Header */}
@@ -351,6 +362,9 @@ export default function ContentLibraryPage() {
                           <IconComponent className="w-4 h-4 text-gray-600" />
                         </div>
                         <span className="text-xs text-gray-500">{item.category?.name}</span>
+                        {!item.is_active && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 text-gray-500">{t('inactive')}</span>
+                        )}
                       </div>
                       <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                         <Link
@@ -399,7 +413,11 @@ export default function ContentLibraryPage() {
                         ) : (
                           <div className="flex items-center gap-1 text-xs text-amber-600">
                             <AlertCircle className="w-3.5 h-3.5" />
-                            <span>{t('tierCount', { count: item.variation_count })}</span>
+                            {/* Against this company's ladder, not a fixed four. */}
+                            <span>{t('tierCount', {
+                              count: tierOptions.filter(o => !item.missing_tiers.includes(o.value)).length,
+                              total: tierOptions.length,
+                            })}</span>
                           </div>
                         )}
                       </div>

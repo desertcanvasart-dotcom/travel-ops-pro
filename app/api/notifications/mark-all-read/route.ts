@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentUserId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { ownNotificationIds } from '@/lib/notifications-scope'
 
 const supabase = createClient(
@@ -8,12 +8,15 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// PUT - Mark all of the signed-in user's notifications as read
+// PUT - Mark all of the signed-in user's notifications in the active
+// organisation as read
 export async function PUT(_request: NextRequest) {
   try {
     const userId = await getCurrentUserId()
     if (!userId) return NextResponse.json({ success: false, error: 'Not authenticated' }, { status: 401 })
-    const ids = await ownNotificationIds(supabase, userId, { unreadOnly: true })
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const ids = await ownNotificationIds(supabase, userId, orgId, { unreadOnly: true })
     if (!ids.length) return NextResponse.json({ success: true, message: '0 notifications marked as read', count: 0 })
 
     const { data, error } = await supabase

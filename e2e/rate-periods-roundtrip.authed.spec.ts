@@ -77,12 +77,13 @@ test('six dated rate periods survive a save and read back', async ({ request }) 
     expect(reread.seasons[0].rates.pp_double_eur).toBe(77)
     expect(reread.pp_double_eur).toBe(77)
 
-    // A malformed payload reads as "no periods" rather than 500ing the save.
+    // A malformed payload is refused (400), not a 500 — and the periods
+    // already saved are left as they were.
     const junk = await request.put(`/api/rates/hotels/${id}`, {
       data: { property_name: row.property_name, city: row.city, tier: row.tier, seasons: 'nonsense' },
     })
-    expect(junk.ok(), await junk.text()).toBeTruthy()
-    expect((await (await request.get(`/api/rates/hotels/${id}`)).json()).data.seasons).toBeNull()
+    expect(junk.status(), await junk.text()).toBe(400)
+    expect((await (await request.get(`/api/rates/hotels/${id}`)).json()).data.seasons).toHaveLength(6)
   } finally {
     const del = await request.delete(`/api/rates/hotels/${id}`)
     console.log('cleanup delete ->', del.status())

@@ -13,6 +13,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Globe, Loader2, Plus, Trash2, Check, MapPin, Star } from 'lucide-react'
 import { useConfirm } from '@/components/ConfirmDialog'
+import { useRole } from '@/hooks/useRole'
 import { clearDestinationCache, type Destination, type DestinationCity } from '@/app/components/useDestinationCities'
 
 interface AdminCity extends DestinationCity {
@@ -29,9 +30,17 @@ interface AdminDestination extends Omit<Destination, 'cities'> {
   cities: AdminCity[]
 }
 
+/** The glossary as the box shows it: stored as { text }, or a bare string. */
+function glossaryText(glossary: AdminDestination['glossary']): string {
+  return typeof glossary === 'string' ? glossary : glossary?.text ?? ''
+}
+
 export default function DestinationsSettingsPage() {
   const t = useTranslations('destinationsSettings')
   const confirmDialog = useConfirm()
+  // Every write here is admin-only on the server (/api/destinations/manage);
+  // a manager reads the page and gets no controls that would only be refused.
+  const { isAdmin } = useRole()
   const [destinations, setDestinations] = useState<AdminDestination[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -99,6 +108,10 @@ export default function DestinationsSettingsPage() {
       </div>
       <p className="text-sm text-gray-500 mb-6">{t('subtitle')}</p>
 
+      {!isAdmin && (
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">{t('readOnly')}</div>
+      )}
+
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>
       )}
@@ -151,6 +164,7 @@ export default function DestinationsSettingsPage() {
                       >
                         <MapPin className="w-3 h-3" />
                         {city.name}
+                        {isAdmin && <>
                         <button
                           type="button"
                           title={city.is_active === false ? t('activateCity') : t('deactivateCity')}
@@ -171,10 +185,12 @@ export default function DestinationsSettingsPage() {
                         >
                           <Trash2 className="w-3 h-3" />
                         </button>
+                        </>}
                       </span>
                     ))}
                   </div>
 
+                  {isAdmin && (
                   <div className="flex items-center gap-2 pt-1">
                     <input
                       className="px-3 py-1.5 border border-gray-300 rounded-lg text-sm w-44"
@@ -227,6 +243,7 @@ export default function DestinationsSettingsPage() {
                       </label>
                     </div>
                   </div>
+                  )}
 
                   {/* The destination's voice in the generation prompt */}
                   <div className="pt-3 border-t border-gray-100 space-y-2">
@@ -234,38 +251,45 @@ export default function DestinationsSettingsPage() {
                     <textarea
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
                       rows={3}
+                      readOnly={!isAdmin}
                       placeholder={t('briefPlaceholder')}
                       value={voiceDrafts[dest.id]?.generation_brief ?? dest.generation_brief ?? ''}
                       onChange={e => setVoiceDrafts(v => ({ ...v, [dest.id]: {
                         generation_brief: e.target.value,
-                        glossary: v[dest.id]?.glossary ?? (typeof dest.glossary === 'string' ? dest.glossary : dest.glossary?.text ?? ''),
+                        glossary: v[dest.id]?.glossary ?? glossaryText(dest.glossary),
                       } }))}
                     />
                     <textarea
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm font-mono"
                       rows={4}
+                      readOnly={!isAdmin}
                       placeholder={t('glossaryPlaceholder')}
-                      value={voiceDrafts[dest.id]?.glossary ?? (typeof dest.glossary === 'string' ? dest.glossary : dest.glossary?.text ?? '')}
+                      value={voiceDrafts[dest.id]?.glossary ?? glossaryText(dest.glossary)}
                       onChange={e => setVoiceDrafts(v => ({ ...v, [dest.id]: {
                         generation_brief: v[dest.id]?.generation_brief ?? dest.generation_brief ?? '',
                         glossary: e.target.value,
                       } }))}
                     />
                     <div className="flex items-center gap-3">
-                      <button
+                      {isAdmin && <button
                         type="button"
                         disabled={busy || !voiceDrafts[dest.id]}
                         onClick={async () => {
                           const draft = voiceDrafts[dest.id]
                           if (!draft) return
-                          if (await act({ action: 'update_destination', id: dest.id, generation_brief: draft.generation_brief, glossary: draft.glossary })) {
+                          // Only what changed: the server writes the fields it
+                          // is sent, so an untouched box is never re-saved.
+                          const payload: Record<string, unknown> = { action: 'update_destination', id: dest.id }
+                          if (draft.generation_brief !== (dest.generation_brief ?? '')) payload.generation_brief = draft.generation_brief
+                          if (draft.glossary !== glossaryText(dest.glossary)) payload.glossary = draft.glossary
+                          if (await act(payload)) {
                             setVoiceDrafts(v => Object.fromEntries(Object.entries(v).filter(([k]) => k !== dest.id)))
                           }
                         }}
                         className="px-3 py-1.5 bg-[#647C47] text-white rounded-lg text-sm hover:bg-[#4a5c35] disabled:opacity-50"
                       >
                         {t('saveVoice')}
-                      </button>
+                      </button>}
                       <p className="text-xs text-gray-500">
                         {dest.country_code === 'EG' ? t('voiceHintEgypt') : t('voiceHint')}
                       </p>
@@ -278,6 +302,7 @@ export default function DestinationsSettingsPage() {
         })}
       </div>
 
+      {isAdmin && (
       <div className="mt-6 bg-white border border-gray-200 rounded-lg p-4">
         <p className="text-xs font-medium text-gray-600 mb-2">{t('addCountry')}</p>
         <div className="flex items-center gap-2">
@@ -316,6 +341,7 @@ export default function DestinationsSettingsPage() {
         </div>
         <p className="mt-2 text-xs text-gray-500">{t('addCountryHint')}</p>
       </div>
+      )}
     </div>
   )
 }

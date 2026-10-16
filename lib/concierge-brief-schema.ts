@@ -215,12 +215,11 @@ export function mapBrief(p: ConciergeBriefPayload): MappedBrief {
 
   const interestsArr = asStringArray(prefs.interests) ?? []
 
-  // Do NOT add org_id to this object. org_id is stamped at INSERT time by
-  // concierge-brief-intake.ts and must NOT be re-spread on revision UPDATE —
-  // see the destructure-and-omit guard at concierge-brief-intake.ts. If you
-  // need org-aware resolution at the mapper level (e.g. per-webhook-secret),
-  // that change is gated behind DEFERRED_GATES.md → G1; coordinate the
-  // UPDATE-side change there.
+  // Do NOT add org_id to this object. The brief's company is decided by the
+  // secret that signed it (the webhook route → lib/concierge/brief-org.ts),
+  // passed to ingestBrief, stamped at INSERT, and must NOT be re-spread on
+  // revision UPDATE — see the destructure-and-omit guard at
+  // concierge-brief-intake.ts. The payload never chooses the company.
   const briefRow: Record<string, unknown> = {
     conversation_id: p.conversation_id,
     session_id: nonEmpty(p.session_id),

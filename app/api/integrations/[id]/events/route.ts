@@ -12,6 +12,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { orgAuth } from '@/lib/auth/org-auth'
+import { requireRole } from '@/lib/auth/current-org'
 
 export const dynamic = 'force-dynamic'
 
@@ -30,6 +31,12 @@ export async function GET(
     if (!supabase || !org_id) {
       return NextResponse.json({ success: false, error: 'Authentication failed' }, { status: 401 })
     }
+
+    // The delivery log is read on Settings › Partner Integrations, a screen
+    // for admins and managers — the same audience as GET /api/integrations.
+    // Any member with an id could read it.
+    const denied = await requireRole(['admin', 'manager'])
+    if (denied) return denied
 
     const { id } = await params
     const requested = Number(request.nextUrl.searchParams.get('limit') || 20)

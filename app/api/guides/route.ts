@@ -1,7 +1,8 @@
 // ============================================
 // API Route: /api/guides
 // ============================================
-// Fetches guides from suppliers table (type='guide')
+// Fetches guides from suppliers table (type='guide') — the caller's
+// company's only (suppliers.org_id, 20261205)
 // GET: List all guides (with filters)
 // ============================================
 
@@ -40,6 +41,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('suppliers')
       .select('*')
+      .eq('org_id', orgId)
       .overlaps('types', supplierTypeKeysMatching(['guide'], await supplierTypesForCurrentOrg()))
       .order('name', { ascending: true })
     
@@ -87,6 +89,7 @@ export async function GET(request: NextRequest) {
       let bookingsQuery = supabase
         .from('itineraries')
         .select('assigned_guide_id')
+        .eq('org_id', orgId)
         .not('assigned_guide_id', 'is', null)
         .or(`and(start_date.lte.${availability_to},end_date.gte.${availability_from})`)
       
@@ -100,8 +103,8 @@ export async function GET(request: NextRequest) {
       guides = guides.filter(g => !bookedGuideIds.includes(g.id))
     }
     
-    // Add statistics if requested. Only this organisation's trips: the guide
-    // is shared by the install, another agency's bookings and revenue are not.
+    // Add statistics if requested. Only this organisation's trips (its guides
+    // are its own; the filter stays as the second wall).
     // Revenue is per currency — trips are priced in different currencies and
     // a sum across them is no amount at all.
     if (with_stats && guides.length > 0) {
@@ -154,6 +157,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = getSupabase()
     const body = await request.json()
     
@@ -169,6 +174,7 @@ export async function POST(request: NextRequest) {
     // to be one of the roles, and the column defaults to '{}' — without it
     // every guide created here was refused by the database.
     const guideData = {
+      org_id: orgId,
       type: 'guide',
       types: ['guide'],
       name: body.name,

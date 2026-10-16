@@ -24,8 +24,14 @@ describe('P6 — bounded queries and bodies', () => {
   it('bulk-update caps the id fan-out', () => {
     expect(src('app/api/b2b/quotes/bulk-update/route.ts')).toMatch(/quote_ids\.length > 500/)
   })
-  it('accounts-receivable is bounded', () => {
-    expect(src('app/api/accounts-receivable/route.ts')).toMatch(/\.limit\(1000\)/)
+  // A single .limit(1000) silently dropped the newest invoices from every total
+  // past 1,000 open ones; it now reads page by page up to a ceiling and flags
+  // `truncated` (behaviour pinned in finance-routes.test.ts).
+  it('accounts-receivable is bounded, page by page', () => {
+    const c = src('app/api/accounts-receivable/route.ts')
+    expect(c).toMatch(/fetchAllRows/)
+    expect(c).toMatch(/\.range\(from, to\)/)
+    expect(c).not.toMatch(/\.limit\(1000\)/)
   })
   it('avatar rejects oversized uploads before parsing the body', () => {
     const a = src('app/api/avatar/upload/route.ts')

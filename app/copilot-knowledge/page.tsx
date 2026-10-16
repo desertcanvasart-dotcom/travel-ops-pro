@@ -12,6 +12,8 @@ interface Entry {
   title: string | null
   query_text: string
   answer_text: string
+  /** The whole entry (every chunk), for editing; answer_text is chunk 0. */
+  full_text?: string
   metadata: { question?: string | null; total_chunks?: number }
   is_active: boolean
   updated_at: string
@@ -36,6 +38,7 @@ export default function CopilotKnowledgePage() {
   const [showBulk, setShowBulk] = useState(false)
   const [tone, setTone] = useState<Tone>('professional')
   const [toneSaving, setToneSaving] = useState(false)
+  const [actionError, setActionError] = useState<string | null>(null)
 
   const load = async () => {
     setLoading(true)
@@ -67,19 +70,34 @@ export default function CopilotKnowledgePage() {
 
   const visible = filter === 'all' ? entries : entries.filter((e) => e.source_type === filter)
 
+  // The list changes only when the server says it did — a failed toggle or
+  // delete used to look done until the next reload.
+  const mutate = async (url: string, init: RequestInit, failure: string): Promise<boolean> => {
+    setActionError(null)
+    try {
+      const res = await fetch(url, init)
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.success) return true
+      setActionError(data.error || failure)
+    } catch {
+      setActionError(failure)
+    }
+    return false
+  }
+
   const toggleActive = async (entry: Entry) => {
-    await fetch(`/api/copilot/knowledge/${entry.id}`, {
+    const ok = await mutate(`/api/copilot/knowledge/${entry.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ is_active: !entry.is_active }),
-    })
-    setEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, is_active: !e.is_active } : e)))
+    }, 'Could not change the entry. Nothing was changed.')
+    if (ok) setEntries((prev) => prev.map((e) => (e.id === entry.id ? { ...e, is_active: !entry.is_active } : e)))
   }
 
   const remove = async (entry: Entry) => {
     if (!(await confirmDialog(`Delete "${entry.title || entry.query_text.slice(0, 40)}"?`))) return
-    await fetch(`/api/copilot/knowledge/${entry.id}`, { method: 'DELETE' })
-    setEntries((prev) => prev.filter((e) => e.id !== entry.id))
+    const ok = await mutate(`/api/copilot/knowledge/${entry.id}`, { method: 'DELETE' }, 'Could not delete the entry.')
+    if (ok) setEntries((prev) => prev.filter((e) => e.id !== entry.id))
   }
 
   return (
@@ -141,6 +159,13 @@ export default function CopilotKnowledgePage() {
           </div>
         </div>
       </div>
+
+      {actionError && (
+        <div className="mb-4 flex items-start justify-between gap-3 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+          <span>{actionError}</span>
+          <button onClick={() => setActionError(null)} className="text-red-500 hover:text-red-700" title="Dismiss"><X className="w-4 h-4" /></button>
+        </div>
+      )}
 
       {/* Filter pills */}
       <div className="flex items-center gap-2 mb-4 flex-wrap">
@@ -447,7 +472,7 @@ function EntryModal({ entry, onClose, onSaved }: { entry: Entry | null; onClose:
   const [sourceType, setSourceType] = useState<SourceType>(entry?.source_type || 'kb_faq')
   const [title, setTitle] = useState(entry?.title || '')
   const [question, setQuestion] = useState(entry?.metadata?.question || '')
-  const [content, setContent] = useState(entry?.answer_text || '')
+  const [content, setContent] = useState(entry?.full_text ?? entry?.answer_text ?? '')
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 

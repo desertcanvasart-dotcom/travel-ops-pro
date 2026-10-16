@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { resolveTripShapeWrite } from '@/lib/pricing/road-trips'
 import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
+import { OWN_SUPPLIER_EMBED, ownSupplierOnRow, ownSupplierOnRows } from '@/lib/rates/own-supplier-embed'
+import { findSameTransportRate, findServiceCodeClash } from '@/lib/rates/transport-natural-key'
+import { validateRatePayload } from '@/lib/rate-validation'
 
 // Actor-attributed service-role client (lib/supabase-actor): rate-table
 // writes from here reach fn_rate_audit_trigger, and without the actor
@@ -16,24 +22,42 @@ const supabaseAdmin = createServerClient()
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const city = searchParams.get('city')
     const serviceType = searchParams.get('serviceType')
     const supplierId = searchParams.get('supplier_id')
     const activeOnly = searchParams.get('activeOnly') === 'true'
 
+    // The screen's tiles: counts over ALL the company's rates, whatever the
+    // list is filtered to — they counted only the rows loaded, so "Inactive"
+    // read 0 unless Show Inactive was on.
+    if (searchParams.get('summary') === '1') {
+      const { data, error } = await supabaseAdmin
+        .from('transportation_rates')
+        .select('id, city, is_active, supplier_id')
+        .eq('org_id', orgId)
+      if (error) {
+        console.error('Error counting transportation rates:', error)
+        return NextResponse.json({ error: 'Failed to count transportation rates' }, { status: 500 })
+      }
+      return NextResponse.json(transportSummary(data ?? []))
+    }
+
+    // The supplier embed carries its company so another company's supplier
+    // (linked before the writes checked it) is never shown — lib/rates/own-supplier-embed.
     let query = supabaseAdmin
       .from('transportation_rates')
-      .select(`
-        *,
-        supplier:supplier_id (id, name, city, contact_phone, contact_email)
-      `)
+      .select(`*, ${OWN_SUPPLIER_EMBED}`)
+      .eq('org_id', orgId)
       .order('city', { ascending: true })
       .order('service_type', { ascending: true })
 
     if (city) query = query.eq('city', city)
     if (serviceType) query = query.eq('service_type', serviceType)
-    if (supplierId) query = query.eq('supplier_id', supplierId)
+    // Only one of the caller's company's suppliers (lib/suppliers/supplier-org).
+    if (supplierId) query = query.eq('supplier_id', await ownSupplierFilterId(supabaseAdmin, supplierId, orgId))
     if (activeOnly) query = query.eq('is_active', true)
 
     const { data, error } = await query
@@ -43,7 +67,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch transportation rates' }, { status: 500 })
     }
 
-    return NextResponse.json(data || [])
+    return NextResponse.json(ownSupplierOnRows(data, orgId))
   } catch (error) {
     console.error('Error in transportation rates GET:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -52,10 +76,26 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     if (!body.city || !body.service_type) {
       return NextResponse.json({ error: 'City and service type are required' }, { status: 400 })
+    }
+
+    const rateCheck = validateRatePayload(body)
+    if (!rateCheck.ok) {
+      return NextResponse.json({ error: 'Invalid rate values', violations: rateCheck.errors }, { status: 400 })
+    }
+
+    // The supplier must be one of this company's; "No supplier / Direct
+    // booking" (the '__none__' option) is stored as no supplier. It used to
+    // go into the uuid column raw, so that option could never save, and any
+    // id — another company's included — was stored unchecked.
+    const supplierCheck = await validateAndResolveSupplierFields(body, supabaseAdmin, orgId)
+    if (!supplierCheck.ok) {
+      return NextResponse.json({ error: supplierCheck.error }, { status: supplierCheck.status })
     }
 
     // The vehicles this rate offers
@@ -83,12 +123,14 @@ export async function POST(request: NextRequest) {
       trip_shape: tripShapeWrite.value,
       duration: body.duration || null,
       area: body.area || null,
+      // The form's Route Name — it was sent and dropped.
+      route_name: body.route_name || null,
       includes: body.includes || null,
       season: body.season || null,
       rate_valid_from: body.rate_valid_from || new Date().toISOString().split('T')[0],
       rate_valid_to: body.rate_valid_to || '2099-12-31',
-      supplier_id: body.supplier_id || null,
-      supplier_name: body.supplier_name || null,
+      supplier_id: supplierCheck.supplier_id,
+      supplier_name: supplierCheck.supplier_name || null,
       notes: body.notes || null,
       is_active: body.is_active !== undefined ? body.is_active : true,
       // Phase B (per-rate currency) named the WRONG route family for this
@@ -99,10 +141,34 @@ export async function POST(request: NextRequest) {
       ...vehiclePatch
     }
 
+    if (newRate.rate_valid_to < newRate.rate_valid_from) {
+      return NextResponse.json({ error: 'Valid to must be on or after Valid from' }, { status: 400 })
+    }
+
+    // A create never inserts a second copy of a rate (lib/rates/transport-natural-key).
+    const { data: orgRates } = await supabaseAdmin
+      .from('transportation_rates')
+      .select('*')
+      .eq('org_id', orgId)
+    const clash = findServiceCodeClash(newRate.service_code, orgRates ?? [])
+    if (clash) {
+      return NextResponse.json({
+        error: `Service code ${newRate.service_code} is already used by another rate. Change the code, or edit that rate.`,
+        existing: clash,
+      }, { status: 409 })
+    }
+    const existing = findSameTransportRate(newRate, (orgRates ?? []).filter((r: any) => r.service_type === newRate.service_type))
+    if (existing) {
+      return NextResponse.json({
+        error: 'A rate with these details already exists. Edit that rate, or change what makes this one different (supplier, route name, validity dates, city) before saving.',
+        existing,
+      }, { status: 409 })
+    }
+
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
-      .insert([newRate])
-      .select(`*, supplier:supplier_id (id, name, city)`)
+      .insert([{ ...newRate, org_id: orgId }])
+      .select(`*, ${OWN_SUPPLIER_EMBED}`)
       .single()
 
     if (error) {
@@ -110,9 +176,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: `Failed to create: ${error.message}` }, { status: 500 })
     }
 
-    return NextResponse.json(data, { status: 201 })
+    return NextResponse.json(ownSupplierOnRow(data, orgId), { status: 201 })
   } catch (error) {
     console.error('Error in transportation rates POST:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+  }
+}
+
+/** The tiles' counts over every rate of the company. */
+export function transportSummary(rows: ReadonlyArray<{ city?: string | null; is_active?: boolean | null; supplier_id?: string | null }>) {
+  const active = rows.filter(r => r.is_active).length
+  return {
+    total: rows.length,
+    active,
+    inactive: rows.length - active,
+    cities: new Set(rows.map(r => String(r.city ?? '').trim().toLowerCase()).filter(Boolean)).size,
+    linked: rows.filter(r => r.supplier_id).length,
   }
 }

@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { Tip } from '../layout'
 
 export default function PortalMessagesPage() {
   return (
@@ -13,23 +13,26 @@ export default function PortalMessagesPage() {
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">Portal Messages</h1>
       <p className="text-gray-600 mb-8">
-        Travellers can ask questions from their own booking page, and your team answers from the
-        unified inbox. The question and the answer stay attached to the trip they are about,
-        instead of living in somebody&rsquo;s email.
+        Travellers can ask questions from their own booking page, and your team answers from the Unified Inbox or the
+        booking. The question and the answer stay attached to the booking they are about. Admins, managers and agents
+        answer them (the owner always can); viewers cannot.
       </p>
 
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">The traveller asks</h2>
         <p className="text-gray-600 mb-3">
-          Under <strong>お問い合わせ</strong> on their portal page. Before they send, they can see
-          your office hours; if nobody is in, they are told when the next office opens, in their
-          own time zone.
+          Under <strong>お問い合わせ</strong> on their portal page (the portal is in Japanese). A message can be up to 4,000
+          characters. The page checks for your reply every 30 seconds while it is open.
+        </p>
+        <p className="text-gray-600 mb-3">
+          If office hours are set for your company, they are listed above the box, and outside them the traveller is told
+          when the next office opens. Times are always given in Japan time.
         </p>
         <p className="text-gray-600">
-          Their first message gets an automatic acknowledgement confirming it arrived. Later
-          messages do not repeat it.
+          The first message in a conversation gets an automatic acknowledgement that it arrived (with the next opening
+          time when nobody is in). Later messages do not repeat it. Your company&apos;s owner, admins and managers get an
+          in-app notification, <strong>New portal message</strong>, that opens the booking. No email is sent for it.
         </p>
-        <ScreenshotPlaceholder caption="The message thread on a traveller's page, showing office hours above the box" />
       </section>
 
       <section className="mb-10">
@@ -37,66 +40,65 @@ export default function PortalMessagesPage() {
         <p className="text-gray-600 mb-3">Two places, and they are the same conversation:</p>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
           <li>
-            <strong>Unified Inbox</strong> &mdash; portal conversations sit beside WhatsApp and
-            email, under the <strong>Portal</strong> tab. This is the one to watch.
+            <strong>Communicate &rsaquo; Unified Inbox</strong>, under the <strong>Portal</strong> tab. A conversation
+            is unread while the traveller&apos;s last message is newer than the last time someone on your team opened it.
+            Opening it marks it read.
           </li>
           <li>
-            <strong>The booking page</strong> &mdash; a Messages panel, useful when you are
-            already looking at the trip.
+            <strong>The booking page</strong> &mdash; a Messages panel, useful when you are already looking at the trip.
+            It refreshes every minute while the page is in view.
           </li>
         </ul>
         <p className="text-gray-600 mt-3">
-          When you reply, the traveller is emailed a link back to their page. The email does not
-          repeat what you wrote &mdash; the conversation may concern a passport or a payment, and
-          email is the less private channel of the two.
+          When you reply, the traveller is emailed a link back to their page, from your company&apos;s Gmail mailbox. The
+          email does not repeat what you wrote: the conversation may concern a passport or a payment, and email is the
+          less private channel. A private conversation emails that traveller (or the booking&apos;s contact if they have
+          no address) with their own private link; the shared conversation emails the booking&apos;s contact with the
+          shared link.
         </p>
         <Tip>
-          The panel tells you whether that email actually went. If it says no, the traveller has
-          no email address on file and will only see your reply if they reopen their link.
+          After you send, a notice says when the email did not go, and why: nobody on the booking has an email address;
+          the booking has no active portal link for that conversation; no Gmail is connected for your company (an admin
+          or manager connects it in Settings &rsaquo; Email); or the send failed. Your reply is saved either way.
         </Tip>
       </section>
 
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Whose conversation is it</h2>
         <p className="text-gray-600 mb-3">
-          The same rule as the rest of the portal: it follows the link.
+          It follows the link the traveller used:
         </p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li>A <strong>family</strong> link opens one conversation for the whole party</li>
-          <li>A <strong>private</strong> link opens that traveller&rsquo;s own conversation, which
-            nobody else on the booking can read</li>
+          <li>A <strong>family</strong> link opens one conversation for the whole party.</li>
+          <li>A <strong>private</strong> link opens that traveller&rsquo;s own conversation, which nobody else on the booking can read.</li>
         </ul>
         <p className="text-gray-600 mt-3">
-          In the inbox each conversation is labelled, so you can see at a glance whether you are
-          answering the whole party or one person privately.
+          In the inbox each conversation is labelled &ldquo;whole party&rdquo; or &ldquo;(private)&rdquo; after the trip
+          name, so you can see whom you are answering.
         </p>
       </section>
 
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Setting your office hours</h2>
-        <p className="text-gray-600 mb-3">
-          Hours are held per office, each with its own working week and time zone, so a team
-          split across countries is described accurately rather than averaged. A traveller is
-          told when <em>any</em> office will next be open.
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Office hours</h2>
+        <p className="text-gray-600">
+          Hours are held per office, each with its own working days, times and time zone, and the traveller is told when
+          <em> any</em> office will next be open. There is no screen to set them yet: they are stored on the company
+          record by whoever runs your installation. Until they are set, no hours are shown and the acknowledgement simply
+          says someone will reply.
         </p>
-        <Tip>
-          A chat box is a promise that somebody is reading it. Decide who watches the Portal tab,
-          and when, before you send the first link &mdash; an unanswered message is worse than no
-          message box at all.
-        </Tip>
       </section>
 
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Current limits</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li>The traveller starts the conversation. You cannot open one and write first &mdash;
-            use email or WhatsApp for that.</li>
+          <li>The traveller starts the conversation. You cannot open one and write first; use email or WhatsApp for that.</li>
           <li>Messages are text only. Files go through{' '}
             <Link href="/docs/passport-documents" className="text-primary-600 hover:underline">
               document attachments
             </Link> instead.</li>
-          <li>Portal conversations are not assigned to an agent the way WhatsApp and email
-            conversations are.</li>
+          <li>Portal conversations cannot be assigned, archived or deleted, and they are left out of the Unified Inbox&apos;s Unassigned, Archived and Spam filters.</li>
+          <li>A portal thread cannot be filtered by client: bookings carry the client&apos;s details but are not linked to a client record.</li>
+          <li>Office hours cannot be edited in the app.</li>
         </ul>
       </section>
     </div>

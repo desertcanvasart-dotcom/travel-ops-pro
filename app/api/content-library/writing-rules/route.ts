@@ -6,40 +6,35 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
+import { contentSession, destinationInOrg, withoutOwnedColumns } from '@/lib/content-library/session'
+
+// Writing rules are each company's own (20261208): read and written in the
+// caller's ACTIVE company only (lib/content-library/session.ts); the AI
+// generator reads the same company's (lib/ai/content-library.ts).
 
 const VALID_CATEGORIES = ['tone', 'vocabulary', 'structure', 'formatting', 'brand']
 const VALID_RULE_TYPES = ['enforce', 'prefer', 'avoid']
 const VALID_APPLIES_TO = ['itinerary', 'email', 'whatsapp', 'all']
 
-// Helper to create Supabase client
-async function createClient() {
-  const cookieStore = await cookies()
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options)
-          })
-        },
-      },
-    }
-  )
+// applies_to as stored: missing or empty means every channel (['all']) — an
+// empty array used to be stored as-is ([] is truthy) and read as "applies to
+// nothing" on the page. Anything that is not a list of known channels is
+// rejected (null = invalid).
+function normaliseAppliesTo(value: unknown): string[] | null {
+  if (value === undefined || value === null) return ['all']
+  if (!Array.isArray(value)) return null
+  if (value.length === 0) return ['all']
+  return value.every(a => typeof a === 'string' && VALID_APPLIES_TO.includes(a)) ? value : null
 }
 
 // GET - List writing rules
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
     const { searchParams } = new URL(request.url)
-    
+
     // Parse filters
     const category = searchParams.get('category')
     const ruleType = searchParams.get('rule_type')
@@ -51,6 +46,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('writing_rules')
       .select('*')
+      .eq('org_id', orgId)
       .order('priority', { ascending: false })
       .order('name', { ascending: true })
 
@@ -117,13 +113,9 @@ export async function GET(request: NextRequest) {
 // POST - Create new writing rule
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId, userId } = session
 
     const body = await request.json()
     const {
@@ -133,7 +125,8 @@ export async function POST(request: NextRequest) {
       description,
       examples,
       priority,
-      applies_to
+      applies_to,
+      destination_id
     } = body
 
     // Validation
@@ -159,8 +152,8 @@ export async function POST(request: NextRequest) {
     }
 
     // Validate applies_to
-    const finalAppliesTo = applies_to || ['all']
-    if (!finalAppliesTo.every((a: string) => VALID_APPLIES_TO.includes(a))) {
+    const finalAppliesTo = normaliseAppliesTo(applies_to)
+    if (!finalAppliesTo) {
       return NextResponse.json(
         { error: `Invalid applies_to values. Must be from: ${VALID_APPLIES_TO.join(', ')}` },
         { status: 400 }
@@ -176,9 +169,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    if (destination_id && !(await destinationInOrg(supabase, orgId, destination_id))) {
+      return NextResponse.json({ error: 'Destination not found' }, { status: 404 })
+    }
+
     const { data, error } = await supabase
       .from('writing_rules')
       .insert({
+        org_id: orgId,
         name,
         category,
         rule_type,
@@ -186,7 +184,8 @@ export async function POST(request: NextRequest) {
         examples: examples || {},
         priority: finalPriority,
         applies_to: finalAppliesTo,
-        created_by: user.id
+        destination_id: destination_id || null,
+        created_by: userId
       })
       .select()
       .single()
@@ -209,16 +208,13 @@ export async function POST(request: NextRequest) {
 // PATCH - Update writing rule
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
 
     const body = await request.json()
-    const { id, ...updates } = body
+    const id = body.id
+    const updates = withoutOwnedColumns(body)
 
     if (!id) {
       return NextResponse.json(
@@ -243,6 +239,21 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    if ('applies_to' in updates) {
+      const appliesTo = normaliseAppliesTo(updates.applies_to)
+      if (!appliesTo) {
+        return NextResponse.json(
+          { error: `Invalid applies_to values. Must be from: ${VALID_APPLIES_TO.join(', ')}` },
+          { status: 400 }
+        )
+      }
+      updates.applies_to = appliesTo
+    }
+
+    if ('is_active' in updates && typeof updates.is_active !== 'boolean') {
+      return NextResponse.json({ error: 'is_active must be true or false' }, { status: 400 })
+    }
+
     // Validate priority if provided
     if (updates.priority !== undefined && (updates.priority < 1 || updates.priority > 10)) {
       return NextResponse.json(
@@ -251,17 +262,21 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
-    // Remove fields that shouldn't be updated
-    delete updates.created_at
-    delete updates.created_by
+    if (updates.destination_id && !(await destinationInOrg(supabase, orgId, updates.destination_id))) {
+      return NextResponse.json({ error: 'Destination not found' }, { status: 404 })
+    }
 
     const { data, error } = await supabase
       .from('writing_rules')
       .update(updates)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
-      .single()
+      .maybeSingle()
 
+    if (!error && !data) {
+      return NextResponse.json({ error: 'Rule not found' }, { status: 404 })
+    }
     if (error) {
       console.error('Error updating writing rule:', error)
       return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -280,13 +295,9 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Delete writing rule
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
@@ -302,6 +313,7 @@ export async function DELETE(request: NextRequest) {
       .from('writing_rules')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
 
     if (error) {
       console.error('Error deleting writing rule:', error)

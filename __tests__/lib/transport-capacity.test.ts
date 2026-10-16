@@ -68,11 +68,13 @@ describe('getTransportRateForPax — vehicles the agency actually runs', () => {
     expect(getTransportRateForPax({}, 2)).toBeNull()
   })
 
-  it('takes the largest vehicle they run when the group exceeds every band', () => {
-    // 60 people, biggest is a 45-seat bus. Today's rule prices ONE bus, which
-    // is wrong — recorded here so the behaviour is visible rather than assumed.
+  it('takes as many of the largest vehicle as the group needs when it exceeds every band', () => {
+    // 60 people, biggest is a 45-seat bus. The rule used to price ONE bus
+    // (this test recorded that as wrong); it is two buses now, priced as two.
     const r = getTransportRateForPax(CONVENTIONAL, 60)
-    expect(r?.vehicleType).toBe('Bus')
+    expect(r?.vehicleType).toBe('2 × Bus')
+    expect(r?.vehicleCount).toBe(2)
+    expect(r?.rateEur).toBe(158)
     expect(r?.capacityMax).toBe(45)
   })
 })

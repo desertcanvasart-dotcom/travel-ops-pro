@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { templatePlaceholders } from '@/lib/templates/template-send'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
-import { templateAccess, visibleToOrg } from '@/lib/templates/template-scope'
+import { templateAccess, templateSaveFailure, visibleToOrg } from '@/lib/templates/template-scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -48,9 +49,9 @@ export async function PUT(
     const body = await request.json()
     const { name, description, category, subcategory, channel, subject, body: templateBody, language } = body
 
-    // Extract placeholders from body
-    const placeholderMatches = templateBody?.match(/\{\{[^}]+\}\}/g) || []
-    const placeholders = [...new Set(placeholderMatches)]
+    // Placeholders from the body and the subject — a subject-only one is
+    // still something the sender must fill.
+    const placeholders = templatePlaceholders(templateBody, subject)
 
     const updateData: any = { updated_at: new Date().toISOString() }
     if (name !== undefined) updateData.name = name
@@ -120,12 +121,10 @@ export async function PUT(
           .select()
           .single()
 
-    if (error?.code === '23505') {
-      return NextResponse.json({ success: false, error: 'Your organization already has a template with this name, channel and language' }, { status: 409 })
-    }
-    if (error) {
-      console.error('Error updating template:', error)
-      return NextResponse.json({ success: false, error: 'Failed to update template' }, { status: 500 })
+    const failed = templateSaveFailure(error, 'Failed to update template')
+    if (failed) {
+      if (failed.status === 500) console.error('Error updating template:', error)
+      return NextResponse.json({ success: false, error: failed.error }, { status: failed.status })
     }
 
     return NextResponse.json({ success: true, data })

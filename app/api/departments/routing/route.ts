@@ -37,6 +37,7 @@ export async function GET() {
     const { data: departments, error: deptError } = await supabaseAdmin
       .from('departments')
       .select('id, name, description, service_types, is_active')
+      .eq('org_id', orgId)
       .eq('is_active', true)
       .order('name')
 
@@ -51,10 +52,12 @@ export async function GET() {
     const rows = (departments || []) as DepartmentRow[]
 
     // The service types actually in use, so the report reflects this operator's
-    // real work rather than a list someone typed once.
+    // real work rather than a list someone typed once — this organisation's
+    // trips only (through the day's itinerary); it read every company's.
     const { data: services } = await supabaseAdmin
       .from('itinerary_services')
-      .select('service_type')
+      .select('service_type, itinerary_days!inner(itineraries!inner(org_id))')
+      .eq('itinerary_days.itineraries.org_id', orgId)
 
     const observed = new Set<string>()
     for (const s of services || []) {

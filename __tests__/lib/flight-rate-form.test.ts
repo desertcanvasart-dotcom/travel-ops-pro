@@ -68,8 +68,11 @@ describe('why the top box could not have worked', () => {
 
   it('and the route spreads it AFTER the typed values', () => {
     const route = read('app/api/rates/flights/route.ts')
+    // The periods patch (lib/rates/flight-write: seasons + the first-period
+    // mirror) is spread after the typed columns, so the periods win.
     expect(route.indexOf('base_rate_eur: parseFloat(body.base_rate_eur)'))
-      .toBeLessThan(route.indexOf("legacyColumnMirror(flightSeasons, 'flight')"))
+      .toBeLessThan(route.indexOf('...(periods.patch.seasons ? periods.patch : {})'))
+    expect(route.indexOf('...(periods.patch.seasons ? periods.patch : {})')).toBeGreaterThan(-1)
   })
 
   it('a flight period carries the fields the fare is made of', () => {

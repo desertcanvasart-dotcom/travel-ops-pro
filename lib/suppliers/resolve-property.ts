@@ -13,6 +13,13 @@
 // with a single SELECT instead of two round-trips per row. The per-row
 // function delegates to the batch one, so a sheet and a form can never place
 // the same rate on different properties.
+//
+// Within ONE company (supplier_properties.org_id, 20261205): an explicit
+// property id of another company's is ignored, and a property is found or
+// created only under a supplier of the caller's company. `orgId` omitted =
+// the request's company (lib/suppliers/supplier-org.ts).
+
+import { supplierOrgId } from './supplier-org'
 
 interface Db {
   from(table: string): any
@@ -53,21 +60,25 @@ const propertyKey = (supplierId: string, propertyType: string, name: string) =>
 export async function resolveRateProperties(
   db: Db,
   requests: readonly PropertyRequest[],
+  orgId?: string | null,
 ): Promise<PropertyResolution[]> {
   const out: PropertyResolution[] = requests.map(() => ({ property_id: null }))
+  const org = await supplierOrgId(orgId)
+  if (!org) return out
 
   // An explicit property id wins, and its canonical name overwrites whatever
   // the payload spelled. Looked up in one query for the whole batch.
   const explicitIds = Array.from(
     new Set(requests.map(r => norm(r.propertyId)).filter(Boolean)),
   )
-  const byId = new Map<string, { id: string; name: string }>()
+  const byId = new Map<string, { id: string; name: string; supplier_id: string | null }>()
   if (explicitIds.length > 0) {
     const { data } = await db
       .from('supplier_properties')
       .select('id, name, supplier_id')
       .in('id', explicitIds)
-    for (const p of data ?? []) byId.set(p.id, { id: p.id, name: p.name })
+      .eq('org_id', org)
+    for (const p of data ?? []) byId.set(p.id, { id: p.id, name: p.name, supplier_id: p.supplier_id ?? null })
   }
 
   // Everything that still needs resolving by name, deduplicated: a sheet of
@@ -75,7 +86,9 @@ export async function resolveRateProperties(
   const pending = new Map<string, { req: PropertyRequest; indices: number[]; supplierId: string; name: string }>()
   requests.forEach((req, i) => {
     const explicit = norm(req.propertyId)
-    if (explicit && byId.has(explicit)) {
+    // ...and only when it is the RATE'S supplier's property: a rate under
+    // supplier X linked to supplier Y's hotel would book X and show Y.
+    if (explicit && byId.has(explicit) && byId.get(explicit)!.supplier_id === (norm(req.supplierId) || null)) {
       const p = byId.get(explicit)!
       out[i] = { property_id: p.id, name: p.name }
       return
@@ -92,12 +105,25 @@ export async function resolveRateProperties(
   })
   if (pending.size === 0) return out
 
+  // Only suppliers of this company may hold (or get) a property here; a
+  // request naming another company's supplier resolves to no property.
+  const named = Array.from(new Set(Array.from(pending.values()).map(p => p.supplierId)))
+  const { data: own } = await db
+    .from('suppliers')
+    .select('id')
+    .in('id', named)
+    .eq('org_id', org)
+  const ownIds = new Set<string>((own ?? []).map((s: { id: string }) => s.id))
+  for (const [k, p] of pending) if (!ownIds.has(p.supplierId)) pending.delete(k)
+  if (pending.size === 0) return out
+
   // One SELECT for every supplier named in the batch, matched in memory.
   const supplierIds = Array.from(new Set(Array.from(pending.values()).map(p => p.supplierId)))
   const { data: existing } = await db
     .from('supplier_properties')
     .select('id, name, supplier_id, property_type')
     .in('supplier_id', supplierIds)
+    .eq('org_id', org)
   const found = new Map<string, { id: string; name: string }>()
   for (const p of existing ?? []) {
     const k = propertyKey(p.supplier_id, p.property_type, String(p.name ?? ''))
@@ -114,7 +140,7 @@ export async function resolveRateProperties(
 
   const { data: created, error } = await db
     .from('supplier_properties')
-    .insert(toCreate.map(({ supplier_id, property_type, name }) => ({ supplier_id, property_type, name })))
+    .insert(toCreate.map(({ supplier_id, property_type, name }) => ({ org_id: org, supplier_id, property_type, name })))
     .select('id, name, supplier_id, property_type')
   // Creation is best-effort: a failure (e.g. a concurrent insert losing the
   // unique race) must not block saving the rates themselves. The affected rows
@@ -140,8 +166,9 @@ export async function resolveRateProperty(
     supplierId: string | null | undefined
     name: string | null | undefined
     propertyId?: string | null
-  }
+  },
+  orgId?: string | null,
 ): Promise<PropertyResolution> {
-  const [one] = await resolveRateProperties(db, [opts])
+  const [one] = await resolveRateProperties(db, [opts], orgId)
   return one
 }

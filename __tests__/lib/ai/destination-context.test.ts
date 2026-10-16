@@ -26,19 +26,24 @@ const JORDAN_CITIES = [
 
 describe('loadDestinationPromptContext', () => {
   it('no id and no default row → Egypt, exactly as before destinations existed', async () => {
-    const ctx = await loadDestinationPromptContext(fakeDb({}), null)
+    const ctx = await loadDestinationPromptContext(fakeDb({}), 'org-1', null)
+    expect(ctx).toEqual(egyptPromptContext())
+  })
+
+  it('no organisation → Egypt: no company, no destination of anyone\'s', async () => {
+    const ctx = await loadDestinationPromptContext(fakeDb({ destinations: JORDAN_ROW, destination_cities: JORDAN_CITIES }), null, 'd-jo')
     expect(ctx).toEqual(egyptPromptContext())
   })
 
   it('a read failure → Egypt, never a throw', async () => {
     const db = { from: () => { throw new Error('boom') } }
-    const ctx = await loadDestinationPromptContext(db, 'whatever')
+    const ctx = await loadDestinationPromptContext(db, 'org-1', 'whatever')
     expect(ctx.name).toBe('Egypt')
   })
 
   it('a Jordan row speaks Jordan: name, glossary, brief, default city', async () => {
     const ctx = await loadDestinationPromptContext(
-      fakeDb({ destinations: JORDAN_ROW, destination_cities: JORDAN_CITIES }), 'd-jo')
+      fakeDb({ destinations: JORDAN_ROW, destination_cities: JORDAN_CITIES }), 'org-1', 'd-jo')
     expect(ctx.name).toBe('Jordan')
     expect(ctx.glossary).toContain('AMM = Amman')
     expect(ctx.brief).toContain('base in Amman')
@@ -53,7 +58,7 @@ describe('loadDestinationPromptContext', () => {
   it('a Jordan row WITHOUT glossary/brief gets honest minimal framing from its cities', async () => {
     const bare = { ...JORDAN_ROW, glossary: null, generation_brief: null }
     const ctx = await loadDestinationPromptContext(
-      fakeDb({ destinations: bare, destination_cities: JORDAN_CITIES }), 'd-jo')
+      fakeDb({ destinations: bare, destination_cities: JORDAN_CITIES }), 'org-1', 'd-jo')
     expect(ctx.glossary).toContain('KNOWN JORDAN CITIES')
     expect(ctx.glossary).toContain('Amman, Petra, Aqaba')
     expect(ctx.brief).toBe('')
@@ -61,7 +66,7 @@ describe('loadDestinationPromptContext', () => {
 
   it('Egypt row keeps the code-borne framing (its data predates the tables)', async () => {
     const eg = { id: 'd-eg', country_code: 'EG', name: 'Egypt', is_default: true, generation_brief: null, glossary: null }
-    const ctx = await loadDestinationPromptContext(fakeDb({ destinations: eg, destination_cities: [] }), 'd-eg')
+    const ctx = await loadDestinationPromptContext(fakeDb({ destinations: eg, destination_cities: [] }), 'org-1', 'd-eg')
     expect(ctx.glossary).toBe(EGYPT_TRAVEL_GLOSSARY)
     expect(ctx.defaultCity).toBe('Cairo')
     expect(ctx.hasCruises).toBe(true)
@@ -80,7 +85,7 @@ describe('the prompts follow the destination', () => {
 
   it('creative: Jordan prompt says Jordan and carries the operator brief', async () => {
     const destination = await loadDestinationPromptContext(
-      fakeDb({ destinations: JORDAN_ROW, destination_cities: JORDAN_CITIES }), 'd-jo')
+      fakeDb({ destinations: JORDAN_ROW, destination_cities: JORDAN_CITIES }), 'org-1', 'd-jo')
     const p = buildCreativePrompt({ ...base, destination })
     expect(p).toContain('Create a 3-day Jordan itinerary.')
     expect(p).toContain('AMM = Amman')
@@ -92,7 +97,7 @@ describe('the prompts follow the destination', () => {
 
   it('structured: Jordan prompt swaps the shorthand line and glossary', async () => {
     const destination = await loadDestinationPromptContext(
-      fakeDb({ destinations: JORDAN_ROW, destination_cities: JORDAN_CITIES }), 'd-jo')
+      fakeDb({ destinations: JORDAN_ROW, destination_cities: JORDAN_CITIES }), 'org-1', 'd-jo')
     const p = buildStructuredPrompt({
       rawItinerary: 'D1 AMM arrival', dayMappingSection: '', expectedDays: 1,
       language: 'English', tier: 'standard', totalPax: 2, packageType: 'full-package',

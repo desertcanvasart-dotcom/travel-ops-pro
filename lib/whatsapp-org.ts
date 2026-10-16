@@ -82,38 +82,122 @@ export async function senderForOrg(
 }
 
 /**
- * Whether a team member may hold an org's conversation. team_members has no
- * org_id; a member belongs to the org their linked login (user_id) is a
- * member of. A member with no login cannot be placed in any org, so they are
- * accepted only while the deployment has a single organization (how every
- * team member was created until now) and refused once there are two.
+ * Whether a team member is the org's own (team_members.org_id, migration
+ * 20261203) — who may hold its conversations, tasks and trips. A member with
+ * no login is the org that created them, like any other.
  */
 export async function teamMemberInOrg(
   supabase: SupabaseClient,
   teamMemberId: string,
   orgId: string,
 ): Promise<boolean> {
-  const { data: member, error } = await supabase
+  const { data, error } = await supabase
     .from('team_members')
-    .select('id, user_id')
+    .select('id')
     .eq('id', teamMemberId)
+    .eq('org_id', orgId)
     .maybeSingle()
   if (error) throw error
-  if (!member) return false
-  const userId = (member as { user_id: string | null }).user_id
-  if (userId) {
-    const { data: membership, error: mErr } = await supabase
-      .from('organization_members')
-      .select('user_id')
-      .eq('org_id', orgId)
-      .eq('user_id', userId)
-      .limit(1)
-    if (mErr) throw mErr
-    return (membership?.length ?? 0) > 0
+  return !!data
+}
+
+/**
+ * What an inbound message changes on its existing conversation: a deleted
+ * (hidden) or archived one comes back to the inbox; a blocked one stays
+ * blocked; anything else is left alone (null — no write).
+ */
+export function whatsappRevival(
+  conv: { is_hidden?: boolean | null; status?: string | null },
+): { is_hidden?: false; hidden_at?: null; hidden_by?: null; status?: 'active' } | null {
+  if (conv.status === 'blocked') return null
+  const out: { is_hidden?: false; hidden_at?: null; hidden_by?: null; status?: 'active' } = {}
+  if (conv.is_hidden) Object.assign(out, { is_hidden: false, hidden_at: null, hidden_by: null })
+  if (conv.status === 'archived') out.status = 'active'
+  return Object.keys(out).length ? out : null
+}
+
+/**
+ * Open WhatsApp chats per team member — the figure the agent lists show.
+ * Counted from the conversations themselves (active, not hidden, assigned to
+ * them) rather than team_members.current_conversations: that counter was only
+ * ever added to on a new chat, never taken from on a reassign, unassign,
+ * archive or delete, so it drifted upward for good.
+ */
+export function openChatsByMember(
+  rows: Array<{ assigned_team_member_id: string | null; status?: string | null; is_hidden?: boolean | null }>,
+): Map<string, number> {
+  const counts = new Map<string, number>()
+  for (const r of rows) {
+    if (!r.assigned_team_member_id) continue
+    if ((r.status ?? 'active') !== 'active' || r.is_hidden) continue
+    counts.set(r.assigned_team_member_id, (counts.get(r.assigned_team_member_id) ?? 0) + 1)
   }
-  const { count, error: cErr } = await supabase
-    .from('organizations')
-    .select('id', { count: 'exact', head: true })
-  if (cErr) throw cErr
-  return count === 1
+  return counts
+}
+
+/**
+ * Who a new chat goes to: the member longest without one, among those who can
+ * actually work it — active, available, with a linked login (a member with no
+ * login, a driver or guide say, would be handed chats nobody can see) and not
+ * already at max_conversations open chats. null when nobody qualifies: the
+ * chat stays unassigned for the team to claim.
+ */
+export function pickAutoAssignee(
+  members: Array<{
+    id: string
+    user_id: string | null
+    is_active?: boolean | null
+    is_available?: boolean | null
+    max_conversations?: number | null
+    last_assigned_at?: string | null
+    created_at?: string | null
+  }>,
+  openChats: Map<string, number>,
+): string | null {
+  const stamp = (v: string | null | undefined) => (v ? Date.parse(v) || 0 : 0)
+  const eligible = members.filter(m => {
+    if (!m.user_id || m.is_active === false || m.is_available === false) return false
+    const max = m.max_conversations
+    return !(typeof max === 'number' && max > 0 && (openChats.get(m.id) ?? 0) >= max)
+  })
+  // Never-assigned first (0), then oldest assignment; ties by who joined first.
+  eligible.sort((a, b) =>
+    stamp(a.last_assigned_at) - stamp(b.last_assigned_at) || stamp(a.created_at) - stamp(b.created_at))
+  return eligible[0]?.id ?? null
+}
+
+/**
+ * The org member whose login has this email address, or null. Adding an agent
+ * with a colleague's address links the agent to that login, so the chats
+ * assigned to the agent are theirs ("Mine", claiming, the assignment
+ * notification). Only this org's members are considered: another company's
+ * login with the same address is never linked.
+ */
+export async function orgLoginForEmail(
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  db: { from: (table: string) => any },
+  orgId: string,
+  email: string | null | undefined,
+): Promise<string | null> {
+  const wanted = (email ?? '').trim().toLowerCase()
+  if (!wanted) return null
+  const { data: members, error } = await db
+    .from('organization_members')
+    .select('user_id')
+    .eq('org_id', orgId)
+  if (error) return null
+  const ids = ((members ?? []) as { user_id: string | null }[])
+    .map(m => m.user_id)
+    .filter((id): id is string => !!id)
+  if (ids.length === 0) return null
+  const { data: profiles, error: profileError } = await db
+    .from('user_profiles')
+    .select('id, email')
+    .in('id', ids)
+  if (profileError) return null
+  // Exactly one login: two members of the org sharing an address is
+  // ambiguous, and guessing would hand one person's notifications to the other.
+  const matches = ((profiles ?? []) as { id: string; email: string | null }[])
+    .filter(p => (p.email ?? '').trim().toLowerCase() === wanted)
+  return matches.length === 1 ? matches[0].id : null
 }

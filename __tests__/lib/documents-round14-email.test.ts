@@ -84,7 +84,8 @@ describe('copilot draft send builds its email like /api/gmail/send', () => {
     expect(r).toContain('`Subject: ${encodeEmailHeader(headerSafe(subject))}`')
     expect(r).toContain("'MIME-Version: 1.0'")
     expect(r).toContain("'Content-Transfer-Encoding: base64'")
-    expect(r).toContain('storedReplyHeaders(supabase, thread.email_conversation_id)')
+    // The conversation as read in the caller's organisation (20261204).
+    expect(r).toContain('storedReplyHeaders(supabase, conv?.id ?? null)')
     expect(r).toContain('threadId: gmailThreadId')
     expect(r).not.toContain('In-Reply-To: ${thread.email_conversation_id}')
   })
@@ -118,11 +119,11 @@ describe('an email links only to the receiving organisation\'s client', () => {
     expect(m).toMatch(/UPDATE public\.email_conversations ec\s+SET client_id = NULL/)
   })
 
-  it('known contacts are the org\'s clients and partners, plus the shared suppliers', async () => {
+  it('known contacts are the org\'s clients, suppliers and partners (suppliers per company since 20261205)', async () => {
     const db = fakeDb({
       clients: [{ org_id: 'A', email: 'a@x.com' }, { org_id: 'B', email: 'b@x.com' }],
       b2b_partners: [{ org_id: 'A', email: 'pa@x.com' }, { org_id: 'B', email: 'pb@x.com' }],
-      suppliers: [{ contact_email: 'Hotel@x.com' }],
+      suppliers: [{ org_id: 'A', contact_email: 'Hotel@x.com' }, { org_id: 'B', contact_email: 'other-hotel@x.com' }],
     })
     expect([...await knownContactEmailsForOrg(db, 'A')].sort()).toEqual(['a@x.com', 'hotel@x.com', 'pa@x.com'])
   })
@@ -133,8 +134,8 @@ describe('an email links only to the receiving organisation\'s client', () => {
       destinations: [], travel_dates: null, travellers: null, summary: null,
     }
     const db = fakeDb({
-      email_conversations: [{ id: 'c1', user_id: 'uA', client_id: null, subject: 'Trip', lead_checked_at: null, created_at: '2026-10-01' }],
-      email_messages: [{ conversation_id: 'c1', direction: 'inbound', from_address: 'jane@x.com', subject: 'Trip', body_text: 'A trip please', sent_at: '2026-10-01T00:00:00Z' }],
+      email_conversations: [{ id: 'c1', org_id: 'A', user_id: 'uA', client_id: null, subject: 'Trip', lead_checked_at: null, created_at: '2026-10-01' }],
+      email_messages: [{ org_id: 'A', conversation_id: 'c1', direction: 'inbound', from_address: 'jane@x.com', subject: 'Trip', body_text: 'A trip please', sent_at: '2026-10-01T00:00:00Z' }],
       gmail_tokens: [], organizations: [{ id: 'A', office_email_addresses: [] }, { id: 'B', office_email_addresses: [] }],
       organization_members: [{ user_id: 'uA', org_id: 'A', created_at: '2026-01-01' }],
       clients: [{ id: 'cb', org_id: 'B', email: 'jane@x.com' }], suppliers: [], b2b_partners: [], email_lead_dismissals: [],
@@ -144,14 +145,15 @@ describe('an email links only to the receiving organisation\'s client', () => {
     expect(db.tables.clients.find(c => c.org_id === 'A')).toMatchObject({ email: 'jane@x.com', status: 'lead' })
   })
 
-  it('a client\'s page lists only conversations in its org members\' mailboxes', () => {
+  it('a client\'s page lists only its organisation\'s conversations', () => {
     const r = src('app/api/unified/client/[clientId]/route.ts')
-    expect(r).toContain(".in('user_id', memberIds)")
+    expect(r).toMatch(/from\('email_conversations'\)[\s\S]{0,400}\.eq\('org_id', orgId\)\s*\n\s*\.eq\('client_id', clientId\)/)
   })
 
   it('copilot intake files under the mailbox org and matches only its clients', () => {
     const s = src('lib/email/sync-mailbox.ts')
-    expect(s).toContain('orgForMailbox(supabase, user_id)')
+    // The company the connection serves (gmail_tokens.org_id, 20261204).
+    expect(s).toContain('const orgId = auth.orgId')
     expect(s).toMatch(/\.from\('clients'\)\s*\n\s*\.select\('id, first_name, last_name'\)\s*\n\s*\.eq\('org_id', orgId\)/)
     expect(s).toMatch(/clientName: matchedClient[\s\S]{0,200}orgId,\n\s*\},\n\s*supabase/)
   })
@@ -160,8 +162,12 @@ describe('an email links only to the receiving organisation\'s client', () => {
 describe('shared-inbox replies', () => {
   it('send from the conversation owner\'s mailbox only when they are in the caller\'s org; else drop the thread and thread by Message-ID', () => {
     const r = src('app/api/gmail/send/route.ts')
-    expect(r).toContain(".from('organization_members').select('user_id').eq('org_id', orgId).eq('user_id', conv.user_id)")
+    // Only the caller's organisation's conversations are used at all, and a
+    // colleague's mailbox only while it serves this organisation.
+    expect(r).toContain(".eq('org_id', orgId)")
+    expect(r).toContain('if (await mailboxServesOrg(supabase, orgId, conv.user_id)) {')
     expect(r).toContain('getAuthenticatedGmail(mailboxUserId)')
+    expect(r).toContain('if (auth.orgId !== orgId) throw new GmailAuthError(')
     expect(r).toContain('gmailThreadId = undefined')
     expect(r).toContain('storedThreading = await storedReplyHeaders(supabase, conv.id)')
     expect(r).toContain('threadId: gmailThreadId')

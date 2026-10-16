@@ -85,12 +85,12 @@ export function toStaffView(
 // phone just means "copy the link yourself". Selects '*' and reads by presence
 // so a column that only exists in one app can never 400 the whole request.
 
+type ContactQuery = {
+  eq: (col: string, v: string) => ContactQuery
+  maybeSingle: () => Promise<{ data: Record<string, unknown> | null }>
+}
 type ContactClient = {
-  from: (table: string) => {
-    select: (cols: string) => {
-      eq: (col: string, v: string) => { maybeSingle: () => Promise<{ data: Record<string, unknown> | null }> }
-    }
-  }
+  from: (table: string) => { select: (cols: string) => ContactQuery }
 }
 
 function phoneOf(row: Record<string, unknown> | null): string | null {
@@ -98,9 +98,15 @@ function phoneOf(row: Record<string, unknown> | null): string | null {
   return str(row.whatsapp) ?? str(row.phone) ?? str(row.contact_phone) ?? str(row.default_driver_phone)
 }
 
+// The directory row is read within the trip's company: suppliers (and the
+// staff views over them) and team_members carry org_id (20261205, 20261203).
+// vehicles has none yet and is read by id.
+const ORG_SCOPED = new Set(['suppliers', 'airport_staff', 'hotel_staff', 'team_members'])
+
 export async function resolveAssigneeContact(
   supabase: ContactClient,
-  resource: { resource_type?: string | null; resource_id?: string | null; resource_name?: string | null }
+  resource: { resource_type?: string | null; resource_id?: string | null; resource_name?: string | null },
+  orgId: string
 ): Promise<{ name: string | null; phone: string | null } | null> {
   try {
     const type = resource?.resource_type
@@ -122,7 +128,9 @@ export async function resolveAssigneeContact(
     const table = tableFor[type]
     if (!table) return null
 
-    const { data } = await supabase.from(table).select('*').eq('id', rid).maybeSingle()
+    let q = supabase.from(table).select('*').eq('id', rid)
+    if (ORG_SCOPED.has(table)) q = q.eq('org_id', orgId)
+    const { data } = await q.maybeSingle()
     if (!data) return null
     return { name: str(data.name) ?? str(data.default_driver_name) ?? fallbackName, phone: phoneOf(data) }
   } catch {

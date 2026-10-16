@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireRole } from '@/lib/auth/current-org'
+import { requireRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { matchTourTemplate, getTemplateWithPricing } from '@/lib/tour-matcher-service'
@@ -34,6 +34,10 @@ export async function POST(request: NextRequest) {
     const denied = await requireRole(['admin', 'manager', 'agent'])
     if (denied) return denied
 
+    // Templates and destination cities are the caller's company's (20261206 /
+    // 20261207): the matcher reads only those.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
     const {
       // From WhatsApp parser
@@ -87,9 +91,10 @@ export async function POST(request: NextRequest) {
         // Use specific template
         templateData = await getTemplateWithPricing(
           supabase, 
-          template_id, 
-          totalPax, 
-          isEuroPassport
+          template_id,
+          totalPax,
+          isEuroPassport,
+          orgId
         )
         
         if (templateData) {
@@ -113,14 +118,15 @@ export async function POST(request: NextRequest) {
           duration_days,
           interests,
           budget_level
-        })
+        }, orgId)
 
         if (matchResult.best_match && matchResult.best_match.match_score >= 50) {
           templateData = await getTemplateWithPricing(
             supabase,
             matchResult.best_match.template_id,
             totalPax,
-            isEuroPassport
+            isEuroPassport,
+            orgId
           )
         }
       }

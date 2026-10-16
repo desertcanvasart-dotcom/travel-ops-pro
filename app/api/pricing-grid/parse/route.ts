@@ -16,7 +16,7 @@ import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic
 import { MODEL_PARSER } from '@/lib/ai/models'
 import { guardAiRate } from '@/lib/rate-limit/ai-limit'
 import { enrichSlots } from '@/app/pricing-grid/lib/enrich-slots'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
 
@@ -26,21 +26,22 @@ import { currencySymbol } from '@/lib/currency-totals'
 
 // `sym` is the org's rate-currency symbol: the AI reads these lines, so they
 // must say what the numbers are.
-async function buildRateCatalog(supabase: any, tier: string, sym: string, runRateCurrency: string) {
+async function buildRateCatalog(supabase: any, orgId: string, tier: string, sym: string, runRateCurrency: string) {
   // Use select('*') — specific column selects fail silently if a column name doesn't match
   const results = await Promise.all([
-    supabase.from('transportation_rates').select('*').eq('is_active', true),
-    supabase.from('guide_rates').select('*').eq('is_active', true),
-    supabase.from('airport_staff_rates').select('*').eq('is_active', true),
-    supabase.from('hotel_staff_rates').select('*').eq('is_active', true),
-    supabase.from('tipping_rates').select('*').eq('is_active', true),
-    supabase.from('activity_rates').select('*').eq('is_active', true),
-    supabase.from('accommodation_rates').select('*').eq('is_active', true).eq('tier', tier),
-    supabase.from('entrance_fees').select('*').eq('is_active', true),
-    supabase.from('meal_rates').select('*').eq('is_active', true),
-    supabase.from('nile_cruises').select('*').eq('is_active', true).eq('tier', tier),
-    supabase.from('b2b_transport_packages').select('*').eq('is_active', true),
-    supabase.from('flight_rates').select('*').eq('is_active', true),
+    supabase.from('transportation_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('guide_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('airport_staff_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('hotel_staff_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('tipping_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('activity_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('accommodation_rates').select('*').eq('org_id', orgId).eq('is_active', true).eq('tier', tier),
+    supabase.from('entrance_fees').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('meal_rates').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('nile_cruises').select('*').eq('org_id', orgId).eq('is_active', true).eq('tier', tier),
+    // The org's own packages (b2b_transport_packages.org_id) — not every company's.
+    supabase.from('b2b_transport_packages').select('*').eq('org_id', orgId).eq('is_active', true),
+    supabase.from('flight_rates').select('*').eq('org_id', orgId).eq('is_active', true),
   ])
 
   // Log any Supabase errors
@@ -252,7 +253,6 @@ Use the ID format as shown (e.g., "a1b2c3d4-..." UUID format).
         "flights": [],
         "experiences": [],
         "meals": [],
-        "water": [],
         "cruise": [],
         "other_pp": 0
       }
@@ -286,7 +286,6 @@ Use the ID format as shown (e.g., "a1b2c3d4-..." UUID format).
 - guide: ALWAYS add a guide for touring days — pick the guide matching the requested language; ONE language for the whole trip — the language the text asks for, else the same language on every day
 - entrance_fees: match EVERY attraction/site mentioned by name
 - meals: ALWAYS add lunch AND dinner for the day's city. Pick restaurant meals matching city.
-- water: ALWAYS add water
 - hotel_services: check-in/check-out service
 - tipping: driver tip + guide tip
 - accommodation: hotel in overnight city (if not last day)
@@ -345,7 +344,6 @@ Transportation AFTER the last cruise sightseeing day (e.g., Luxor → Hurghada) 
 
 ### Free/Leisure Day (beach, resort, no sightseeing)
 - accommodation: hotel
-- water: add water
 - vehicle: NONE
 - guide: NONE
 - meals: ONLY if hotel is NOT all-inclusive (board_basis != AI)
@@ -487,7 +485,6 @@ Return a JSON object with "metadata" and "days" — same format as a parsed itin
         "flights": [],
         "experiences": [],
         "meals": [],
-        "water": [],
         "cruise": [],
         "other_pp": 0
       }
@@ -503,7 +500,7 @@ Return a JSON object with "metadata" and "days" — same format as a parsed itin
 - NO guide, NO entrance fees, NO meals
 
 ### Touring Day (sightseeing)
-- vehicle: day-tour vehicle, guide: ALWAYS, entrance_fees: match sites, meals: lunch + dinner, water: ALWAYS
+- vehicle: day-tour vehicle, guide: ALWAYS, entrance_fees: match sites, meals: lunch + dinner
 - tipping: driver + guide tip, accommodation: hotel, hotel_services: porterage
 
 ### Cruise Embarkation Day
@@ -521,7 +518,7 @@ Return a JSON object with "metadata" and "days" — same format as a parsed itin
 - NO cruise rate (not sleeping on ship)
 
 ### Free/Leisure Day (beach, resort)
-- accommodation: hotel, water: yes
+- accommodation: hotel
 - NO vehicle, NO guide
 
 ### Departure Day (last day)
@@ -585,9 +582,11 @@ export async function POST(request: NextRequest) {
 
     // 1. Fetch all rates from DB
     // The org's rate-currency symbol: the catalogue the AI reads, and the logs, both say what the numbers are.
-    const runRateCurrency = await getOrgRateCurrency(supabase, await getCurrentOrgId())
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const runRateCurrency = await getOrgRateCurrency(supabase, orgId)
     const sym = currencySymbol(runRateCurrency)
-    const { catalog, rawRates } = await buildRateCatalog(supabase, tier || 'standard', sym, runRateCurrency)
+    const { catalog, rawRates } = await buildRateCatalog(supabase, orgId, tier || 'standard', sym, runRateCurrency)
 
     // 2. Build prompt with real rate IDs
     const systemPrompt = buildSystemPrompt(catalog, pkg)
@@ -667,6 +666,12 @@ export async function POST(request: NextRequest) {
     // ladder, which names no vehicle an agency using its own list prices.
     const tieredIdFor = (row: any, paxNum: number): string =>
       `${row.id}__${vehicleRateForPax(row, paxNum)?.key ?? 'vehicle'}`
+
+    // The group the vehicles are sized for: the travellers the text names
+    // (the page takes the same figure as the grid's pax), else the grid's own.
+    // Sizing for the pax SENT put "we are 8" in a sedan for 2.
+    const metaPax = Math.floor(Number(parsed.metadata?.pax))
+    const groupSize = metaPax > 0 ? metaPax : (Number(pax) || 2)
 
     // 6. Post-process: fill obvious gaps the AI missed (deterministic rules)
     const totalDays = parsed.days?.length || 0
@@ -773,7 +778,7 @@ export async function POST(request: NextRequest) {
         const routes = allTransportRoutes
         const dayTourVehicles = rawRates.transportRates?.filter((t: any) => t.service_type === 'day_tour') || []
         const routeIds: string[] = [...(Array.isArray(slots.route) ? slots.route : [])]
-        const paxNum = pax || 2
+        const paxNum = groupSize
         const cityLower = day.city?.toLowerCase()?.trim()
         const prevDay = idx > 0 ? parsed.days[idx - 1] : null
         const prevCity = prevDay?.city?.toLowerCase()?.trim() || ''
@@ -1075,10 +1080,8 @@ export async function POST(request: NextRequest) {
         }
       }
 
-      // Auto-fill water on EVERY day (people drink water every day)
-      if (isEmpty('water')) {
-        slots.water = ['water-standard']
-      }
+      // No water pick: Rates › Fixed Costs (water included) are charged by the
+      // grid itself on every sightseeing day (pricing-grid/lib/fixed-cost-lines.ts).
 
       // Touring day: auto-fill tipping if missing (driver + guide tip)
       // This includes arrival/departure days that have sightseeing
@@ -1154,7 +1157,13 @@ export async function POST(request: NextRequest) {
           // The package for this cruise's length in days — a 4D and a 5D
           // package are different prices; none of that length adds none
           // (lib/pricing/cruise-package). It took the first package on file.
-          const pkg = packageForDuration(rawRates.cruiseTransportPkgs ?? [], cruiseEndIdx - cruiseStartIdx + 1) as any
+          // A Cruise Sightseeing package only, on this sailing's route (the
+          // boarding day before it through the disembark day).
+          const cruiseRoute = parsed.days
+            .slice(Math.max(0, cruiseStartIdx - 1), cruiseEndIdx + 1)
+            .map((d: any) => String(d?.city ?? '').trim().toLowerCase())
+            .filter(Boolean)
+          const pkg = packageForDuration(rawRates.cruiseTransportPkgs ?? [], cruiseEndIdx - cruiseStartIdx + 1, cruiseRoute) as any
 
           // On flight days, also ensure the departure city airport transfer is present
           // The flight-day code above should have added it, but verify it's in slots.route
@@ -1169,7 +1178,7 @@ export async function POST(request: NextRequest) {
                 return rc === depCity || rc.includes(depCity) || depCity.includes(rc)
               })
               if (depTransfer) {
-                const tieredId = tieredIdFor(depTransfer, pax || 2)
+                const tieredId = tieredIdFor(depTransfer, groupSize)
                 const currentRoutes = Array.isArray(slots.route) ? slots.route : []
                 if (!currentRoutes.includes(tieredId)) {
                   slots.route = [...currentRoutes, tieredId]
@@ -1181,7 +1190,7 @@ export async function POST(request: NextRequest) {
 
           if (pkg) {
             const existingRoutes = Array.isArray(slots.route) ? slots.route : []
-            const pkgId = tieredIdFor(pkg, pax || 2)
+            const pkgId = tieredIdFor(pkg, groupSize)
             if (!existingRoutes.includes(pkgId)) {
               slots.route = [...existingRoutes, pkgId]
             }
@@ -1256,6 +1265,10 @@ export async function POST(request: NextRequest) {
 // ENRICHMENT — resolve IDs to full rate objects
 // ============================================
 
+// The prices here are only what the parse reports back; the page rebuilds
+// every picked item from the rates list by its id (hydrate-items.ts), and the
+// save from the stored rates. They follow the rates list's non-EU rules all
+// the same, so the two never disagree about a row.
 function buildFlatRateMap(rawRates: any): Map<string, any> {
   const map = new Map<string, any>()
 
@@ -1283,7 +1296,7 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
   }
   addAll(rawRates.guideRates, (r: any) => ({
     rateId: r.id, name: `${r.guide_language} ${r.guide_type || 'Guide'}`,
-    rateEur: toNum(r.base_rate_eur || r.rate_eur), rateNonEur: toNum(r.base_rate_eur || r.rate_eur),
+    rateEur: toNum(r.base_rate_eur || r.rate_eur), rateNonEur: toNum(r.base_rate_non_eur || r.rate_non_eur || r.base_rate_eur || r.rate_eur),
   }))
   addAll(rawRates.airportRates, (r: any) => ({
     rateId: r.id, name: `${r.airport_code} — ${r.direction}`,
@@ -1299,7 +1312,7 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
   }))
   addAll(rawRates.activityRates, (r: any) => ({
     rateId: r.id, name: r.activity_name,
-    rateEur: toNum(r.rate_eur || r.base_rate_eur), rateNonEur: toNum(r.rate_eur || r.base_rate_eur),
+    rateEur: toNum(r.rate_eur || r.base_rate_eur), rateNonEur: toNum(r.rate_non_eur || r.base_rate_non_eur || r.rate_eur || r.base_rate_eur),
   }))
   addAll(rawRates.accommodationRates, (r: any) => ({
     rateId: r.id, name: `${r.property_name} (${r.city})`,
@@ -1317,7 +1330,7 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
   }))
   addAll(rawRates.cruiseRates, (r: any) => ({
     rateId: r.id, name: `${r.ship_name} (${r.duration_nights}N, ${r.cabin_type})`,
-    rateEur: toNum(r.rate_double_eur || r.rate_low_double_eur), rateNonEur: toNum(r.rate_double_eur || r.rate_low_double_eur),
+    rateEur: toNum(r.rate_double_eur || r.rate_low_double_eur), rateNonEur: toNum(r.rate_double_non_eur || r.rate_low_double_non_eur || r.rate_double_eur || r.rate_low_double_eur),
   }))
 
   // Cruise transport packages
@@ -1327,14 +1340,8 @@ function buildFlatRateMap(rawRates: any): Map<string, any> {
   // Flights
   addAll(rawRates.flightRates, (r: any) => ({
     rateId: r.id, name: `${r.airline} ${r.route_from}→${r.route_to} (${r.cabin_class})`,
-    rateEur: toNum(r.base_rate_eur) + toNum(r.tax_eur), rateNonEur: toNum(r.base_rate_non_eur) + toNum(r.tax_non_eur),
+    rateEur: toNum(r.base_rate_eur) + toNum(r.tax_eur), rateNonEur: toNum(r.base_rate_non_eur || r.base_rate_eur) + toNum(r.tax_non_eur || r.tax_eur),
   }))
-
-  // Water (hardcoded — not from DB)
-  map.set('water-standard', {
-    rateId: 'water-standard', name: 'Water Bottles',
-    rateEur: 0.50, rateNonEur: 0.50,
-  })
 
   return map
 }

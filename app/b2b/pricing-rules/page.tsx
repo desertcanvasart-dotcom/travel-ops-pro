@@ -13,11 +13,13 @@ import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import VehicleRatesTable, { useVehicleOptions, vehicleListFromRows, vehicleRowsFor, type VehicleFormRows } from '@/components/rates/VehicleRatesTable'
 import { vehicleBands } from '@/lib/rates/vehicle-bands'
+import { lengthLeftWithout, validDuration } from '@/lib/b2b/transport-packages'
 
 // ============================================
-// B2B PRICING RULES MANAGEMENT
+// TRANSPORT PACKAGES (Tours › Transport Packages)
 // File: app/b2b/pricing-rules/page.tsx
-// Manage tiered pricing, boat sizes, transport packages
+// The path is historical: the activity "pricing rules" this page once held
+// are gone (group-size tiers live on activity_rates.tiers).
 // ============================================
 
 interface TransportPackage {
@@ -99,7 +101,17 @@ export default function B2BPricingRulesPage() {
   // The vehicles the agency lists, with the vocabulary's sizes — the same
   // rows a transportation rate is entered with.
   const { options: vehicleOptions, vehicleName } = useVehicleOptions()
-  const { confirmDelete } = useConfirmDialog()
+  const { confirm, confirmDelete } = useConfirmDialog()
+
+  // The last active Cruise Sightseeing package of a length: without it every
+  // sailing of that length prices at No rate — say so before it goes.
+  const confirmLeavesLengthEmpty = async (pkg: TransportPackage, days: number, confirmText: string) =>
+    confirm({
+      title: t('lastPackageTitle', { days }),
+      message: t('lastPackageWarning', { packageName: pkg.package_name, days }),
+      confirmText,
+      variant: 'warning',
+    })
 
   const showToast = (type: 'success' | 'error', message: string) => {
     const id = Date.now().toString()
@@ -170,10 +182,18 @@ export default function B2BPricingRulesPage() {
       showToast('error', t('packageNameRequired'))
       return
     }
+    if (validDuration(packageForm.duration_days) === null) {
+      showToast('error', t('durationInvalid'))
+      return
+    }
     const vehicles = vehicleListFromRows(packageForm.vehicles)
     if (vehicles.length === 0) {
       showToast('error', t('vehicleRateRequired'))
       return
+    }
+    if (editingPackage) {
+      const emptied = lengthLeftWithout(editingPackage, packageForm, transportPackages)
+      if (emptied !== null && !(await confirmLeavesLengthEmpty(editingPackage, emptied, t('saveAnyway')))) return
     }
 
     setSaving(true)
@@ -213,7 +233,11 @@ export default function B2BPricingRulesPage() {
   }
 
   const handleDeletePackage = async (pkg: TransportPackage) => {
-    if (!(await confirmDelete(pkg.package_name))) return
+    const emptied = lengthLeftWithout(pkg, null, transportPackages)
+    const ok = emptied !== null
+      ? await confirmLeavesLengthEmpty(pkg, emptied, t('deleteAnyway'))
+      : await confirmDelete(pkg.package_name, t('deletePackageConfirm', { packageName: pkg.package_name }))
+    if (!ok) return
 
     try {
       const res = await fetch(`/api/b2b/transport-packages/${pkg.id}`, { method: 'DELETE' })
@@ -409,6 +433,9 @@ export default function B2BPricingRulesPage() {
                   </select>
                 </div>
               </div>
+              {/* What each field does where — the engines read less than the
+                  form asks for (docs: /docs/transport-packages). */}
+              <p className="text-xs text-gray-500 -mt-2">{t('typeHelp')}</p>
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
@@ -435,8 +462,10 @@ export default function B2BPricingRulesPage() {
                   <label className="block text-sm font-medium text-gray-700 mb-1">{t('durationDays')}</label>
                   <input
                     type="number"
+                    min={1}
+                    step={1}
                     value={packageForm.duration_days}
-                    onChange={(e) => setPackageForm({ ...packageForm, duration_days: parseInt(e.target.value) || 1 })}
+                    onChange={(e) => setPackageForm({ ...packageForm, duration_days: Math.max(1, parseInt(e.target.value) || 1) })}
                     className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                   />
                 </div>
@@ -445,6 +474,10 @@ export default function B2BPricingRulesPage() {
                   onChange={v => setPackageForm(prev => ({ ...prev, rate_currency: v }))}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                 />
+              </div>
+              <div className="text-xs text-gray-500 -mt-2 space-y-1">
+                <p>{t('routeHelp')}</p>
+                <p>{t('durationHelp')}</p>
               </div>
 
               <div>

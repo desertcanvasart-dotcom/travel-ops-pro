@@ -17,6 +17,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Banknote, Loader2, Check } from 'lucide-react'
+import { useRole } from '@/hooks/useRole'
 
 interface Terms {
   deposit_percent: number | null
@@ -33,6 +34,12 @@ type Field = keyof Terms
 
 export default function PaymentTermsCard() {
   const t = useTranslations('settings.paymentTerms')
+  const ts = useTranslations('settings')
+  // The OWNER's alone on the server (/api/settings/payment-terms) — an admin
+  // is refused too — so everyone else reads the terms without inputs that
+  // could only fail.
+  const { role } = useRole()
+  const readOnly = role !== 'owner'
   // Strings, because an input's empty state is '' and that emptiness is the
   // point: it is how an owner says "back to the standing rule".
   const [form, setForm] = useState<Record<Field, string>>({
@@ -127,7 +134,13 @@ export default function PaymentTermsCard() {
             })}
           </p>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          {readOnly && (
+            <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+              {ts('readOnlyOwner')}
+            </div>
+          )}
+
+          <fieldset disabled={readOnly} className="grid grid-cols-1 sm:grid-cols-3 gap-4 min-w-0">
             {(
               [
                 ['deposit_percent', t('depositPercent'), '%'],
@@ -152,13 +165,13 @@ export default function PaymentTermsCard() {
                 </div>
               </label>
             ))}
-          </div>
+          </fieldset>
 
           <p className="text-xs text-gray-500 mt-2">{t('blankHint')}</p>
 
           {error && <p className="text-sm text-red-600 mt-3">{error}</p>}
 
-          <div className="flex items-center gap-3 mt-4">
+          {!readOnly && <div className="flex items-center gap-3 mt-4">
             <button
               onClick={save}
               disabled={saving}
@@ -172,7 +185,7 @@ export default function PaymentTermsCard() {
                 <Check className="w-4 h-4" /> {t('savedNote')}
               </span>
             )}
-          </div>
+          </div>}
         </div>
       </div>
     </div>

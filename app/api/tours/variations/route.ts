@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { presetTierFor } from '@/lib/vocabulary'
 import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // ============================================
 // TOUR VARIATIONS API - FIXED
@@ -13,15 +14,18 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET - List all variations (optionally filter by template_id)
+// GET - List the company's variations (optionally filter by template_id)
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { searchParams } = new URL(request.url)
     const templateId = searchParams.get('template_id')
 
     let query = supabaseAdmin
       .from('tour_variations')
       .select('*')
+      .eq('org_id', orgId)
       .order('tier', { ascending: true })
 
     if (templateId) {
@@ -56,6 +60,8 @@ export async function GET(request: NextRequest) {
 // POST - Create new variation(s) - SUPPORTS BATCH CREATION
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     // Support both single variation and batch creation
@@ -90,6 +96,22 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Every template named must be the caller's company's: a variation lives
+    // in its template's company (tour_variations.org_id), and another
+    // company's template is "not found".
+    const namedTemplates = [...new Set(variations.map(v => v.template_id as string))]
+    const { data: ownTemplates } = await supabaseAdmin
+      .from('tour_templates')
+      .select('id')
+      .eq('org_id', orgId)
+      .in('id', namedTemplates)
+    if ((ownTemplates ?? []).length !== namedTemplates.length) {
+      return NextResponse.json(
+        { success: false, error: 'Template not found' },
+        { status: 404 }
+      )
+    }
+
     // Smart defaults are keyed by PRESET rung: an agency-added tier
     // ("5_star") is placed on the ladder first, so the top tier gets the
     // luxury defaults rather than budget's.
@@ -105,6 +127,7 @@ export async function POST(request: NextRequest) {
       const variationCode = v.variation_code ? v.variation_code : `${baseCode}-${suffix}`
 
       return {
+        org_id: orgId,
         template_id: v.template_id,
         variation_code: variationCode,
         variation_name: v.variation_name,
@@ -142,6 +165,7 @@ export async function POST(request: NextRequest) {
     const { data: existingVars } = await supabaseAdmin
       .from('tour_variations')
       .select('id, template_id, tier, variation_name')
+      .eq('org_id', orgId)
       .in('template_id', templateIds)
     const existingKeys = new Set(
       (existingVars ?? []).map((v: { template_id: string; tier: string }) => `${v.template_id}|${v.tier}`)

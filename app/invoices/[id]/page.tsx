@@ -1,7 +1,10 @@
 'use client'
 
 import { receiptNumberFor } from '@/lib/receipt-pdf-generator'
+import { displayStatus as invoiceDisplayStatus } from '@/lib/invoices/status'
 import { todayLocal } from '@/lib/today'
+import { readInvoiceVat } from '@/lib/vat'
+import { VatToken, VatToggle } from '@/app/components/Vat'
 import { useState, useEffect, use } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -53,6 +56,8 @@ interface Invoice {
   subtotal: number
   tax_rate: number
   tax_amount: number
+  /** Whether tax_rate / tax_amount are VAT this invoice charges (lib/vat.ts). */
+  vat_applied?: boolean
   discount_amount: number
   total_amount: number
   currency: string
@@ -84,6 +89,8 @@ interface Payment {
   payment_method: string
   payment_date: string
   transaction_reference: string | null
+  /** The receipt's own number, from the company's series. */
+  receipt_number?: string | null
   notes: string | null
   created_at: string
 }
@@ -280,6 +287,27 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
     }
   }
 
+  // VAT on or off: the server re-works it from the invoice's net at the
+  // company's rate, and refuses once a payment has been taken.
+  const [switchingVat, setSwitchingVat] = useState(false)
+  const handleSwitchVat = async (on: boolean) => {
+    setSwitchingVat(true)
+    try {
+      const response = await fetch(`/api/invoices/${resolvedParams.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ vat_applied: on })
+      })
+      if (response.ok) fetchInvoice()
+      else {
+        const error = await response.json()
+        await dialog.alert(tCommon('error'), error.error || tCommon('error'), 'warning')
+      }
+    } finally {
+      setSwitchingVat(false)
+    }
+  }
+
   const handleMarkAsSent = async () => {
     try {
       const response = await fetch(`/api/invoices/${resolvedParams.id}`, {
@@ -292,6 +320,28 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
       }
     } catch (error) {
       console.error('Error updating invoice:', error)
+    }
+  }
+
+  // The server refuses when payments are recorded against the invoice and says
+  // why; that message is shown as it is.
+  const handleCancelInvoice = async () => {
+    if (!(await confirmDialog(t('confirmCancelInvoice')))) return
+    try {
+      const response = await fetch(`/api/invoices/${resolvedParams.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'cancelled' })
+      })
+      if (response.ok) {
+        fetchInvoice()
+      } else {
+        const error = await response.json().catch(() => ({}))
+        await dialog.alert(tCommon('error'), error.error || t('failedToCancelInvoice'), 'warning')
+      }
+    } catch (error) {
+      console.error('Error cancelling invoice:', error)
+      await dialog.alert(tCommon('error'), t('failedToCancelInvoice'), 'warning')
     }
   }
 
@@ -405,8 +455,14 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
     setCreatingFinalInvoice(true)
     try {
-      const fullTripCost = (Number(invoice.total_amount) * 100) / invoice.deposit_percent
-      const balanceAmount = fullTripCost - Number(invoice.total_amount)
+      // The server works the balance out (from the trip's saved total, or the
+      // trip cost this deposit stored, less this deposit's net) and ignores the
+      // amounts below; they are sent for a deposit with neither, which only an
+      // admin or manager can settle (POST /api/invoices).
+      // From the deposit's NET: a deposit carrying VAT has it in its total.
+      const depositNet = Number(invoice.total_amount) - Number(invoice.tax_amount || 0)
+      const fullTripCost = (depositNet * 100) / invoice.deposit_percent
+      const balanceAmount = fullTripCost - depositNet
 
       const response = await fetch('/api/invoices', {
         method: 'POST',
@@ -420,6 +476,8 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
           client_name: invoice.client_name,
           client_email: invoice.client_email,
           full_trip_cost: fullTripCost,
+          // The final carries VAT as its deposit does.
+          vat_applied: readInvoiceVat(invoice).vat_applied,
           line_items: [{
             description: t('finalBalanceDescription', { description: invoice.line_items[0]?.description.replace(/^Booking Deposit \(\d+%\) - /, '') }),
             quantity: 1,
@@ -462,16 +520,15 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
 
   const getDisplayStatus = () => {
     if (!invoice) return 'draft'
-    if (invoice.status !== 'paid' && invoice.status !== 'cancelled' && invoice.due_date) {
-      const dueDate = new Date(invoice.due_date)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      if (dueDate < today && Number(invoice.balance_due) > 0) {
-        return 'overdue'
-      }
-    }
-    return invoice.status
+    // The same rule as the list and the Payments page (lib/invoices/status):
+    // a draft that was never sent is not overdue.
+    return invoiceDisplayStatus(invoice, todayLocal())
   }
+
+  // Money is recorded against an invoice that has been sent: the API refuses a
+  // payment on a draft or a cancelled one.
+  const canRecordPayment = () =>
+    !!invoice && Number(invoice.balance_due) > 0 && invoice.status !== 'draft' && invoice.status !== 'cancelled'
 
   const canCreateFinalInvoice = () => {
     if (!invoice) return false
@@ -581,6 +638,16 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </button>
           )}
 
+          {invoice.status !== 'cancelled' && invoice.status !== 'paid' && (
+            <button
+              onClick={handleCancelInvoice}
+              className="flex items-center gap-2 px-4 py-2 text-sm font-medium border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
+            >
+              <XCircle className="h-4 w-4" />
+              {t('cancelInvoice')}
+            </button>
+          )}
+
           {canCreateFinalInvoice() && (
             <button
               onClick={handleCreateFinalInvoice}
@@ -601,7 +668,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
             </button>
           )}
 
-          {Number(invoice.balance_due) > 0 && (
+          {canRecordPayment() && (
             <button
               onClick={() => setShowPaymentModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors"
@@ -757,16 +824,26 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
                     {formatMoney(Number(invoice.subtotal), invoice.currency)}
                   </td>
                 </tr>
-                {Number(invoice.tax_amount) > 0 && (
-                  <tr>
-                    <td colSpan={3} className="px-5 py-3 text-sm text-gray-500 text-right">
-                      {t('taxWithRate', { rate: invoice.tax_rate })}
-                    </td>
-                    <td className="px-5 py-3 text-sm text-gray-900 text-right">
-                      {formatMoney(Number(invoice.tax_amount), invoice.currency)}
-                    </td>
-                  </tr>
-                )}
+                {/* VAT, always stated (lib/vat.ts): the recorded rate and amount,
+                    or "VAT not applied". Switchable until a payment is taken. */}
+                <tr>
+                  <td colSpan={3} className="px-5 py-3 text-sm text-gray-500 text-right">
+                    <div className="flex flex-col items-end gap-2">
+                      <VatToken vat={readInvoiceVat(invoice)} currency={invoice.currency} />
+                      {Number(invoice.amount_paid) <= 0 && invoice.status !== 'cancelled' && (
+                        <VatToggle
+                          checked={readInvoiceVat(invoice).vat_applied}
+                          rate={readInvoiceVat(invoice).vat_applied ? readInvoiceVat(invoice).vat_rate : undefined}
+                          disabled={switchingVat}
+                          onChange={handleSwitchVat}
+                        />
+                      )}
+                    </div>
+                  </td>
+                  <td className="px-5 py-3 text-sm text-gray-900 text-right align-top">
+                    {readInvoiceVat(invoice).vat_applied ? formatMoney(Number(invoice.tax_amount), invoice.currency) : ''}
+                  </td>
+                </tr>
                 {Number(invoice.discount_amount) > 0 && (
                   <tr>
                     <td colSpan={3} className="px-5 py-3 text-sm text-gray-500 text-right">{t('discount')}</td>
@@ -840,7 +917,7 @@ export default function InvoiceDetailPage({ params }: { params: Promise<{ id: st
               </div>
             </div>
 
-            {Number(invoice.balance_due) > 0 && (
+            {canRecordPayment() && (
               <button
                 onClick={() => setShowPaymentModal(true)}
                 className="w-full mt-5 flex items-center justify-center gap-2 px-4 py-2.5 bg-[#647C47] text-white text-sm font-medium rounded-lg hover:bg-[#4f6238] transition-colors"

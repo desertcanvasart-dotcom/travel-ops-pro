@@ -135,6 +135,11 @@ export default function TripAssignee({ itineraryId, initialAssignee = null, onAs
           }`}
         >
           <option value="">{loading ? 'Loading…' : 'Unassigned'}</option>
+          {/* A deactivated owner is not in the active list: show them anyway,
+              labelled, so the trip does not read "Unassigned". */}
+          {assignedTo && !members.some(m => m.id === assignedTo) && (
+            <option value={assignedTo}>{assigneeName || 'Former team member'} (inactive)</option>
+          )}
           {members.map(m => (
             <option key={m.id} value={m.id}>
               {m.name}

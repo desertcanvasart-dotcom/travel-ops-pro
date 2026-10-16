@@ -1,5 +1,6 @@
 import { jsPDF } from 'jspdf'
 import { formatMoney } from '@/lib/currency-totals'
+import { vatInPayment, vatMarker } from '@/lib/vat'
 
 interface ReceiptData {
   receiptNumber: string
@@ -19,6 +20,13 @@ interface Invoice {
   client_name: string
   total_amount: number
   currency: string
+  /** The invoice's recorded VAT (lib/vat.ts). A receipt states the share of
+   *  it inside the amount received, or "VAT not applied". */
+  vat_applied?: boolean
+  tax_rate?: number | null
+  tax_amount?: number | null
+  /** Set when the invoice left extras and insurance out of its VAT. */
+  vat_base?: number | null
 }
 
 /**
@@ -149,6 +157,11 @@ export function generateReceiptPDF(
     doc.text(`Transaction Ref: ${receipt.transactionRef}`, margin + 10, y)
   }
 
+  // VAT, always stated: the invoice's recorded VAT in proportion to this
+  // payment ("VAT 14% included: ¥7,000"), or "VAT not applied".
+  y += 7
+  doc.text(receiptVatLine(receipt, invoice), margin + 10, y)
+
   y += 25
 
   // Amount
@@ -202,17 +215,14 @@ export function generateReceiptPDF(
   return doc
 }
 
+/** The receipt's VAT line (exported for tests). */
+export function receiptVatLine(receipt: Pick<ReceiptData, 'amount' | 'currency'>, invoice: Invoice): string {
+  return vatMarker(vatInPayment(receipt.amount, invoice, receipt.currency), receipt.currency)
+}
+
 export function downloadReceiptPDF(receipt: ReceiptData, invoice: Invoice, brand: ReceiptBrand = {}, font?: ReceiptFont | null) {
   const doc = generateReceiptPDF(receipt, invoice, brand, font)
   doc.save(`Receipt-${receipt.receiptNumber}.pdf`)
 }
-/**
- * A payment's receipt number — ONE rule for every place a receipt is made
- * (the invoice page, the receipts page, the receipt page, WhatsApp): its
- * transaction reference, else RCP- and the payment id. The invoice page
- * numbered receipts by their position in a newest-first list, so each new
- * payment renumbered the older receipts.
- */
-export function receiptNumberFor(payment: { id: string; transaction_reference?: string | null }): string {
-  return payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`
-}
+// The receipt number rule lives in lib/payments/receipt-number (no PDF library needed).
+export { receiptNumberFor } from '@/lib/payments/receipt-number'

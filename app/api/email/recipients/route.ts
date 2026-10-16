@@ -2,9 +2,9 @@
 // API: /api/email/recipients?q= — address suggestions for To / Cc / Bcc
 // ============================================
 // Typing in a compose address field suggests the people the system already
-// knows (operator, 2026-10-15): clients and B2B partners of the caller's
-// organisation, suppliers and team members (the shared catalogues their own
-// pages read), and anyone the organisation's mailboxes have corresponded with.
+// knows (operator, 2026-10-15): the caller's organisation's clients, B2B
+// partners, suppliers and team members, and anyone its mailboxes have
+// corresponded with — each its own company's (org_id, 20261203–05).
 // Staff only (the /api/email middleware gate, and in-route).
 
 import { NextRequest, NextResponse } from 'next/server'
@@ -32,10 +32,6 @@ export async function GET(request: NextRequest) {
     if (q.length < 2) return NextResponse.json({ suggestions: [] })
     const like = `%${q}%`
 
-    // The organisation's mailboxes: conversations are kept per mailbox owner.
-    const { data: members } = await supabase.from('organization_members').select('user_id').eq('org_id', orgId)
-    const memberIds = (members ?? []).map((m: { user_id: string }) => m.user_id).filter(Boolean)
-
     const [clients, partners, suppliers, team, correspondents] = await Promise.all([
       supabase.from('clients').select('first_name, last_name, email')
         .eq('org_id', orgId).not('email', 'is', null)
@@ -44,17 +40,15 @@ export async function GET(request: NextRequest) {
         .eq('org_id', orgId).not('email', 'is', null)
         .or(`email.ilike.${like},company_name.ilike.${like},contact_name.ilike.${like}`).limit(PER_SOURCE),
       supabase.from('suppliers').select('name, contact_name, contact_email')
-        .not('contact_email', 'is', null)
+        .eq('org_id', orgId).not('contact_email', 'is', null)
         .or(`contact_email.ilike.${like},name.ilike.${like},contact_name.ilike.${like}`).limit(PER_SOURCE),
       supabase.from('team_members').select('name, email')
-        .not('email', 'is', null)
+        .eq('org_id', orgId).not('email', 'is', null)
         .or(`email.ilike.${like},name.ilike.${like}`).limit(PER_SOURCE),
-      memberIds.length > 0
-        ? supabase.from('email_conversations').select('client_name, client_email, last_message_at')
-          .in('user_id', memberIds).not('client_email', 'is', null)
-          .or(`client_email.ilike.${like},client_name.ilike.${like}`)
-          .order('last_message_at', { ascending: false }).limit(PER_SOURCE)
-        : Promise.resolve({ data: [] }),
+      supabase.from('email_conversations').select('client_name, client_email, last_message_at')
+        .eq('org_id', orgId).not('client_email', 'is', null)
+        .or(`client_email.ilike.${like},client_name.ilike.${like}`)
+        .order('last_message_at', { ascending: false }).limit(PER_SOURCE),
     ])
 
     const found: RecipientSuggestion[] = [

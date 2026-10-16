@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react'
 import { useTranslations } from 'next-intl'
-import { createClient } from '@/lib/supabase'
 import Link from 'next/link'
 import {
   Calendar, Clock, AlertCircle, CheckCircle, Phone, Mail,
@@ -10,8 +9,7 @@ import {
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { shiftDateISO, todayLocal } from '@/lib/today'
-
-const supabase = createClient()
+import { FOLLOWUP_PRIORITIES, FOLLOWUP_TYPES } from '@/lib/followups'
 
 interface Followup {
   id: string
@@ -20,7 +18,8 @@ interface Followup {
   due_date: string
   priority: string
   status: string
-  notes: string | null
+  // What the Add Follow-up modal saves as "Notes" (there is no notes column).
+  description: string | null
   created_at: string
   client: {
     client_code: string
@@ -35,6 +34,10 @@ export default function FollowupDashboard() {
   const t = useTranslations('followups')
   const dialog = useConfirmDialog()
   const [followups, setFollowups] = useState<Followup[]>([])
+  // The cards, counted by the server over every pending follow-up.
+  const [stats, setStats] = useState({ today: 0, week: 0, overdue: 0, total: 0 })
+  const [matched, setMatched] = useState(0)
+  const [loadFailed, setLoadFailed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [filter, setFilter] = useState<'all' | 'today' | 'week' | 'overdue'>('today')
   const [priorityFilter, setPriorityFilter] = useState<string>('all')
@@ -44,46 +47,42 @@ export default function FollowupDashboard() {
     loadFollowups()
   }, [])
 
+  // Everything goes through /api/followups: the active company's follow-ups
+  // only, on the active company's role. The browser read the table directly,
+  // which listed — and let you complete, snooze or delete — every company's
+  // you belong to, and showed nothing when your FIRST company's role was viewer.
   const loadFollowups = async () => {
     setIsLoading(true)
 
     try {
-      const { data, error } = await supabase
-        .from('client_followups')
-        .select(`
-          *,
-          client:clients!client_id (
-            client_code,
-            first_name,
-            last_name,
-            email,
-            phone
-          )
-        `)
-        .eq('status', 'pending')
-        .order('due_date', { ascending: true })
+      const response = await fetch(`/api/followups?today=${todayLocal()}`)
+      const result = await response.json().catch(() => null)
+      if (!response.ok || !result?.success) throw new Error(result?.error || 'Failed to load follow-ups')
 
-      if (error) throw error
-
-      setFollowups(data || [])
+      setFollowups(result.data || [])
+      setStats(result.counts)
+      setMatched(Number(result.matched) || 0)
+      setLoadFailed(false)
     } catch (error) {
       console.error('Error loading follow-ups:', error)
+      setLoadFailed(true)
     } finally {
       setIsLoading(false)
     }
   }
 
+  const send = async (id: string, method: 'PATCH' | 'DELETE', body?: Record<string, unknown>) => {
+    const response = await fetch(`/api/followups/${id}?today=${todayLocal()}`, {
+      method,
+      headers: { 'Content-Type': 'application/json' },
+      ...(body ? { body: JSON.stringify(body) } : {}),
+    })
+    if (!response.ok) throw new Error((await response.json().catch(() => null))?.error || `HTTP ${response.status}`)
+  }
+
   const completeFollowup = async (id: string) => {
     try {
-      const { error } = await supabase
-        .from('client_followups')
-        .update({
-          status: 'completed',
-          completed_at: new Date().toISOString()
-        })
-        .eq('id', id)
-
-      if (error) throw error
+      await send(id, 'PATCH', { action: 'complete' })
 
       // Show success message
       await dialog.alert(t('success'), t('followupCompleted'), 'success')
@@ -94,19 +93,12 @@ export default function FollowupDashboard() {
     }
   }
 
+  // N days after the current due date — or after today if it is overdue
+  // (lib/followups snoozeDate). It was today + N, which pulled a follow-up
+  // due later than that EARLIER.
   const snoozeFollowup = async (id: string, days: number) => {
     try {
-
-      const { error } = await supabase
-        .from('client_followups')
-        .update({
-          // Our calendar date + days (toISOString gave the UTC date: a day
-          // early in Japan before 09:00).
-          due_date: shiftDateISO(todayLocal(), days)
-        })
-        .eq('id', id)
-
-      if (error) throw error
+      await send(id, 'PATCH', { action: 'snooze', days })
 
       // Show success message
       await dialog.alert(t('snoozed'), t('followupSnoozed', { days }), 'success')
@@ -122,12 +114,7 @@ export default function FollowupDashboard() {
     if (!confirmed) return
 
     try {
-      const { error } = await supabase
-        .from('client_followups')
-        .delete()
-        .eq('id', id)
-
-      if (error) throw error
+      await send(id, 'DELETE')
 
       await dialog.alert(t('deleted'), t('followupDeleted'), 'success')
       loadFollowups()
@@ -170,15 +157,6 @@ export default function FollowupDashboard() {
 
   const filteredFollowups = getFilteredFollowups()
 
-  const todayStr = todayLocal()
-  const weekEndStr = shiftDateISO(todayStr, 7)
-  const stats = {
-    today: followups.filter(f => f.due_date.slice(0, 10) === todayStr).length,
-    week: followups.filter(f => f.due_date.slice(0, 10) >= todayStr && f.due_date.slice(0, 10) <= weekEndStr).length,
-    overdue: followups.filter(f => f.due_date.slice(0, 10) < todayStr).length,
-    total: followups.length
-  }
-
   const isOverdue = (dateString: string) => dateString.slice(0, 10) < todayLocal()
 
   const isToday = (dateString: string) => dateString.slice(0, 10) === todayLocal()
@@ -194,6 +172,8 @@ export default function FollowupDashboard() {
 
   const getPriorityColor = (priority: string) => {
     switch (priority) {
+      case 'urgent':
+        return 'bg-danger text-white border-danger'
       case 'high':
         return 'bg-danger/10 text-danger border-danger/20'
       case 'medium':
@@ -339,9 +319,10 @@ export default function FollowupDashboard() {
             className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
           >
             <option value="all">{t('allPriorities')}</option>
-            <option value="high">{t('highPriority')}</option>
-            <option value="medium">{t('mediumPriority')}</option>
-            <option value="low">{t('lowPriority')}</option>
+            {/* Every priority and type the Add Follow-up modal offers. */}
+            {[...FOLLOWUP_PRIORITIES].reverse().map(p => (
+              <option key={p} value={p}>{t(`priorities.${p}`)}</option>
+            ))}
           </select>
 
           <select
@@ -350,11 +331,9 @@ export default function FollowupDashboard() {
             className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
           >
             <option value="all">{t('allTypes')}</option>
-            <option value="call">{t('phoneCall')}</option>
-            <option value="email">{t('email')}</option>
-            <option value="whatsapp">{t('whatsapp')}</option>
-            <option value="meeting">{t('meeting')}</option>
-            <option value="quote">{t('sendQuote')}</option>
+            {FOLLOWUP_TYPES.map(type => (
+              <option key={type} value={type}>{t(`types.${type}`)}</option>
+            ))}
           </select>
 
           <div className="ml-auto text-xs text-gray-600">
@@ -363,9 +342,21 @@ export default function FollowupDashboard() {
         </div>
       </div>
 
+      {/* A failed load used to read as "All Caught Up!". */}
+      {loadFailed && (
+        <div className="bg-red-50 border border-red-200 text-red-700 text-sm rounded-lg px-4 py-2">
+          {t('failedToLoad')}
+        </div>
+      )}
+      {matched > followups.length && (
+        <div className="bg-amber-50 border border-amber-200 text-amber-800 text-sm rounded-lg px-4 py-2">
+          {t('listTruncated', { shown: followups.length, matched })}
+        </div>
+      )}
+
       {/* Follow-ups List */}
       <div className="space-y-3">
-        {filteredFollowups.length === 0 ? (
+        {loadFailed ? null : filteredFollowups.length === 0 ? (
           <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-8 text-center">
             <CheckCircle className="w-12 h-12 text-success mx-auto mb-3" />
             <h3 className="text-lg font-bold text-gray-900 mb-2">{t('allCaughtUp')}</h3>
@@ -408,14 +399,14 @@ export default function FollowupDashboard() {
                             {followup.client?.client_code || t('noClientLinked')}
                         </span>
                         <span className={`px-2 py-0.5 rounded-full text-xs font-medium border ${getPriorityColor(followup.priority)}`}>
-                          {t(followup.priority)}
+                          {(FOLLOWUP_PRIORITIES as readonly string[]).includes(followup.priority) ? t(`priorities.${followup.priority}`) : followup.priority}
                         </span>
                       </div>
 
                       <div className="flex items-center gap-3 text-xs text-gray-600 mb-2">
                         <div className="flex items-center gap-1">
                           <TypeIcon className="w-3 h-3" />
-                          <span className="capitalize">{followup.followup_type}</span>
+                          <span>{(FOLLOWUP_TYPES as readonly string[]).includes(followup.followup_type) ? t(`types.${followup.followup_type}`) : followup.followup_type}</span>
                         </div>
                         <div className={`flex items-center gap-1 font-medium ${
                           overdue ? 'text-danger' : today ? 'text-primary-600' : ''
@@ -427,9 +418,9 @@ export default function FollowupDashboard() {
                         </div>
                       </div>
 
-                      {followup.notes && (
+                      {followup.description && (
                         <p className="text-xs text-gray-700 mt-2 bg-gray-50 p-2 rounded-lg">
-                          {followup.notes}
+                          {followup.description}
                         </p>
                       )}
                     

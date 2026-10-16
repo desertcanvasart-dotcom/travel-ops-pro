@@ -26,6 +26,9 @@ interface TripSnapshot {
   client_name?: string
 }
 
+/** This browser has sent answers on this link (per-viewer convenience only). */
+const answeredKey = (token: string) => `survey-answered:${token}`
+
 export default function GuestSurveyPage() {
   const params = useParams()
   const token = String(params.token)
@@ -56,11 +59,17 @@ export default function GuestSurveyPage() {
           return
         }
         setTrip(json.data.trip ?? {})
-        // Seed the name box with the booking's name so what the guest sees is
-        // exactly what is submitted; they can clear it to answer anonymously
-        // (the questionnaire welcomes unnamed answers).
-        setGuestName(json.data.trip?.client_name ?? '')
-        if (json.data.submitted) setSubmitted(true)
+        // The whole party shares this link and each guest's answers are kept
+        // separately, so the form stays open after someone has answered. Only
+        // the browser that sent answers sees its thank-you again.
+        let answeredHere = false
+        try { answeredHere = window.localStorage.getItem(answeredKey(token)) === '1' } catch { /* storage blocked */ }
+        if (answeredHere) setSubmitted(true)
+        // Seed the name box with the booking's name for the first answer, so
+        // what the guest sees is exactly what is submitted; they can clear it
+        // to answer anonymously (the questionnaire welcomes unnamed answers).
+        // A later guest is someone else: blank.
+        setGuestName(json.data.submitted ? '' : (json.data.trip?.client_name ?? ''))
       })
       .catch(() => active && setNotFound(true))
       .finally(() => active && setLoading(false))
@@ -88,6 +97,7 @@ export default function GuestSurveyPage() {
       })
       const json = await res.json().catch(() => ({}))
       if (!json?.success) throw new Error(json?.error || '送信に失敗しました')
+      try { window.localStorage.setItem(answeredKey(token), '1') } catch { /* storage blocked */ }
       setSubmitted(true)
       window.scrollTo({ top: 0, behavior: 'smooth' })
     } catch (e) {
@@ -96,6 +106,20 @@ export default function GuestSurveyPage() {
       setSubmitting(false)
     }
   }, [token, ratings, comments, extras, optionalTours, optionalDetail, additional, guestName])
+
+  // A fresh, blank form for the next guest; the first answers stay as sent.
+  const startAnotherAnswer = () => {
+    try { window.localStorage.removeItem(answeredKey(token)) } catch { /* storage blocked */ }
+    setRatings({})
+    setComments({})
+    setExtras({})
+    setOptionalTours('')
+    setOptionalDetail('')
+    setAdditional('')
+    setGuestName('')
+    setSubmitted(false)
+    window.scrollTo({ top: 0 })
+  }
 
   if (loading) {
     return <div className="min-h-screen flex items-center justify-center text-gray-400">読み込み中…</div>
@@ -117,6 +141,14 @@ export default function GuestSurveyPage() {
           <div className="w-14 h-14 rounded-full bg-[#647C47]/10 text-[#647C47] flex items-center justify-center mx-auto mb-4 text-3xl">✓</div>
           <h1 className="text-xl font-bold text-gray-900 mb-2">ご協力誠にありがとうございました。</h1>
           <p className="text-sm text-gray-600">いただいたご意見は、今後のサービス向上に役立ててまいります。</p>
+          {/* Another member of the party on the same device. */}
+          <button
+            type="button"
+            onClick={startAnotherAnswer}
+            className="mt-6 text-sm text-[#647C47] underline hover:text-[#4a5c35]"
+          >
+            同行の方のご回答はこちら（別の回答として送信されます）
+          </button>
         </div>
       </div>
     )

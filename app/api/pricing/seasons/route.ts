@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
-import { SEASON_COLOURS, isHexColour, parseUpliftPercent } from '@/lib/pricing/season-admin'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { SEASON_COLOURS, isHexColour, lengthError, parseUpliftPercent } from '@/lib/pricing/season-admin'
+import { recordChange } from '@/lib/activity-log'
 
 // ============================================
 // THE OPERATOR'S OWN HIGH DATES
@@ -62,6 +63,8 @@ export async function POST(request: NextRequest) {
     if (!name) {
       return NextResponse.json({ success: false, error: 'Name is required' }, { status: 400 })
     }
+    const tooLong = lengthError('name', name)
+    if (tooLong) return NextResponse.json({ success: false, error: tooLong }, { status: 400 })
 
     // Zero is legitimate — a season worth naming and watching before deciding
     // to charge for it — so an absent percentage means zero, not an error.
@@ -90,6 +93,15 @@ export async function POST(request: NextRequest) {
       }
       console.error('Error creating pricing season:', error)
       return NextResponse.json({ success: false, error: 'Failed to create season' }, { status: 500 })
+    }
+
+    // The Activity Log keeps the premium a new season starts at.
+    const userId = await getCurrentUserId()
+    if (userId) {
+      await recordChange({
+        org_id: orgId, user_id: userId, method: 'POST', path: '/api/pricing/seasons',
+        detail: { target: data.name, changes: [{ field: 'uplift_percent', from: null, to: Number(data.uplift_percent) }] },
+      })
     }
 
     return NextResponse.json({ success: true, data: { ...data, pricing_season_dates: [] } })

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { recordsInOrg } from '@/lib/org-refs'
+import { DELETABLE_BILL_STATUSES, duplicateBillMessage, findDuplicateBill, isBillNumberViolation, normalizeBillFields } from '@/lib/finance/supplier-bills'
 
 const EDITABLE = [
   'supplier_invoice_number', 'supplier_name', 'supplier_id', 'invoice_date', 'due_date',
@@ -80,18 +81,28 @@ export async function PUT(
     // / match / dispute / upload routes; org_id would re-home the row.
     const updateData: Record<string, unknown> = {}
     for (const key of EDITABLE) if (key in body) updateData[key] = body[key]
+    // The same checks as creating a bill: a negative or non-numeric amount, an
+    // emptied date.
+    const invalid = normalizeBillFields(updateData, true)
+    if (invalid) return NextResponse.json({ error: invalid }, { status: 400 })
+    for (const key of ['supplier_invoice_number', 'supplier_name']) {
+      if (key in updateData) {
+        updateData[key] = String(updateData[key] ?? '').trim()
+        if (!updateData[key]) return NextResponse.json({ error: `${key} cannot be empty` }, { status: 400 })
+      }
+    }
     // An emptied picker sends '' — a uuid column needs null.
     for (const key of ['supplier_id', 'itinerary_id', 'client_invoice_id']) {
       if (updateData[key] === '') updateData[key] = null
     }
 
-    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updateData.itinerary_id, invoice_id: updateData.client_invoice_id }))) {
-      return NextResponse.json({ error: 'Trip or client invoice not found' }, { status: 404 })
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updateData.itinerary_id, invoice_id: updateData.client_invoice_id, supplier_id: updateData.supplier_id }))) {
+      return NextResponse.json({ error: 'Trip, client invoice or supplier not found' }, { status: 404 })
     }
 
     const { data: current } = await supabaseAdmin
       .from('supplier_invoices')
-      .select('status, amount, currency, matched_amount, supplier_id, supplier_name, tax_amount')
+      .select('status, amount, currency, matched_amount, supplier_invoice_number, supplier_name, supplier_id, tax_amount')
       .eq('id', id)
       .eq('org_id', orgId)
       .maybeSingle()
@@ -121,6 +132,18 @@ export async function PUT(
         { error: `Cannot change the supplier or tax of an invoice with status '${current.status}'` },
         { status: 409 }
       )
+    }
+    // Renaming the number or supplier must not land on another bill's.
+    if ('supplier_invoice_number' in updateData || 'supplier_name' in updateData || 'supplier_id' in updateData) {
+      const next = {
+        supplier_invoice_number: updateData.supplier_invoice_number ?? current.supplier_invoice_number,
+        supplier_name: updateData.supplier_name ?? current.supplier_name,
+        supplier_id: 'supplier_id' in updateData ? updateData.supplier_id : current.supplier_id,
+      }
+      const duplicate = current.status === 'cancelled' ? null : await findDuplicateBill(supabaseAdmin, orgId, next, id)
+      if (duplicate) {
+        return NextResponse.json({ error: duplicateBillMessage(next, duplicate), duplicate_id: duplicate.id }, { status: 409 })
+      }
     }
     const matched = Number(current.matched_amount || 0)
     if (currencyChanges && matched > 0) {
@@ -157,6 +180,9 @@ export async function PUT(
       // The status moved (approved, paid) between the read and this write.
       return NextResponse.json({ error: 'The invoice changed meanwhile — reload and try again' }, { status: 409 })
     }
+    if (isBillNumberViolation(error)) {
+      return NextResponse.json({ error: 'That invoice number is already recorded for this supplier' }, { status: 409 })
+    }
     if (error) {
       console.error('Error updating supplier invoice:', error)
       return NextResponse.json({ error: 'Failed to update supplier invoice' }, { status: 500 })
@@ -180,15 +206,18 @@ export async function DELETE(
     const { id } = await params
 
     // A paid, approved or disputed invoice is a financial record with downstream
-    // state (payments, approvals, an open dispute); deleting it erases the trail.
-    // Only a draft/pending/cancelled invoice may be deleted, enforced in the
-    // WHERE so a concurrent approval/payment cannot slip through the check.
+    // state (payments, approvals, an open dispute); deleting it erases the trail
+    // (cancel it instead: POST /cancel). Only a bill nobody has approved or paid,
+    // or one already cancelled, may be deleted — 'draft' and 'pending' are not
+    // statuses a bill can have (supplier_invoices_status_check), so listing only
+    // them made every bill undeletable. Enforced in the WHERE so a concurrent
+    // approval/payment cannot slip through the check. Its match rows go with it.
     const { data, error } = await supabaseAdmin
       .from('supplier_invoices')
       .delete()
       .eq('id', id)
       .eq('org_id', orgId)
-      .in('status', ['draft', 'pending', 'cancelled'])
+      .in('status', [...DELETABLE_BILL_STATUSES, 'cancelled'])
       .select('id')
 
     if (error) {
@@ -197,7 +226,7 @@ export async function DELETE(
     }
     if (!data?.length) {
       return NextResponse.json(
-        { error: 'Only a draft, pending or cancelled invoice can be deleted.' },
+        { error: 'Only a received, matched or cancelled invoice can be deleted. Cancel an approved or disputed one first; a paid one stays on record.' },
         { status: 409 }
       )
     }

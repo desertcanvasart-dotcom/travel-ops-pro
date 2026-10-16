@@ -7,18 +7,21 @@
 // Settings page claimed "Connected" because it fell back to ANY token
 // (operator, 2026-10-10). The company's connected mailbox is shared:
 //
-//   - your own connection, when you have one;
-//   - else the organisation's shared mailbox — the most recently refreshed
-//     connection of a member of your organisation — for the roles that may
-//     use the inbox (the same roles middleware gives /inbox).
+//   - your own connection, when it serves the organisation you are working in;
+//   - else the organisation's mailbox — its longest-standing connection
+//     (lib/email/org-gmail-sender, the one rule reading and sending share) —
+//     for the roles that may use the inbox (the same roles middleware gives
+//     /inbox).
 //
-// Replying from the unified inbox already worked this way (gmail/send picks
-// the conversation owner's mailbox); this makes it the one rule.
+// A connection serves ONE organisation (gmail_tokens.org_id, 20261204). A
+// person in both companies whose own mailbox is connected to the other one
+// works here in this company's mailbox, never their own.
 
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError, type AuthenticatedGmail } from '@/lib/gmail'
 import { getCurrentOrgId, getCurrentUserRole } from '@/lib/auth/current-org'
 import { roleAllows } from '@/lib/auth/roles'
+import { orgMailbox } from '@/lib/email/org-gmail-sender'
 
 /** Who may work in the organisation's shared mailbox: the /inbox roles. */
 export const SHARED_MAILBOX_ROLES = ['admin', 'manager', 'agent']
@@ -30,6 +33,8 @@ export interface MailboxChoice {
   shared: boolean
   /** The mailbox address. */
   email: string
+  /** The organisation the mailbox serves (the active workspace). */
+  orgId: string
 }
 
 function admin() {
@@ -38,42 +43,21 @@ function admin() {
 
 /** The mailbox this (session) user works in, or null when there is none. */
 export async function resolveMailbox(userId: string): Promise<MailboxChoice | null> {
-  const supabase = admin()
-
-  const { data: own } = await supabase
-    .from('gmail_tokens')
-    .select('user_id, email')
-    .eq('user_id', userId)
-    .maybeSingle()
-  if (own) return { mailboxUserId: userId, shared: false, email: own.email || '' }
-
-  // The shared mailbox is for a signed-in request: the role and the
-  // organisation come from the session. Outside one (a scheduled job) there
-  // is none, and only the user's own connection counts — as before.
+  // The organisation and the role come from the session. Outside a signed-in
+  // request (a scheduled job) there is no workspace, so no mailbox: the jobs
+  // use the connection they sync (lib/email/sync-mailbox).
   let orgId: string | null = null
+  let shareAllowed = false
   try {
-    if (!roleAllows(await getCurrentUserRole(), SHARED_MAILBOX_ROLES)) return null
     orgId = await getCurrentOrgId()
+    shareAllowed = roleAllows(await getCurrentUserRole(), SHARED_MAILBOX_ROLES)
   } catch {
     return null
   }
   if (!orgId) return null
 
-  const { data: members } = await supabase
-    .from('organization_members')
-    .select('user_id')
-    .eq('org_id', orgId)
-  const memberIds = (members ?? []).map(m => m.user_id).filter((id): id is string => !!id && id !== userId)
-  if (memberIds.length === 0) return null
-
-  const { data: shared } = await supabase
-    .from('gmail_tokens')
-    .select('user_id, email')
-    .in('user_id', memberIds)
-    .order('updated_at', { ascending: false })
-    .limit(1)
-    .maybeSingle()
-  return shared ? { mailboxUserId: shared.user_id, shared: true, email: shared.email || '' } : null
+  const box = await orgMailbox(admin(), orgId, userId, { ownOnly: !shareAllowed })
+  return box ? { mailboxUserId: box.user_id, shared: box.shared, email: box.email, orgId } : null
 }
 
 /** An authenticated Gmail client on the mailbox this user works in. */
@@ -81,5 +65,7 @@ export async function getMailboxGmail(userId: string): Promise<AuthenticatedGmai
   const choice = await resolveMailbox(userId)
   if (!choice) throw new GmailAuthError('Gmail not connected. Please connect your Gmail account first.')
   const auth = await getAuthenticatedGmail(choice.mailboxUserId)
+  // Moved to another company between the two reads (reconnected there).
+  if (auth.orgId && auth.orgId !== choice.orgId) throw new GmailAuthError('Gmail not connected. Please connect your Gmail account first.')
   return { ...auth, ...choice, email: auth.emailAddress || choice.email }
 }

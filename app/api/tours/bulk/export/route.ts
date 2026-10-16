@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { TEMPLATE_CSV_DB_COLUMNS, serializeTemplatesCsv } from '@/lib/tours/template-csv'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -17,6 +18,9 @@ const supabaseAdmin = createClient(
  */
 export async function GET() {
   try {
+    // The caller's company's templates only (tour_templates.org_id, 20261207).
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     // The REAL columns only. Naming a virtual one here made PostgREST refuse
     // the whole query — `42703 column tour_templates.name_ja does not exist` —
     // so this export returned a 500 to everyone for as long as that column
@@ -25,6 +29,7 @@ export async function GET() {
     const { data, error } = await supabaseAdmin
       .from('tour_templates')
       .select(`id, ${cols}`)
+      .eq('org_id', orgId)
       .order('template_code', { ascending: true })
 
     if (error) {

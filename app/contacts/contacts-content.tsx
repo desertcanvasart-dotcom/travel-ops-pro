@@ -4,8 +4,13 @@ import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useRef } from 'react'
 import { useDismissOnOutside } from '@/lib/use-dismiss-on-outside'
 import { useTranslations } from 'next-intl'
+import { useRole } from '@/hooks/useRole'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
+import { csvCell } from '@/lib/csv-cell'
+import { CLIENT_STATUSES, clientStatusClass } from '@/lib/clients/status'
+import { attachedKinds, requestDeleteClient, requestMarkInactive } from '@/lib/clients/delete-client'
+import type { ClientAttachments } from '@/lib/clients/delete-guard'
 import { 
   Search, Plus, MoreHorizontal, Users, UserCog, X, Edit, Trash2, Eye, 
   Loader2, AlertCircle, Phone, Mail, MessageCircle, MapPin, Globe,
@@ -34,7 +39,10 @@ type SortDirection = 'asc' | 'desc'
 
 // Config (will be initialized inside component with translations)
 
-const CLIENT_STATUS_OPTIONS = ['prospect', 'active', 'inactive', 'vip']
+// Exactly the statuses the database allows (clients_status_check). The list
+// offered 'active' and 'vip' too, and choosing either failed the save; VIP is
+// a flag on the client (vip_status), set from the client's own page.
+const CLIENT_STATUS_OPTIONS: string[] = [...CLIENT_STATUSES]
 
 // Form fields and other configs will be initialized inside component with translations
 
@@ -42,15 +50,16 @@ const TABLE_NAMES = {
   client: 'clients',
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  active: 'bg-green-100 text-green-700',
-  inactive: 'bg-gray-100 text-gray-500',
-  prospect: 'bg-blue-100 text-blue-700',
-  vip: 'bg-amber-100 text-amber-700',
-}
-
 export default function ContactsContent() {
   const t = useTranslations('contacts')
+  // Suppliers is the managers' screen (Suppliers & Rates); agents use
+  // Contacts without the link that would only bounce them.
+  const canOpenSuppliers = useRole().canAccess(['admin', 'manager'])
+  // Deleting a client is the managers' (the database reserves it to them too).
+  const canDelete = canOpenSuppliers
+  const tClients = useTranslations('clients')
+  // Set when the server refused to delete because something is attached.
+  const [blockedBy, setBlockedBy] = useState<ClientAttachments | null>(null)
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -74,7 +83,6 @@ export default function ContactsContent() {
       { name: t('fields.lastName'), key: 'last_name', type: 'text', required: true },
       { name: t('fields.email'), key: 'email', type: 'email' },
       { name: t('fields.phone'), key: 'phone', type: 'tel' },
-      { name: t('fields.whatsapp'), key: 'whatsapp', type: 'tel' },
       { name: t('fields.nationality'), key: 'nationality', type: 'text' },
       { name: t('fields.status'), key: 'status', type: 'select', options: CLIENT_STATUS },
       { name: t('fields.preferredLanguage'), key: 'preferred_language', type: 'text' },
@@ -144,7 +152,7 @@ export default function ContactsContent() {
           subtype: c.status,
           email: c.email,
           phone: c.phone,
-          whatsapp: c.whatsapp || c.phone,
+          whatsapp: c.phone,
           city: c.nationality,
           notes: c.internal_notes,
           extra: { nationality: c.nationality, preferred_language: c.preferred_language, status: c.status },
@@ -218,7 +226,20 @@ export default function ContactsContent() {
 
   const handleEdit = (contact: Contact) => {
     setSelectedContact(contact)
-    setFormData({ ...contact.rawData })
+    // Only the columns this form edits. The row from the list also carries the
+    // combined `name` (not a column: the update was rejected) and id/money
+    // fields that are not ours to send back.
+    const raw = contact.rawData ?? {}
+    setFormData({
+      first_name: raw.first_name ?? '',
+      last_name: raw.last_name ?? '',
+      email: raw.email ?? '',
+      phone: raw.phone ?? '',
+      nationality: raw.nationality ?? '',
+      status: raw.status ?? '',
+      preferred_language: raw.preferred_language ?? '',
+      internal_notes: raw.internal_notes ?? '',
+    })
     setError(null)
     setShowEditModal(true)
     setOpenMenuId(null)
@@ -232,6 +253,8 @@ export default function ContactsContent() {
 
   const handleDeleteClick = (contact: Contact) => {
     setSelectedContact(contact)
+    setBlockedBy(null)
+    setError(null)
     setShowDeleteModal(true)
     setOpenMenuId(null)
   }
@@ -292,14 +315,36 @@ export default function ContactsContent() {
     setSaving(true)
     setError(null)
     try {
-      const endpoint = selectedContact.type === 'client'
-        ? `/api/clients/${selectedContact.id}`
-        : `/api/clients/${selectedContact.id}`
-      
-      const response = await fetch(endpoint, { method: 'DELETE' })
-      if (!response.ok) throw new Error((await response.json()).error || 'Failed to delete')
+      const outcome = await requestDeleteClient(selectedContact.id)
+      if (outcome.ok) {
+        setShowDeleteModal(false)
+        setSelectedContact(null)
+        fetchAllContacts()
+        return
+      }
+      // Something is attached: say what, and offer "Mark inactive" instead.
+      if (outcome.blocked) {
+        setBlockedBy(outcome.counts)
+        return
+      }
+      throw new Error(outcome.message)
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleMarkInactive = async () => {
+    if (!selectedContact) return
+    setSaving(true)
+    setError(null)
+    try {
+      const outcome = await requestMarkInactive(selectedContact.id)
+      if (!outcome.ok) throw new Error(outcome.message)
       setShowDeleteModal(false)
       setSelectedContact(null)
+      setBlockedBy(null)
       fetchAllContacts()
     } catch (err: any) {
       setError(err.message)
@@ -310,8 +355,10 @@ export default function ContactsContent() {
 
   const handleExport = () => {
     const csv = [
-      [t('exportHeaders.type'), t('exportHeaders.name'), t('exportHeaders.email'), t('exportHeaders.phone'), t('exportHeaders.locationNationality'), t('exportHeaders.statusRole')].join(','),
-      ...filteredContacts.map(c => [c.type, c.name, c.email, c.phone, c.city, c.subtype].map(v => `"${v || ''}"`).join(','))
+      [t('exportHeaders.type'), t('exportHeaders.name'), t('exportHeaders.email'), t('exportHeaders.phone'), t('exportHeaders.locationNationality'), t('exportHeaders.statusRole')].map(csvCell).join(','),
+      // csvCell doubles quotes inside a value and neutralises a leading = + - @
+      // (a client named "=HYPERLINK(...)" is a formula to a spreadsheet).
+      ...filteredContacts.map(c => [c.type, c.name, c.email, c.phone, c.city, c.subtype].map(csvCell).join(','))
     ].join('\n')
     const blob = new Blob([csv], { type: 'text/csv' })
     const a = document.createElement('a')
@@ -428,7 +475,9 @@ export default function ContactsContent() {
             <Globe className="w-5 h-5 text-blue-600" />
             <p className="text-sm text-blue-800">
               {t('suppliersInfo')}
-              <a href="/suppliers" className="font-medium underline ml-1">{t('goToSuppliers')}</a>
+              {canOpenSuppliers && (
+                <a href="/suppliers" className="font-medium underline ml-1">{t('goToSuppliers')}</a>
+              )}
             </p>
           </div>
         </div>
@@ -485,7 +534,7 @@ export default function ContactsContent() {
                             <div className="absolute right-0 top-8 w-36 bg-white rounded-lg shadow-lg border border-gray-200 py-1 z-20">
                               <button type="button" onClick={(e) => { e.stopPropagation(); handleView(contact) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"><Eye className="w-3.5 h-3.5" /> {t('view')}</button>
                               <button type="button" onClick={(e) => { e.stopPropagation(); handleEdit(contact) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-gray-700 hover:bg-gray-50"><Edit className="w-3.5 h-3.5" /> {t('edit')}</button>
-                              <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteClick(contact) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /> {t('delete')}</button>
+                              {canDelete && <button type="button" onClick={(e) => { e.stopPropagation(); handleDeleteClick(contact) }} className="w-full flex items-center gap-2 px-3 py-2 text-xs text-red-600 hover:bg-red-50"><Trash2 className="w-3.5 h-3.5" /> {t('delete')}</button>}
                             </div>
                           )}
                         </div>
@@ -499,8 +548,8 @@ export default function ContactsContent() {
                       )}
                       {contact.type === 'client' && contact.extra?.status && (
                         <div className="mt-3 pt-3 border-t border-gray-100">
-                          <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[contact.extra.status] || 'bg-gray-100 text-gray-600'}`}>
-                            {contact.extra.status === 'vip' && <Star className="w-3 h-3 mr-1" />}
+                          <span className={`inline-flex px-2 py-0.5 text-xs font-medium rounded-full ${clientStatusClass(contact.extra.status)}`}>
+                            {contact.rawData?.vip_status && <Star className="w-3 h-3 mr-1" />}
                             {contact.extra.status}
                           </span>
                         </div>
@@ -539,7 +588,7 @@ export default function ContactsContent() {
                           <td className="px-4 py-3">
                             <div className="flex items-center justify-end gap-1">
                               <button onClick={(e) => { e.stopPropagation(); handleEdit(contact) }} className="p-1.5 text-gray-400 hover:text-primary-600 hover:bg-primary-50 rounded-lg"><Edit className="w-4 h-4" /></button>
-                              <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(contact) }} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>
+                              {canDelete && <button onClick={(e) => { e.stopPropagation(); handleDeleteClick(contact) }} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg"><Trash2 className="w-4 h-4" /></button>}
                             </div>
                           </td>
                         </tr>
@@ -681,8 +730,8 @@ export default function ContactsContent() {
             </div>
             <div className="p-5 overflow-y-auto flex-1 space-y-3">
               {selectedContact.type === 'client' && selectedContact.extra?.status && (
-                <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full ${STATUS_COLORS[selectedContact.extra.status]}`}>
-                  {selectedContact.extra.status === 'vip' && <Star className="w-3 h-3" />}
+                <span className={`inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium rounded-full ${clientStatusClass(selectedContact.extra.status)}`}>
+                  {selectedContact.rawData?.vip_status && <Star className="w-3 h-3" />}
                   {selectedContact.extra.status}
                 </span>
               )}
@@ -701,7 +750,7 @@ export default function ContactsContent() {
               {selectedContact.notes && <div className="p-3 bg-gray-50 rounded-lg"><p className="text-xs text-gray-500 mb-1">{t('viewModal.notes')}</p><p className="text-sm text-gray-700">{selectedContact.notes}</p></div>}
             </div>
             <div className="flex items-center justify-between px-5 py-4 border-t border-gray-200 bg-gray-50">
-              <button type="button" onClick={() => { setShowViewModal(false); handleDeleteClick(selectedContact) }} className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg">{t('delete')}</button>
+              {canDelete ? <button type="button" onClick={() => { setShowViewModal(false); handleDeleteClick(selectedContact) }} className="px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50 rounded-lg">{t('delete')}</button> : <span />}
               <div className="flex items-center gap-2">
                 <button type="button" onClick={() => setShowViewModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-200 rounded-lg">{t('close')}</button>
                 <button type="button" onClick={() => { setShowViewModal(false); handleEdit(selectedContact) }} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700"><Edit className="w-4 h-4" /> {t('edit')}</button>
@@ -719,11 +768,27 @@ export default function ContactsContent() {
               <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center"><Trash2 className="w-6 h-6 text-red-600" /></div>
               <div><h3 className="text-base font-semibold text-gray-900">{t('deleteContact')}</h3><p className="text-sm text-gray-500">{t('deleteWarning')}</p></div>
             </div>
-            <p className="text-sm text-gray-600 mb-6">{t('deleteConfirm', { name: selectedContact.name })}</p>
+            {blockedBy ? (
+              <div className="mb-4">
+                <p className="text-sm font-medium text-gray-800 mb-2">{tClients('deleteBlockedBody')}</p>
+                <ul className="text-sm text-gray-700 space-y-1 ml-4 list-disc mb-2">
+                  {attachedKinds(blockedBy).map(([kind, count]) => (
+                    <li key={kind}>{tClients(`attached.${kind}`, { count })}</li>
+                  ))}
+                </ul>
+                <p className="text-sm text-gray-600">{tClients('deleteBlockedHint')}</p>
+              </div>
+            ) : (
+              <p className="text-sm text-gray-600 mb-6">{t('deleteConfirm', { name: selectedContact.name })}</p>
+            )}
             {error && <div className="flex items-center gap-2 p-3 mb-4 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm"><AlertCircle className="w-4 h-4" />{error}</div>}
             <div className="flex items-center justify-end gap-2">
               <button type="button" onClick={() => setShowDeleteModal(false)} className="px-4 py-2 text-sm font-medium text-gray-600 hover:bg-gray-100 rounded-lg">{t('cancel')}</button>
-              <button type="button" onClick={handleDelete} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">{saving && <Loader2 className="w-4 h-4 animate-spin" />} {t('delete')}</button>
+              {blockedBy ? (
+                <button type="button" onClick={handleMarkInactive} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50">{saving && <Loader2 className="w-4 h-4 animate-spin" />} {tClients('markInactive')}</button>
+              ) : (
+                <button type="button" onClick={handleDelete} disabled={saving} className="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50">{saving && <Loader2 className="w-4 h-4 animate-spin" />} {t('delete')}</button>
+              )}
             </div>
           </div>
         </div>

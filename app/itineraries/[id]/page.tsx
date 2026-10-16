@@ -1,5 +1,7 @@
 'use client'
 
+import { tripVatExcluded, vatMarker, vatOnLiveNet } from '@/lib/vat'
+import { VatToken } from '@/app/components/Vat'
 import { clientTotalOfDays, seasonSupplementOf, tripClientTotal } from '@/lib/itinerary-client-price'
 import { addDays } from '@/lib/payment-schedule'
 import { overnightLabel, overnightProperty } from '@/lib/itineraries/overnight-property'
@@ -58,6 +60,7 @@ import ComposeEmailModal from '@/components/unified/ComposeEmailModal'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { formatPhoneForWhatsApp, generateWhatsAppLink } from '@/lib/whatsapp-link'
 import { withReturnTo } from '@/lib/nav/return-to'
+import { useRole } from '@/hooks/useRole'
 
 const ItineraryMap = dynamic(() => import('@/components/ItineraryMap'), {
   ssr: false,
@@ -100,6 +103,9 @@ interface Itinerary {
   num_infants: number    // Ages 0-3: FREE except flights
   currency: string
   total_cost: number
+  /** VAT carried from the quote (lib/vat.ts): flag and recorded rate. */
+  vat_applied?: boolean
+  vat_rate?: number | null
   /** What the trip costs us, when the pricing engine has stored it. */
   supplier_cost?: number | null
   status: string
@@ -227,6 +233,12 @@ export default function ViewItineraryPage() {
   const router = useRouter()
   const supabase = createClient()
   const intlLocale = useLocale() as Language
+  // Generating commissions is a manager's action (the route refuses agents).
+  const { canAccess } = useRole()
+  const canGenerateCommissions = canAccess(['admin', 'manager'])
+  // The money screens are a manager's (the finance routes answer an agent 403):
+  // Add expense, the expenses panel, the actual P&L and the P&L card are theirs too.
+  const canSeeFinance = canAccess(['admin', 'manager'])
 
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
   const [days, setDays] = useState<DayWithServices[]>([])
@@ -244,6 +256,11 @@ export default function ViewItineraryPage() {
   const effectiveTotalCost = computedClientTotal > 0
     ? tripClientTotal(itinerary as never, days as never)
     : (Number(itinerary?.total_cost) || 0)
+  // The trip's VAT at its recorded rate, not on its extras lines (lib/vat.ts).
+  const tripVat = useMemo(
+    () => vatOnLiveNet(itinerary ? { ...itinerary, vat_excluded: tripVatExcluded(days as never) } : null, effectiveTotalCost, itinerary?.currency),
+    [itinerary, days, effectiveTotalCost]
+  )
   const [error, setError] = useState<string | null>(null)
   const [expandedDays, setExpandedDays] = useState<Set<number>>(new Set([1]))
 
@@ -679,7 +696,7 @@ export default function ViewItineraryPage() {
             last_name: lastName,
             email: itinerary.client_email || '',
             phone: itinerary.client_phone || '',
-            status: 'active',
+            status: 'lead',
             source: 'itinerary'
           })
         })
@@ -715,10 +732,10 @@ export default function ViewItineraryPage() {
           client_email: itinerary.client_email,
           line_items: lineItems,
           subtotal: effectiveTotalCost,
-          tax_rate: 0,
-          tax_amount: 0,
           discount_amount: 0,
+          // The NET; the server adds VAT when the trip carries it (lib/vat.ts).
           total_amount: effectiveTotalCost,
+          vat_applied: itinerary.vat_applied === true,
           currency: itinerary.currency || 'EUR',
           issue_date: todayLocal(),
           // Fourteen days from the office's today — toISOString is UTC, a day
@@ -1234,7 +1251,7 @@ export default function ViewItineraryPage() {
   const [assignments, setAssignments] = useState<CoverageAssignment[] | null>(null)
   const [resourceRefresh, setResourceRefresh] = useState(0)
   useEffect(() => {
-    if (!params.id) return
+    if (!params.id || !canSeeFinance) return
     let live = true
     fetch(`/api/profit-loss?itineraryId=${params.id}`)
       .then(r => r.json())
@@ -1242,7 +1259,7 @@ export default function ViewItineraryPage() {
       // Without it the page shows the quoted figures only.
       .catch(() => undefined)
     return () => { live = false }
-  }, [params.id, expenseRefreshTrigger])
+  }, [params.id, expenseRefreshTrigger, canSeeFinance])
   useEffect(() => {
     if (!params.id) return
     let live = true
@@ -1260,7 +1277,7 @@ export default function ViewItineraryPage() {
     status: itinerary.status,
     hasBooking: !!existingBooking,
     hasInvoice: !!existingInvoice,
-    invoiced: actualPnl && actualPnl.invoice_count > 0 ? actualPnl.total_revenue : null,
+    invoiced: actualPnl && actualPnl.invoice_count > 0 ? actualPnl.total_invoiced : null,
     paid: actualPnl && actualPnl.invoice_count > 0 ? actualPnl.total_paid : null,
     startDate: itinerary.start_date,
     endDate: itinerary.end_date,
@@ -1310,7 +1327,7 @@ export default function ViewItineraryPage() {
         startDate: itinerary.start_date,
         endDate: itinerary.end_date,
         currency: itinerary.currency || 'EUR',
-        invoiced: actualPnl && actualPnl.invoice_count > 0 ? actualPnl.total_revenue : null,
+        invoiced: actualPnl && actualPnl.invoice_count > 0 ? actualPnl.total_invoiced : null,
         paid: actualPnl && actualPnl.invoice_count > 0 ? actualPnl.total_paid : null,
         profit: actualPnl && actualPnl.invoice_count > 0 ? actualPnl.gross_profit : null,
         staleNights,
@@ -1402,6 +1419,8 @@ export default function ViewItineraryPage() {
     const data = await res.json().catch(() => ({}))
     if (!res.ok || !data.success) throw new Error(data.error || tStage('statusFailed'))
     setItinerary(prev => (prev ? { ...prev, status } : prev))
+    // Confirmed, but the booking it should have made was not: say so.
+    if (data.booking_error) await dialog.alert(tCommon('error'), data.booking_error, 'warning')
   }
 
   const closeOut = async () => {
@@ -1526,7 +1545,8 @@ export default function ViewItineraryPage() {
         name: itinerary.client_name || '',
         trip: splitTourCode(content.trip_name).title,
         dates,
-        price: formatMoney(effectiveTotalCost, itinerary.currency),
+        // The price and whether VAT is on it — never silent (lib/vat.ts).
+        price: `${formatMoney(effectiveTotalCost, itinerary.currency)} (${vatMarker(tripVat, itinerary.currency, lang === 'ja' ? 'ja' : 'en')})`,
         link: data.url,
         company: company?.name ?? '',
       })
@@ -1743,9 +1763,13 @@ export default function ViewItineraryPage() {
                 icon={<MoreHorizontal className="w-4 h-4" />}
                 items={[
                   { label: tStage('editItinerary'), icon: <Edit2 className="w-4 h-4" />, href: `/itineraries/${itinerary.id}/edit` },
-                  { label: tStage('addExpense'), icon: <Receipt className="w-4 h-4" />, onSelect: () => setExpenseSignal(n => n + 1) },
+                  ...(canSeeFinance
+                    ? [{ label: tStage('addExpense'), icon: <Receipt className="w-4 h-4" />, onSelect: () => setExpenseSignal(n => n + 1) }]
+                    : []),
                   { label: generatingTasks ? t('generating') : t('operationsTasks'), icon: <ClipboardList className="w-4 h-4" />, onSelect: handleOpenTaskDialog, disabled: generatingTasks, title: t('generateOperationsTasks') },
-                  { label: generatingCommissions ? t('generating') : tStage('generateCommissions'), icon: <Handshake className="w-4 h-4" />, onSelect: handleGenerateCommissions, disabled: generatingCommissions },
+                  ...(canGenerateCommissions
+                    ? [{ label: generatingCommissions ? t('generating') : tStage('generateCommissions'), icon: <Handshake className="w-4 h-4" />, onSelect: handleGenerateCommissions, disabled: generatingCommissions }]
+                    : []),
                   { label: duplicating ? tStage('duplicating') : tStage('duplicate'), icon: <Copy className="w-4 h-4" />, onSelect: duplicateTrip, disabled: duplicating, title: tStage('duplicateHint') },
                   itinerary.status === 'cancelled'
                     ? { label: tStage('reopen'), icon: <RotateCcw className="w-4 h-4" />, onSelect: reopenTrip }
@@ -1806,14 +1830,16 @@ export default function ViewItineraryPage() {
       </header>
 
       {/* The dialogs the menus open; each component keeps its own form. */}
-      <AddExpenseFromItinerary
-        itineraryId={itinerary.id}
-        itineraryCode={itinerary.itinerary_code}
-        clientName={itinerary.client_name}
-        onExpenseAdded={() => setExpenseRefreshTrigger(prev => prev + 1)}
-        openSignal={expenseSignal}
-        hideTrigger
-      />
+      {canSeeFinance && (
+        <AddExpenseFromItinerary
+          itineraryId={itinerary.id}
+          itineraryCode={itinerary.itinerary_code}
+          clientName={itinerary.client_name}
+          onExpenseAdded={() => setExpenseRefreshTrigger(prev => prev + 1)}
+          openSignal={expenseSignal}
+          hideTrigger
+        />
+      )}
       <GenerateNitteiButton
         itineraryId={itinerary.id}
         clientName={itinerary.client_name}
@@ -2052,6 +2078,8 @@ export default function ViewItineraryPage() {
                 </span>
               </div>
               <p className="text-xl font-bold text-gray-900">{formatMoney(effectiveTotalCost, itinerary.currency)}</p>
+              {/* VAT at the rate the trip recorded from its quote (lib/vat.ts). */}
+              <VatToken vat={tripVat} currency={itinerary.currency} />
               <p className="text-xs text-gray-500">{tStage('daysTravellers', { days: itinerary.total_days, travellers: itinerary.num_adults + (itinerary.num_children || 0) + (itinerary.num_infants || 0) })}</p>
               {actualPnl && (
                 <dl className="pt-2 mt-2 border-t border-gray-100 text-xs grid grid-cols-2 gap-y-1">
@@ -2062,8 +2090,8 @@ export default function ViewItineraryPage() {
                       <dt className="text-gray-500">{tStage('paid')}</dt>
                       <dd className="text-right text-gray-900">{formatMoney(actualPnl.total_paid, itinerary.currency)}</dd>
                       <dt className="text-gray-500">{tStage('balanceDue')}</dt>
-                      <dd className={`text-right font-medium ${actualPnl.total_revenue - actualPnl.total_paid > 0.005 ? 'text-amber-700' : 'text-green-700'}`}>
-                        {formatMoney(Math.max(0, actualPnl.total_revenue - actualPnl.total_paid), itinerary.currency)}
+                      <dd className={`text-right font-medium ${actualPnl.total_invoiced - actualPnl.total_paid > 0.005 ? 'text-amber-700' : 'text-green-700'}`}>
+                        {formatMoney(Math.max(0, actualPnl.total_invoiced - actualPnl.total_paid), itinerary.currency)}
                       </dd>
                     </>
                   )}
@@ -2458,7 +2486,7 @@ export default function ViewItineraryPage() {
                     <h3 className="text-sm font-semibold text-gray-900">{tStage('invoicesPayments')}</h3>
                     <p className="text-xs text-gray-500">
                       {actualPnl && actualPnl.invoice_count > 0
-                        ? tStage('invoicedPaid', { invoiced: formatMoney(actualPnl.total_revenue, itinerary.currency), paid: formatMoney(actualPnl.total_paid, itinerary.currency) })
+                        ? tStage('invoicedPaid', { invoiced: formatMoney(actualPnl.total_invoiced, itinerary.currency), paid: formatMoney(actualPnl.total_paid, itinerary.currency) })
                         : tStage('noInvoiceYet')}
                     </p>
                   </div>
@@ -2481,12 +2509,11 @@ export default function ViewItineraryPage() {
                 </div>
 
                 {/* PROFIT & LOSS */}
-                {days.length > 0 && <ItineraryPL
+                {canSeeFinance && days.length > 0 && <ItineraryPL
                   itineraryId={itinerary.id}
                   totalCost={effectiveTotalCost}
                   supplierCost={itinerary.supplier_cost}
                   currency={itinerary.currency}
-                  marginPercent={25}
                   days={days}
                   extraExpenses={itineraryExpenses.map(exp => ({
                     amount: exp.amount,
@@ -2497,12 +2524,14 @@ export default function ViewItineraryPage() {
                 />}
 
                 {/* EXTRA EXPENSES */}
-                <ItineraryExpenses
-                  itineraryId={itinerary.id}
-                  currency={itinerary.currency}
-                  refreshTrigger={expenseRefreshTrigger}
-                  onExpensesChanged={(expenses) => setItineraryExpenses(expenses)}
-                />
+                {canSeeFinance && (
+                  <ItineraryExpenses
+                    itineraryId={itinerary.id}
+                    currency={itinerary.currency}
+                    refreshTrigger={expenseRefreshTrigger}
+                    onExpensesChanged={(expenses) => setItineraryExpenses(expenses)}
+                  />
+                )}
               </div>
             )}
 
@@ -2524,10 +2553,10 @@ export default function ViewItineraryPage() {
                           <span className="text-gray-600">{tStage('noInvoiceYet')}</span>
                         ) : (
                           <>
-                            <span className="text-gray-600">{tStage('invoiced')} <span className="font-semibold text-gray-900">{formatMoney(actualPnl.total_revenue, itinerary.currency)}</span></span>
+                            <span className="text-gray-600">{tStage('invoiced')} <span className="font-semibold text-gray-900">{formatMoney(actualPnl.total_invoiced, itinerary.currency)}</span></span>
                             <span className="text-gray-600">{tStage('paid')} <span className="font-semibold text-gray-900">{formatMoney(actualPnl.total_paid, itinerary.currency)}</span></span>
-                            {actualPnl.total_revenue - actualPnl.total_paid > 0.005 ? (
-                              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">{tStage('balanceDueAmount', { amount: formatMoney(actualPnl.total_revenue - actualPnl.total_paid, itinerary.currency) })}</span>
+                            {actualPnl.total_invoiced - actualPnl.total_paid > 0.005 ? (
+                              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-medium">{tStage('balanceDueAmount', { amount: formatMoney(actualPnl.total_invoiced - actualPnl.total_paid, itinerary.currency) })}</span>
                             ) : (
                               <span className="px-2 py-0.5 rounded-full bg-green-100 text-green-800 font-medium">{tStage('paidInFull')}</span>
                             )}

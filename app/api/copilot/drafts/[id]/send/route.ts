@@ -13,6 +13,7 @@ import { getAuthenticatedGmail } from '@/lib/gmail'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { headerSafe, encodeEmailHeader } from '@/lib/http/safe-header'
 import { storedReplyHeaders, threadingLines } from '@/lib/email/reply-threading'
+import { mailboxServesOrg, orgGmailSenderId } from '@/lib/email/org-gmail-sender'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -179,27 +180,40 @@ export async function POST(
       }
 
       try {
-        const { gmail, emailAddress } = await getAuthenticatedGmail(userId)
-
         // Build email subject (reply to original subject)
         const subject = inboxMessage.subject
           ? (inboxMessage.subject.startsWith('Re:') ? inboxMessage.subject : `Re: ${inboxMessage.subject}`)
           : 'Re: Your inquiry'
 
-        // The conversation this draft answers: its Gmail thread (only usable
-        // from the mailbox that owns it) and the stored Message-IDs that thread
-        // the reply in every other mail client. The old In-Reply-To carried our
-        // own email_conversations row id, which is not a Message-ID at all.
-        let gmailThreadId: string | undefined
-        if (thread.email_conversation_id) {
-          const { data: conv } = await supabase
+        // The conversation this draft answers — this organisation's — and the
+        // mailbox to answer from: the one it came in on while that connection
+        // still serves this organisation (its Gmail thread is only usable
+        // there), else the organisation's mailbox (lib/email/org-gmail-sender)
+        // as a new thread kept together by the stored Message-IDs. It sent
+        // from the sender's own connection, whichever company that served.
+        // The old In-Reply-To carried our own email_conversations row id,
+        // which is not a Message-ID at all.
+        const { data: conv } = thread.email_conversation_id
+          ? await supabase
             .from('email_conversations')
-            .select('thread_id, user_id')
+            .select('id, thread_id, user_id')
             .eq('id', thread.email_conversation_id)
+            .eq('org_id', orgId)
             .maybeSingle()
-          if (conv?.thread_id && conv.user_id === userId) gmailThreadId = conv.thread_id
+          : { data: null }
+        let gmailThreadId: string | undefined
+        let senderId: string | null
+        if (conv?.user_id && conv.thread_id && await mailboxServesOrg(supabase, orgId, conv.user_id)) {
+          senderId = conv.user_id
+          gmailThreadId = conv.thread_id
+        } else {
+          senderId = await orgGmailSenderId(supabase, orgId, userId)
         }
-        const threading = await storedReplyHeaders(supabase, thread.email_conversation_id)
+        if (!senderId) throw new Error('Gmail not connected. Please connect your Gmail account in Settings.')
+        const { gmail, emailAddress, orgId: senderOrg } = await getAuthenticatedGmail(senderId)
+        if (senderOrg !== orgId) throw new Error('Gmail not connected. Please connect your Gmail account in Settings.')
+
+        const threading = await storedReplyHeaders(supabase, conv?.id ?? null)
 
         // Built like /api/gmail/send: header values cleaned of CR/LF (the
         // address and subject came from inbound mail), the subject an RFC 2047
@@ -230,9 +244,10 @@ export async function POST(
         sendResult = { success: true, messageId: sent.data.id || undefined }
 
         // Store in email_messages for continuity
-        if (thread.email_conversation_id) {
+        if (conv) {
           await supabase.from('email_messages').insert({
-            conversation_id: thread.email_conversation_id,
+            org_id: orgId,
+            conversation_id: conv.id,
             message_id: sent.data.id,
             thread_id: sent.data.threadId,
             direction: 'outbound',

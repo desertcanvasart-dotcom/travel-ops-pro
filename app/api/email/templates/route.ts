@@ -41,12 +41,14 @@ export async function GET(request: NextRequest) {
     // Also fetch from email_templates (legacy templates) if table exists
     let legacyTemplates: any[] = []
     try {
-      // Legacy templates are per user (email_templates.user_id): only the
-      // signed-in user's own — this listed every user's, across orgs.
+      // Legacy templates are per user (email_templates.user_id) and per
+      // company (org_id, 20261204): the signed-in user's own in this
+      // workspace — a person in both companies sees each company's here.
       const { data: legacy, error: legacyError } = userId
         ? await supabase
             .from('email_templates')
             .select('*')
+            .eq('org_id', orgId)
             .eq('user_id', userId)
             .order('name')
         : { data: [], error: null }

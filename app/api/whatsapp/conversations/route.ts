@@ -4,7 +4,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
-import { teamMemberInOrg } from '@/lib/whatsapp-org'
+import { teamMemberInOrg, pickAutoAssignee, openChatsByMember } from '@/lib/whatsapp-org'
 
 // Every query here runs on the service role and filters on org_id itself:
 // each organization has its own WhatsApp number and only its own threads
@@ -165,26 +165,28 @@ export async function POST(request: NextRequest) {
     // Create new conversation
     let assignedTeamMemberId = null
 
-    // Auto-assign if requested — to the next available member of THIS org.
-    // team_members carries no org_id, so the queue is filtered through each
-    // member's login (lib/whatsapp-org teamMemberInOrg); the first one in
-    // line used to be anyone in the deployment.
+    // Auto-assign if requested — to the next available member of THIS org
+    // (team_members.org_id); the first one in line used to be anyone in the
+    // deployment.
     if (auto_assign !== false) {
-      const { data: candidates } = await supabase
-        .from('team_members')
-        .select('id')
-        .eq('is_active', true)
-        .eq('is_available', true)
-        .order('last_assigned_at', { ascending: true, nullsFirst: true })
-        .order('created_at', { ascending: true })
-        .limit(50)
-
-      for (const candidate of candidates ?? []) {
-        if (await teamMemberInOrg(supabase, candidate.id, orgId)) {
-          assignedTeamMemberId = candidate.id
-          break
-        }
-      }
+      // Only members with a linked login (someone who can see the chat) who are
+      // available and below max_conversations; a Driver or Guide with no login
+      // used to receive chats nobody could open.
+      const [{ data: members }, { data: assigned }] = await Promise.all([
+        supabase
+          .from('team_members')
+          .select('id, user_id, max_conversations, last_assigned_at, created_at')
+          .eq('org_id', orgId)
+          .eq('is_active', true)
+          .eq('is_available', true)
+          .not('user_id', 'is', null),
+        supabase
+          .from('whatsapp_conversations')
+          .select('assigned_team_member_id, status, is_hidden')
+          .eq('org_id', orgId)
+          .not('assigned_team_member_id', 'is', null),
+      ])
+      assignedTeamMemberId = pickAutoAssignee(members ?? [], openChatsByMember(assigned ?? []))
     }
 
     const { data: newConversation, error } = await supabase
@@ -207,24 +209,20 @@ export async function POST(request: NextRequest) {
 
     if (error) throw error
 
-    // Update team member's count if assigned
+    // When they were last given a chat. No current_conversations bump: the
+    // open-chat figure is counted from the conversations (/api/whatsapp/agents)
+    // — a counter only ever added to here drifted upward for good.
     if (assignedTeamMemberId) {
-      const { data: memberData } = await supabase
-        .from('team_members')
-        .select('current_conversations')
-        .eq('id', assignedTeamMemberId)
-        .single()
-
       await supabase
         .from('team_members')
-        .update({ 
-          current_conversations: (memberData?.current_conversations || 0) + 1,
-          last_assigned_at: new Date().toISOString()
-        })
+        .update({ last_assigned_at: new Date().toISOString() })
         .eq('id', assignedTeamMemberId)
+        .eq('org_id', orgId)
 
-      // Log activity
-      await supabase
+      // Log activity. agent_id references team_members since 20261209 (it
+      // referenced sales_agents, so this insert always failed — unseen, as
+      // the result was never read).
+      const { error: activityError } = await supabase
         .from('conversation_activity')
         .insert({
           conversation_id: newConversation.id,
@@ -233,6 +231,7 @@ export async function POST(request: NextRequest) {
           action_type: 'auto_assigned',
           action_details: { source: 'new_conversation' }
         })
+      if (activityError) console.error('Activity log failed:', activityError.message)
     }
 
     return NextResponse.json({ conversation: newConversation, created: true })
@@ -296,17 +295,21 @@ export async function PATCH(request: NextRequest) {
       return NextResponse.json({ error: 'Conversation not found' }, { status: 404 })
     }
 
-    // Log activity if agent provided
+    // Log activity if agent provided — one of this company's team members
+    // (agent_id references team_members since 20261209).
     if (agent_id && action) {
-      await supabase
-        .from('conversation_activity')
-        .insert({
-          conversation_id,
-          agent_id,
-          team_member_id: agent_id,
-          action_type: 'status_changed',
-          action_details: { action, updates }
-        })
+      if (await teamMemberInOrg(supabase, agent_id, orgId)) {
+        const { error: activityError } = await supabase
+          .from('conversation_activity')
+          .insert({
+            conversation_id,
+            agent_id,
+            team_member_id: agent_id,
+            action_type: 'status_changed',
+            action_details: { action, updates }
+          })
+        if (activityError) console.error('Activity log failed:', activityError.message)
+      }
     }
 
     return NextResponse.json({ conversation: data })

@@ -49,7 +49,8 @@ describe('wiring', () => {
     expect(sync).toContain('isOfficeAddress(rule, from)')
     expect(sync).not.toMatch(/fromEmail === userEmail/)
     expect(readFileSync('app/api/gmail/poll/route.ts', 'utf8')).toContain('isOfficeAddress(officeRuleForPoll, fromEmail)')
-    expect(readFileSync('app/api/cron/gmail-sync/route.ts', 'utf8')).toContain('applyOfficeRuleWhenDue(db, await loadOfficeRule(db))')
+    // Per company: each organisation's own rule over its own mail (20261204).
+    expect(readFileSync('app/api/cron/gmail-sync/route.ts', 'utf8')).toContain('applyOfficeRuleWhenDue(db, orgId, await loadOfficeRule(db, orgId))')
     expect(readFileSync('app/settings/email/page.tsx', 'utf8')).toContain('<OfficeAddressesCard />')
   })
 })

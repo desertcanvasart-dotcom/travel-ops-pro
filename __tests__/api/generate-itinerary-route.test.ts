@@ -122,6 +122,8 @@ describe('generate-itinerary route — idempotency', () => {
     total_cost: 100,
     supplier_cost: 80,
     status: 'draft',
+    // The caller's company's trip: both look-ups are org-scoped (20261212).
+    org_id: 'org-test-1',
   }
 
   it('returns the existing itinerary for a repeated idempotency_key without inserting', async () => {
@@ -151,12 +153,45 @@ describe('generate-itinerary route — idempotency', () => {
   it("does not resolve another org's thread from its whatsapp_conversation_id", async () => {
     seed({
       communication_threads: [{ id: 'thread-x', whatsapp_conversation_id: 'wa-conv-x', org_id: 'org-other' }],
-      itineraries: [{ ...EXISTING, thread_id: 'thread-x' }],
+      itineraries: [{ ...EXISTING, thread_id: 'thread-x', org_id: 'org-other' }],
     })
     const res = await POST(makeRequest({ ...VALID_BODY, whatsapp_conversation_id: 'wa-conv-x' }))
     const json = await res.json()
     expect(json.data?.deduplicated).not.toBe(true)
     expect(json.data?.id).not.toBe('itin-existing-1')
+  })
+
+  it("never answers with another company's itinerary for its idempotency key", async () => {
+    seed({ itineraries: [{ ...EXISTING, idempotency_key: 'idem-x', org_id: 'org-other' }] })
+    const res = await POST(makeRequest({ ...VALID_BODY, idempotency_key: 'idem-x' }))
+    const json = await res.json()
+    expect(json.data?.deduplicated).not.toBe(true)
+    expect(json.data?.id).not.toBe('itin-existing-1')
+  })
+})
+
+describe("generate-itinerary route — the other company's ids are refused", () => {
+  it.each([
+    ['client_id', 'clients', 'Client'],
+    ['partner_id', 'b2b_partners', 'Partner'],
+    ['destination_id', 'destinations', 'Destination'],
+    ['thread_id', 'communication_threads', 'Conversation'],
+  ])('%s of another company → 404 before any AI work, nothing inserted', async (field, table, label) => {
+    seed({ [table]: [{ id: 'foreign-1', org_id: 'org-other' }] })
+    const res = await POST(makeRequest({ ...VALID_BODY, [field]: 'foreign-1' }))
+    expect(res.status).toBe(404)
+    expect((await res.json()).error).toBe(`${label} not found`)
+    expect(mockedCreative).not.toHaveBeenCalled()
+    const { data } = await (await import('../_mock-supabase')).createMockClient().from('itineraries').select()
+    expect(data).toHaveLength(0)
+  })
+
+  it("the company's own client is accepted and stored", async () => {
+    seed({ clients: [{ id: 'own-client', org_id: 'org-test-1' }] })
+    const res = await POST(makeRequest({ ...VALID_BODY, client_id: 'own-client' }))
+    expect(res.status).toBe(200)
+    const { data } = await (await import('../_mock-supabase')).createMockClient().from('itineraries').select()
+    expect(data![0].client_id).toBe('own-client')
   })
 })
 
@@ -235,7 +270,8 @@ describe('generate-itinerary route — a day trip is one vehicle', () => {
       { day_number: 3, title: 'Departure', city: 'Cairo', overnight_city: null, description: 'Fly home.', attractions: [] },
     ],
   })
-  const rate = (over: Record<string, unknown>) => ({ is_active: true, base_rate_eur: 50, base_rate_non_eur: 50, vehicle_type: 'Sedan', ...over })
+  // The caller's company's rates (org-test-1).
+  const rate = (over: Record<string, unknown>) => ({ org_id: 'org-test-1', is_active: true, base_rate_eur: 50, base_rate_non_eur: 50, vehicle_type: 'Sedan', ...over })
 
   async function transportOfDay2(rates: Record<string, unknown>[]) {
     seed({ transportation_rates: rates })
@@ -264,5 +300,44 @@ describe('generate-itinerary route — a day trip is one vehicle', () => {
       rate({ id: 'alex-tour', service_type: 'day_tour', city: 'Alexandria' }),
     ])
     expect(names).toEqual(['Sedan Sightseeing Transportation (Alexandria)'])
+  })
+})
+
+describe('generate-itinerary route — the company’s own content library and writing rules', () => {
+  // content_library / writing_rules carry org_id since 20261208; the route
+  // runs on the service role, so only its own filter keeps the other
+  // company's content and style rules out of this company's prompt.
+  const variation = (org: string, id: string, text: string) => ({
+    id: `v-${id}`, content_id: id, tier: 'standard', is_active: true, title: 'Pyramids of Giza', description: text,
+    highlights: [], inclusions: [],
+    // is_active: the generator skips a deactivated item (Content Library › Active).
+    content_library: { id, org_id: org, is_active: true, name: 'Pyramids of Giza', tags: ['cairo'], location: 'Cairo', is_cruise: false,
+      content_categories: { name: 'Sites', slug: 'sites' } },
+  })
+
+  it('reads only its company’s content and rules, prints rules as "name: description", logs usage in its company', async () => {
+    seed({
+      writing_rules: [
+        { id: 'wr-own', org_id: 'org-test-1', name: 'Warm tone', description: 'Write warmly', rule_type: 'enforce', is_active: true, priority: 5 },
+        { id: 'wr-own-avoid', org_id: 'org-test-1', name: 'No cliches', description: 'Never say breathtaking', rule_type: 'avoid', is_active: true, priority: 4 },
+        { id: 'wr-other', org_id: 'org-other', name: 'Other house style', description: 'Their rule', rule_type: 'enforce', is_active: true, priority: 9 },
+      ],
+      content_variations: [variation('org-test-1', 'c-own', 'Our Giza text'), variation('org-other', 'c-other', 'Their Giza text')],
+      content_usage_log: [],
+    })
+    const res = await POST(makeRequest({ ...VALID_BODY, tier: 'standard' }))
+    expect((await res.json()).success).toBe(true)
+    const args = mockedCreative.mock.calls[0][0] as any
+    expect(args.writingContext).toContain('- Warm tone: Write warmly')
+    expect(args.writingContext).toContain('- No cliches: Never say breathtaking')
+    expect(args.writingContext).not.toContain('Their rule')
+    expect(args.writingContext).not.toContain('undefined')
+    expect(args.contentContext).toContain('Our Giza text')
+    expect(args.contentContext).not.toContain('Their Giza text')
+
+    const db = (await import('../_mock-supabase')).createMockClient()
+    const { data: logs } = await db.from('content_usage_log').select()
+    expect(logs!.length).toBeGreaterThan(0)
+    expect(logs!.every((l: any) => l.org_id === 'org-test-1' && l.content_id === 'c-own')).toBe(true)
   })
 })

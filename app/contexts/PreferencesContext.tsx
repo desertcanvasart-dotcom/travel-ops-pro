@@ -14,6 +14,10 @@ export interface UserPreferences {
   default_cost_mode: 'auto' | 'manual'
   default_tier: string
   default_margin_percent: number
+  /** True when the person has no margin of their own and default_margin_percent
+   *  is the company's (GET /api/user-preferences). Sent back on save so the
+   *  company's figure is never stored as theirs. */
+  margin_follows_company?: boolean
   default_currency: string
   /** The org's supplier-rate currency (what engine amounts are in). Not user-editable. */
   rate_currency?: string

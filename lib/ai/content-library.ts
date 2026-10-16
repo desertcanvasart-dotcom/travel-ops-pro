@@ -6,6 +6,12 @@
 import { type CruiseDetectionResult } from './cruise-detection'
 import { type ServiceTier } from './parsing-utils'
 
+// Every read here runs on the service role (RLS does not apply), so each one
+// filters by the generating company: content items, cruise programmes,
+// writing rules and the usage log are each company's own since 20261208.
+// Matches no organisation: an org-less read finds nothing.
+const NO_ORG = '00000000-0000-0000-0000-000000000000'
+
 // ============================================
 // CRUISE CONTENT LOOKUP
 // ============================================
@@ -20,6 +26,7 @@ export interface CruiseContentMatch {
 
 export async function findCruiseContent(
   supabaseAdmin: any,
+  orgId: string | null | undefined,
   cruiseDetection: CruiseDetectionResult,
   tier: ServiceTier,
   requestedDuration: number | null
@@ -54,6 +61,7 @@ export async function findCruiseContent(
           is_active
         )
       `)
+      .eq('org_id', orgId ?? NO_ORG)
       .eq('is_cruise', true)
       .eq('is_active', true)
       .eq('content_variations.is_active', true)
@@ -91,6 +99,7 @@ export async function findCruiseContent(
             is_active
           )
         `)
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('is_cruise', true)
         .eq('is_active', true)
         .eq('content_variations.is_active', true)
@@ -159,15 +168,21 @@ export interface ContentItem {
   inclusions: string[]
 }
 
+// writing_rules' real columns (there is no rule_text: the prompt used to
+// print "- undefined" for every rule).
 export interface WritingRule {
+  name: string
+  description: string
   rule_type: string
-  rule_text: string
   category: string
   priority: number
+  applies_to?: string[] | null
+  examples?: unknown
 }
 
 export async function fetchContentLibrary(
   supabaseAdmin: any,
+  orgId: string | null | undefined,
   tier: string,
   cities: string[],
   interests: string[]
@@ -190,6 +205,7 @@ export async function fetchContentLibrary(
         inclusions,
         content_library!inner (
           id,
+          org_id,
           name,
           slug,
           short_description,
@@ -202,6 +218,10 @@ export async function fetchContentLibrary(
           )
         )
       `)
+      .eq('content_library.org_id', orgId ?? NO_ORG)
+      // A deactivated item is not used (Content Library › Active); the
+      // variation's own flag alone let it through.
+      .eq('content_library.is_active', true)
       .eq('tier', tier)
       .eq('is_active', true)
 
@@ -250,11 +270,12 @@ export async function fetchContentLibrary(
   }
 }
 
-export async function fetchWritingRules(supabaseAdmin: any): Promise<WritingRule[]> {
+export async function fetchWritingRules(supabaseAdmin: any, orgId: string | null | undefined): Promise<WritingRule[]> {
   try {
     const { data: rules, error } = await supabaseAdmin
       .from('writing_rules')
       .select('*')
+      .eq('org_id', orgId ?? NO_ORG)
       .eq('is_active', true)
       .order('priority', { ascending: false })
 
@@ -292,22 +313,65 @@ export function buildContentContext(content: ContentItem[]): string {
   return context
 }
 
+/** One rule as the prompt reads it: "name: description" (either alone when
+ *  the other is empty; nothing when both are). */
+function ruleLine(r: WritingRule): string | null {
+  const name = (r.name ?? '').trim()
+  const description = (r.description ?? '').trim()
+  if (name && description) return `${name}: ${description}`
+  return name || description || null
+}
+
+/** Whether a rule is meant for itineraries: its applies_to names 'itinerary'
+ *  or 'all'. A rule saved with no applies_to (the API stored [] before it
+ *  defaulted to ['all']) counts as 'all'. */
+export function ruleAppliesToItinerary(r: WritingRule): boolean {
+  const to = Array.isArray(r.applies_to) ? r.applies_to : []
+  return to.length === 0 || to.includes('all') || to.includes('itinerary')
+}
+
+const EXAMPLE_MAX = 160
+const clip = (s: string) => (s.length > EXAMPLE_MAX ? `${s.slice(0, EXAMPLE_MAX - 1)}…` : s)
+
+/** The rule's first good and first bad example, as one indented line under
+ *  it — one each, so the prompt stays bounded however many a rule has. */
+function exampleLine(r: WritingRule): string | null {
+  const ex = (r.examples && typeof r.examples === 'object' ? r.examples : {}) as { good?: unknown; bad?: unknown }
+  const first = (v: unknown) =>
+    Array.isArray(v) ? v.find((x): x is string => typeof x === 'string' && x.trim() !== '')?.trim() : undefined
+  const good = first(ex.good)
+  const bad = first(ex.bad)
+  const parts = [good && `write "${clip(good)}"`, bad && `not "${clip(bad)}"`].filter(Boolean)
+  return parts.length ? `  e.g. ${parts.join('; ')}` : null
+}
+
+// Per section, highest priority first (fetchWritingRules orders by it).
+// Preferred rules come last and fewer: they are soft guidance, and the
+// prompt is long already.
+const RULE_SECTIONS: { type: string; heading: string; max: number }[] = [
+  { type: 'enforce', heading: 'MUST follow:', max: 5 },
+  { type: 'avoid', heading: 'AVOID:', max: 5 },
+  { type: 'prefer', heading: 'PREFER where it fits:', max: 3 },
+]
+
 export function buildWritingRulesContext(rules: WritingRule[]): string {
-  if (rules.length === 0) return ''
+  // The itinerary generator is the only caller: rules for emails or WhatsApp
+  // only are not its business.
+  const forItinerary = rules.filter(ruleAppliesToItinerary)
+  if (forItinerary.length === 0) return ''
 
   let context = '\n\nWRITING STYLE:\n'
 
-  const enforceRules = rules.filter(r => r.rule_type === 'enforce').slice(0, 5)
-  const avoidRules = rules.filter(r => r.rule_type === 'avoid').slice(0, 5)
-
-  if (enforceRules.length > 0) {
-    context += 'MUST follow:\n'
-    enforceRules.forEach(r => context += `- ${r.rule_text}\n`)
-  }
-
-  if (avoidRules.length > 0) {
-    context += 'AVOID:\n'
-    avoidRules.forEach(r => context += `- ${r.rule_text}\n`)
+  for (const section of RULE_SECTIONS) {
+    const lines: string[] = []
+    for (const r of forItinerary.filter(r => r.rule_type === section.type).slice(0, section.max)) {
+      const line = ruleLine(r)
+      if (!line) continue
+      lines.push(`- ${line}`)
+      const example = exampleLine(r)
+      if (example) lines.push(example)
+    }
+    if (lines.length > 0) context += `${section.heading}\n${lines.join('\n')}\n`
   }
 
   return context
@@ -323,7 +387,7 @@ export function buildWritingRulesContext(rules: WritingRule[]): string {
  * the AI from outputting attraction names in wrong languages.
  * Only pass English/Latin-script names to the AI prompt.
  */
-export async function fetchAttractionsList(supabase: any): Promise<string[]> {
+export async function fetchAttractionsList(supabase: any, orgId: string | null | undefined): Promise<string[]> {
   try {
     // Fetch BOTH entrance fees AND activity rates — activities (Sea Trip, etc.)
     // are valid attractions that need to be in the validation set
@@ -331,11 +395,13 @@ export async function fetchAttractionsList(supabase: any): Promise<string[]> {
       supabase
         .from('entrance_fees')
         .select('attraction_name')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('is_active', true)
         .eq('is_addon', false),
       supabase
         .from('activity_rates')
         .select('activity_name')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('is_active', true)
     ])
 
@@ -376,7 +442,7 @@ export interface AttractionAlias {
  * Fetches all active aliases from the attraction_aliases table.
  * Returns a map: alias (lowercase) → canonical_name
  */
-export async function fetchAttractionAliases(supabase: any): Promise<{
+export async function fetchAttractionAliases(supabase: any, orgId: string | null | undefined): Promise<{
   aliasToCanonical: Map<string, string>
   canonicalToAliases: Map<string, string[]>
 }> {
@@ -387,6 +453,7 @@ export async function fetchAttractionAliases(supabase: any): Promise<{
     const { data } = await supabase
       .from('attraction_aliases')
       .select('canonical_name, alias')
+      .eq('org_id', orgId ?? NO_ORG)
       .eq('is_active', true)
 
     if (data) {
@@ -409,19 +476,21 @@ export async function fetchAttractionAliases(supabase: any): Promise<{
  * Also fetches aliases from attraction_aliases table.
  * Returns a structured list so the AI can pick from a city-specific menu.
  */
-export async function fetchAttractionsWithCity(supabase: any): Promise<AttractionWithCity[]> {
+export async function fetchAttractionsWithCity(supabase: any, orgId: string | null | undefined): Promise<AttractionWithCity[]> {
   try {
     const [entranceResult, activityResult, { canonicalToAliases }] = await Promise.all([
       supabase
         .from('entrance_fees')
         .select('attraction_name, city')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('is_active', true)
         .eq('is_addon', false),
       supabase
         .from('activity_rates')
         .select('activity_name, city')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('is_active', true),
-      fetchAttractionAliases(supabase),
+      fetchAttractionAliases(supabase, orgId),
     ])
 
     const attractions: AttractionWithCity[] = []
@@ -616,22 +685,27 @@ export function buildRichContentContext(
  */
 export async function logContentUsage(
   supabase: any,
+  orgId: string | null | undefined,
   contentIds: string[],
   tier: string,
   itineraryId: string,
   context: string = 'itinerary_generation'
 ): Promise<void> {
-  if (contentIds.length === 0) return
+  if (contentIds.length === 0 || !orgId) return
   try {
+    // Only this company's items (an id from elsewhere logs nothing), and the
+    // log row is the company's.
     const { data: variations } = await supabase
       .from('content_variations')
-      .select('id, content_id')
+      .select('id, content_id, content_library!inner(org_id)')
+      .eq('content_library.org_id', orgId)
       .in('content_id', contentIds)
       .eq('tier', tier)
 
     if (!variations || variations.length === 0) return
 
     const logs = variations.map((v: any) => ({
+      org_id: orgId,
       content_id: v.content_id,
       variation_id: v.id,
       itinerary_id: itineraryId,

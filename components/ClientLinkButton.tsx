@@ -161,7 +161,10 @@ export default function ClientLinkButton({
         }),
       })
       const data = await res.json()
-      const created = data?.client ?? data?.data
+      // Already a client with this address: link that one instead of failing.
+      const created = res.status === 409 && data?.existing?.id
+        ? data.existing
+        : (data?.client ?? data?.data)
       if (!created?.id) {
         console.error('Could not create the lead:', data?.error)
         return

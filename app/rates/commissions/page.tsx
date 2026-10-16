@@ -19,7 +19,7 @@ import { useTranslations } from 'next-intl'
 import { ArrowLeft, Percent, Search, Edit, Save, X, Check, AlertTriangle, Loader2, Info, TrendingUp, TrendingDown } from 'lucide-react'
 import { supplierTypeLabel } from '@/lib/supplier-types'
 import { useSupplierTypes } from '@/hooks/useSupplierTypes'
-import { COMMISSION_DIRECTIONS, type CommissionDirection } from '@/lib/suppliers/fields'
+import { COMMISSION_DIRECTIONS, commissionDirectionOf, type CommissionDirection } from '@/lib/suppliers/fields'
 
 interface Supplier {
   id: string
@@ -34,13 +34,8 @@ interface Supplier {
 
 type DirectionFilter = 'all' | CommissionDirection | 'none'
 
-function directionOf(s: Supplier): CommissionDirection | null {
-  const rate = Number(s.default_commission_rate)
-  if (!Number.isFinite(rate) || s.default_commission_rate === null || s.default_commission_rate === undefined) return null
-  if (s.commission_type === 'payable') return 'payable'
-  // The generator's own fallback: a rate without a direction is "we receive".
-  return 'receivable'
-}
+// A rate of 0 is "No commission" — the generator skips it (lib/suppliers/fields).
+const directionOf = (s: Supplier): CommissionDirection | null => commissionDirectionOf(s)
 
 export default function CommissionRatesPage() {
   const t = useTranslations('rates.commissions')
@@ -129,7 +124,9 @@ export default function CommissionRatesPage() {
       showNotice('error', t('rateRequired'))
       return
     }
-    persist(s, { default_commission_rate: rate, commission_type: editDirection })
+    // 0% is no commission: saved as one, never as "We receive 0%".
+    if (rate === 0) { handleClear(s); return }
+    persist(s,{ default_commission_rate: rate, commission_type: editDirection })
   }
 
   const handleClear = (s: Supplier) => persist(s, { default_commission_rate: null, commission_type: null })

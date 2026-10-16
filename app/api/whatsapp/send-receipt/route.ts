@@ -5,6 +5,9 @@ import { createServerClient } from '@/lib/supabase-server'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { orgIdentity } from '@/lib/org-identity'
+import { loadTripVatExtras, vatInPayment, vatMarker, type VatRecord } from '@/lib/vat'
+import { receiptVat } from '@/lib/payments/vat'
+import { receiptNumberFor } from '@/lib/payments/receipt-number'
 
 export async function POST(request: NextRequest) {
   try {
@@ -35,13 +38,17 @@ export async function POST(request: NextRequest) {
       paymentMethod: string | null
       referenceLabel: string
       reference: string
+      /** The VAT inside the amount (lib/vat.ts), stated on every receipt. */
+      vat: VatRecord
     }
 
     if (invoicePaymentId) {
       // invoice_payments has no org_id: the organisation is its invoice's.
       const { data: ip, error: ipError } = await supabase
         .from('invoice_payments')
-        .select('id, amount, currency, payment_method, payment_date, transaction_reference, created_at, invoices!inner (invoice_number, client_name, client_id, itinerary_id, org_id)')
+        // The invoice's '*': its VAT columns when the database has them —
+        // vat_base (20261218) says it left extras and insurance out.
+        .select('id, amount, currency, payment_method, payment_date, transaction_reference, receipt_number, created_at, invoices!inner (*)')
         .eq('id', invoicePaymentId)
         .eq('invoices.org_id', orgId)
         .single()
@@ -49,7 +56,7 @@ export async function POST(request: NextRequest) {
       if (ipError || !ip) {
         return NextResponse.json({ success: false, error: 'Payment not found' }, { status: 404 })
       }
-      const inv = (ip as unknown as { invoices: { invoice_number: string; client_name: string | null; client_id: string | null; itinerary_id: string | null } }).invoices
+      const inv = (ip as unknown as { invoices: { invoice_number: string; client_name: string | null; client_id: string | null; itinerary_id: string | null; total_amount: number | null; tax_rate: number | null; tax_amount: number | null; vat_applied?: boolean; vat_base?: number | null } }).invoices
 
       // The same phone the invoice send uses: the client's, else the trip's.
       let phone: string | null = null
@@ -65,13 +72,15 @@ export async function POST(request: NextRequest) {
       receipt = {
         clientName: inv.client_name,
         clientPhone: phone,
-        receiptNumber: ip.transaction_reference || `RCP-${String(ip.id).slice(0, 8).toUpperCase()}`,
+        receiptNumber: receiptNumberFor(ip),
         amount: ip.amount,
         currency: ip.currency,
         paymentDate: ip.payment_date || ip.created_at,
         paymentMethod: ip.payment_method,
         referenceLabel: 'Invoice',
         reference: inv.invoice_number || 'N/A',
+        // This payment's share of the invoice's recorded VAT.
+        vat: vatInPayment(ip.amount, inv, ip.currency),
       }
     } else {
       // Get payment details with itinerary
@@ -79,14 +88,7 @@ export async function POST(request: NextRequest) {
         .from('payments')
         .select(`
           *,
-          itineraries (
-            id,
-            itinerary_code,
-            client_name,
-            client_phone,
-            client_email,
-            org_id
-          )
+          itineraries ( * )
         `)
         .eq('id', paymentId)
         .eq('org_id', orgId)
@@ -98,6 +100,12 @@ export async function POST(request: NextRequest) {
 
       // A receipt says the money arrived; never send one for a pending, failed
       // or refunded payment.
+      if (payment.payment_type === 'refund') {
+        return NextResponse.json(
+          { success: false, error: 'This payment is a refund; a receipt is only sent for money received.' },
+          { status: 409 }
+        )
+      }
       if (payment.payment_status !== 'completed') {
         return NextResponse.json(
           { success: false, error: `This payment is ${payment.payment_status ?? 'not completed'}; a receipt is only sent once it is completed.` },
@@ -111,13 +119,21 @@ export async function POST(request: NextRequest) {
       receipt = {
         clientName: trip?.client_name ?? null,
         clientPhone: trip?.client_phone ?? null,
-        receiptNumber: payment.transaction_reference || `RCP-${payment.id.slice(0, 8).toUpperCase()}`,
+        receiptNumber: receiptNumberFor(payment),
         amount: payment.amount,
         currency: payment.currency,
         paymentDate: payment.payment_date || payment.created_at,
         paymentMethod: payment.payment_method,
         referenceLabel: 'Itinerary',
         reference: trip?.itinerary_code || 'N/A',
+        // The VAT recorded on the payment when it was made; one from before
+        // that is worked out from the trip's rate and taxed share — its extras
+        // are not taxed (lib/vat.ts, lib/payments/vat).
+        vat: receiptVat(
+          payment,
+          payment.currency,
+          trip?.vat_applied === true ? { ...trip, ...(await loadTripVatExtras(supabase, trip.id)) } : trip
+        ),
       }
     }
 
@@ -150,6 +166,7 @@ export async function POST(request: NextRequest) {
       `📅 *Date:* ${paymentDate}\n` +
       `💳 *Payment Method:* ${receipt.paymentMethod?.replace('_', ' ').replace(/\b\w/g, (l: string) => l.toUpperCase())}\n` +
       `💰 *Amount:* ${amount}\n` +
+      `🧾 ${vatMarker(receipt.vat, receipt.currency || 'EUR')}\n` +
       `🎫 *${receipt.referenceLabel}:* ${receipt.reference}\n\n` +
       `This receipt confirms your payment has been received and processed.\n\n` +
       (businessEmail || businessWebsite

@@ -140,14 +140,17 @@ describe('the pages', () => {
     expect(page).toContain('{received && payment.client_phone && (')
     expect(page).not.toContain('router.back()')
     expect(page).not.toContain('Cairo, Egypt')
-    expect(read('app/receipts/page.tsx')).toContain("itineraryPayments.filter((p: any) => p.payment_status === 'completed')")
+    // Completed and not a refund: lib/payments/stats isReceivedTripPayment (`payment_status === 'completed' && payment_type !== 'refund'`).
+    expect(read('app/receipts/page.tsx')).toContain('itineraryPayments.filter(isReceivedTripPayment)')
+    expect(read('lib/payments/stats.ts')).toContain("p.payment_status === 'completed' && p.payment_type !== 'refund'")
     expect(read('app/payments/[id]/page.tsx')).toMatch(/payment\.payment_status === 'completed' && \(\s*<Link\s+href=\{withReturnTo\(`\/documents\/receipt\//)
   })
 
   it('the payment API returns the client’s phone and email', () => {
     const route = read('app/api/payments/[id]/route.ts')
-    expect(route).toContain('client_phone: payment.itineraries?.client_phone')
-    expect(route).toContain('client_email: payment.itineraries?.client_email')
+    // From the payment's trip, only when the trip is this org's (#8).
+    expect(route).toContain('client_phone: trip?.client_phone')
+    expect(route).toContain('client_email: trip?.client_email')
   })
 
   it('the contract shows the trip’s currency and survives no price', () => {

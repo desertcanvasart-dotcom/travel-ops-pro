@@ -106,12 +106,14 @@ describe('suppliers: export → delete → re-import', () => {
       name: 'Nile "Dream" Cruises, Ltd',
       notes: 'Line one\nLine two, with a comma\nHe said "fine"',
     }
-    const rows = prepareSupplierRows(importRows(exportCsv([awkward, { ...SUPPLIER, id: 'b', name: 'Second Supplier' }])), new Set(['cruise', 'transport']))
+    // Two suppliers, two codes: a code twice in one file is now a row error
+    // (lib/suppliers/import-csv), so the second row carries its own.
+    const rows = prepareSupplierRows(importRows(exportCsv([awkward, { ...SUPPLIER, id: 'b', name: 'Second Supplier', supplier_code: 'SUP-0043' }])), new Set(['cruise', 'transport']))
     expect(rows.errors).toEqual([])
     expect(rows.ready).toHaveLength(2)
     expect(rows.ready[0].row).toMatchObject({ name: 'Nile "Dream" Cruises, Ltd', notes: awkward.notes })
     // The row below is untouched — the escape held.
-    expect(rows.ready[1].row).toMatchObject({ name: 'Second Supplier', supplier_code: 'SUP-0042' })
+    expect(rows.ready[1].row).toMatchObject({ name: 'Second Supplier', supplier_code: 'SUP-0043' })
   })
 
   it('exports the headers even when nothing is selected', () => {

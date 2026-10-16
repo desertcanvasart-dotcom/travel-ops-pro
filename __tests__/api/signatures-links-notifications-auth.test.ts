@@ -17,7 +17,7 @@ function builder(table: string) {
   }
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const b: any = {
-    select: () => b, order: () => b, ilike: () => b,
+    select: () => b, order: () => b, ilike: () => b, limit: () => b,
     insert: (v: unknown) => { c.op = 'insert'; c.vals = v; return b },
     update: (v: unknown) => { c.op = 'update'; c.vals = v; return b },
     delete: () => { c.op = 'delete'; return b },
@@ -34,6 +34,7 @@ let session = { userId: 'me', orgId: 'org-a', role: 'agent' }
 vi.mock('@/lib/auth/current-org', () => ({
   getCurrentUserId: async () => session.userId,
   getCurrentOrgId: async () => session.orgId,
+  noOrgResponse: () => new Response(null, { status: 403 }),
   requireRole: async (allowed: string[]) =>
     allowed.includes(session.role) ? null : new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403 }),
 }))
@@ -111,6 +112,12 @@ describe('POST /api/notifications', () => {
       expect((await post({ ...ok, link })).status).toBe(400)
       expect(createNotification).not.toHaveBeenCalled()
     })
+  it('rejects a team member of another workspace', async () => {
+    rows.team_members = [{ id: 'tm1', user_id: 'stranger', org_id: 'org-b' }]
+    rows.organization_members = [{ org_id: 'org-b', user_id: 'stranger' }]
+    expect((await post(ok)).status).toBe(404)
+    expect(createNotification).not.toHaveBeenCalled()
+  })
   it('rejects a login recipient outside the workspace', async () => {
     rows.organization_members = [{ org_id: 'org-b', user_id: 'stranger' }]
     expect((await post({ ...ok, team_member_id: undefined, user_id: 'stranger' })).status).toBe(404)
@@ -119,7 +126,12 @@ describe('POST /api/notifications', () => {
     expect((await post({ ...ok, message: 'x'.repeat(2001) })).status).toBe(400)
   })
   it('the task-assignment call still works', async () => {
+    // tm1 is this workspace's team member (team_members.org_id) — a team
+    // member of another organisation is refused (teamMemberInOrg). The
+    // notification is this workspace's.
+    rows.team_members = [{ id: 'tm1', user_id: 'me', org_id: 'org-a' }]
+    rows.organization_members = [{ org_id: 'org-a', user_id: 'me' }]
     expect((await post(ok)).status).toBe(200)
-    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({ team_member_id: 'tm1', link: '/tasks' }))
+    expect(createNotification).toHaveBeenCalledWith(expect.objectContaining({ org_id: 'org-a', team_member_id: 'tm1', link: '/tasks' }))
   })
 })

@@ -178,8 +178,10 @@ async function main() {
   // ---------- an add-on that goes with any trip ----------
   await findOrInsert(
     'entrance_fees',
-    `select=id&service_code=eq.${ENTRANCE_CODE}`,
+    // The org's own fee: service codes are unique per company (20261206).
+    `select=id&org_id=eq.${orgId}&service_code=eq.${ENTRANCE_CODE}`,
     {
+      org_id: orgId,
       service_code: ENTRANCE_CODE,
       attraction_name: 'Sound & Light Show, Karnak (demo)',
       city: 'Luxor',
@@ -436,7 +438,7 @@ async function cleanup(orgId) {
   await del('tour_day_activities', `template_id=in.(${(await select('tour_templates', `select=id&template_code=eq.${TEMPLATE_CODE}`))?.map(t => t.id).join(',') || '00000000-0000-0000-0000-000000000000'})`)
     .catch(() => {})
   await del('tour_templates', `template_code=eq.${TEMPLATE_CODE}`)
-  await del('entrance_fees', `service_code=eq.${ENTRANCE_CODE}`)
+  await del('entrance_fees', `org_id=eq.${orgId}&service_code=eq.${ENTRANCE_CODE}`)
   console.log(`  - programme ${TEMPLATE_CODE}, add-on ${ENTRANCE_CODE}, client ${CLIENT_EMAIL}`)
   console.log('\nDone.')
 }

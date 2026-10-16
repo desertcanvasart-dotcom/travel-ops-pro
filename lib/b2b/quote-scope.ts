@@ -48,7 +48,7 @@ export function quoteNotFound() {
 }
 
 /**
- * Are the trip and partner a quote points at this organisation's? A quote
+ * Are the trip, partner and tour variation a quote points at this organisation's? A quote
  * stored another org's itinerary_id or partner_id as given: the quote and its
  * PDF then carried that org's client, supplier costs or partner contact, and
  * converting it re-priced THEIR trip. An absent reference passes. Fails closed.
@@ -56,10 +56,13 @@ export function quoteNotFound() {
 export async function quoteRefsInOrg(
   supabase: DbClient,
   orgId: string,
-  refs: { itinerary_id?: unknown; partner_id?: unknown }
+  refs: { itinerary_id?: unknown; partner_id?: unknown; variation_id?: unknown }
 ): Promise<boolean> {
   if (!orgId) return false
-  const checks: Array<[string, unknown]> = [['itineraries', refs.itinerary_id], ['b2b_partners', refs.partner_id]]
+  // The variation too: a tour variation is one company's (20261207).
+  const checks: Array<[string, unknown]> = [
+    ['itineraries', refs.itinerary_id], ['b2b_partners', refs.partner_id], ['tour_variations', refs.variation_id],
+  ]
   for (const [table, id] of checks) {
     if (id === undefined || id === null || id === '') continue
     if (typeof id !== 'string') return false
@@ -67,6 +70,28 @@ export async function quoteRefsInOrg(
     if (!data) return false
   }
   return true
+}
+
+export const INACTIVE_PARTNER =
+  'That partner is deactivated. Reactivate it on the Partners page, or choose another partner.'
+
+/**
+ * Is this partner (the org's own) deactivated? Deactivation is honoured by the
+ * pickers but a stale tab or a direct call could still start a NEW quote, trip
+ * or booking for one. Call it where something new is created, never where an
+ * existing record is only read or re-saved: quotes and trips already made for
+ * the partner stay valid. An absent partner is not inactive; a lookup error
+ * counts as not inactive (quoteRefsInOrg has already proved the partner exists).
+ */
+export async function partnerIsInactive(supabase: DbClient, orgId: string, partnerId: unknown): Promise<boolean> {
+  if (typeof partnerId !== 'string' || !partnerId || !orgId) return false
+  const { data } = await supabase.from('b2b_partners').select('id, is_active').eq('id', partnerId).eq('org_id', orgId).maybeSingle()
+  return !!data && data.is_active === false
+}
+
+/** The refusal for a new record against a deactivated partner. */
+export function inactivePartnerResponse() {
+  return NextResponse.json({ success: false, error: INACTIVE_PARTNER }, { status: 409 })
 }
 
 /** The refusal for a trip or partner that is not the caller's — the same 404 as a missing one. */

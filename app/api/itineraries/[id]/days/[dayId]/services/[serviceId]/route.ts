@@ -15,6 +15,7 @@ import { createClient } from '@/lib/supabase/server'
 import { clientMessage } from '@/lib/api-errors'
 import { NextResponse } from 'next/server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { recordsInOrg } from '@/lib/org-refs'
 
 /** 404 unless the itinerary belongs to the org AND the day belongs to the itinerary. */
 async function ownedDay(
@@ -87,6 +88,14 @@ export async function PUT(
         delete updateData[key]
       }
     })
+
+    // The supplier and the seller are this company's (suppliers.org_id, 20261205).
+    for (const key of ['supplier_id', 'sold_by_supplier_id']) {
+      if (updateData[key] === '') updateData[key] = null
+      if (!(await recordsInOrg(supabase, orgId, { supplier_id: updateData[key] }))) {
+        return NextResponse.json({ success: false, error: 'Supplier not found' }, { status: 404 })
+      }
+    }
 
     const { data, error } = await supabase
       .from('itinerary_services')

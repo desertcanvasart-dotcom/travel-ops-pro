@@ -99,14 +99,18 @@ export type ThreadConflict =
  */
 export async function threadConflict(
   db: Db,
-  args: { threadId: string; requestKey: string | null; seenUpTo: string | null | undefined; bodyHash: string; now?: Date },
+  args: { orgId?: string; threadId: string; requestKey: string | null; seenUpTo: string | null | undefined; bodyHash: string; now?: Date },
 ): Promise<ThreadConflict | null> {
   const now = args.now ?? new Date()
 
   if (args.seenUpTo !== undefined) {
     const after = args.seenUpTo ?? '1970-01-01T00:00:00Z'
-    const { data: replies } = await db.from('email_messages')
-      .select('sent_at, sent_by')
+    // The organisation's own messages (email_messages.org_id, 20261204): a
+    // Gmail thread id is per mailbox, so another company's reply in a thread
+    // with the same id is not an answer here.
+    let repliesQuery = db.from('email_messages').select('sent_at, sent_by')
+    if (args.orgId) repliesQuery = repliesQuery.eq('org_id', args.orgId)
+    const { data: replies } = await repliesQuery
       .eq('thread_id', args.threadId)
       .eq('direction', 'outbound')
       .gt('sent_at', after)

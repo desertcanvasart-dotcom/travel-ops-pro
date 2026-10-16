@@ -33,6 +33,8 @@ export interface AuthenticatedGmail {
   accessToken: string
   refreshToken: string
   emailAddress: string
+  /** The organisation this connection serves (gmail_tokens.org_id, 20261204). */
+  orgId: string | null
 }
 
 /**
@@ -84,7 +86,7 @@ export async function getAuthenticatedGmail(userId: string): Promise<Authenticat
 
   const gmail = getGmailClient(accessToken, refreshToken)
 
-  return { gmail, accessToken, refreshToken, emailAddress }
+  return { gmail, accessToken, refreshToken, emailAddress, orgId: (tokenData.org_id as string | null) ?? null }
 }
 
 /**

@@ -4,7 +4,10 @@ import { blankToNull } from '@/lib/blank-to-null'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { paymentCurrencyFor } from '@/lib/payment-currency'
-import { pickPaymentFields, positiveAmount } from '@/lib/payment-fields'
+import { loadTripVatExtras } from '@/lib/vat'
+import { checkPaymentAmount, pickPaymentFields } from '@/lib/payments/fields'
+import { tripPaymentVatColumns } from '@/lib/payments/vat'
+import { liveInvoicesOfTrip, tripHasInvoiceMessage } from '@/lib/payments/ledger'
 
 export async function GET(
   request: NextRequest,
@@ -21,13 +24,7 @@ export async function GET(
       .from('payments')
       .select(`
         *,
-        itineraries (
-          itinerary_code,
-          client_name,
-          client_phone,
-          client_email,
-          total_cost
-        )
+        itineraries ( * )
       `)
       .eq('id', id)
       .eq('org_id', orgId)
@@ -35,15 +32,34 @@ export async function GET(
 
     if (error) throw error
 
+    // Only this org's trip (as send-receipt does): itinerary_id was stored as
+    // given on older payments, and another company's trip would print that
+    // company's client, phone, email and total on our invoice and receipt.
+    const trip = payment.itineraries?.org_id === orgId ? payment.itineraries : null
+    // No VAT on the trip's extras (owner, 2026-10-13): the payment's VAT is
+    // worked out on the taxed share of the trip (lib/vat.ts vatInsideGross).
+    // A payment records its own VAT when it is made (lib/payments/vat); one
+    // from before that has NULL and still reads the trip.
+    const recorded = typeof payment.vat_applied === 'boolean'
+    const taxed = recorded ? payment.vat_applied === true : trip?.vat_applied === true
+    const extras = taxed && trip ? await loadTripVatExtras(supabase, trip.id) : null
+
     const formattedPayment = {
       ...payment,
-      itinerary_code: payment.itineraries?.itinerary_code,
-      client_name: payment.itineraries?.client_name,
+      itineraries: trip,
+      itinerary_code: trip?.itinerary_code,
+      client_name: trip?.client_name,
       // The receipt's WhatsApp button and the email on the invoice and
       // receipt need these; the list route already returned them.
-      client_phone: payment.itineraries?.client_phone,
-      client_email: payment.itineraries?.client_email,
-      total_cost: payment.itineraries?.total_cost
+      client_phone: trip?.client_phone,
+      client_email: trip?.client_email,
+      total_cost: trip?.total_cost,
+      // The VAT (lib/vat.ts) the payment's invoice and receipt state inside the
+      // amount paid: the payment's own record, else the trip's. '*' above so a
+      // database without the columns (migration 20261214) still answers.
+      vat_recorded: recorded,
+      ...(recorded ? {} : { vat_applied: trip?.vat_applied === true, vat_rate: trip?.vat_rate ?? null }),
+      ...(extras && extras.vat_excluded > 0 ? { vat_excluded: extras.vat_excluded, vat_net: extras.vat_net } : {}),
     }
 
     return NextResponse.json({
@@ -69,30 +85,30 @@ export async function PUT(
 
     const { id } = await params
     const supabase = createServerClient()
-    // Only the payment's own fields; org_id, id and timestamps are not the
-    // caller's to change (M3 Phase 2A, AUDIT H26). As POST: blanks are null.
-    const safeBody = blankToNull(pickPaymentFields(await request.json()))
+    // As POST: a form field left alone arrives as "", and "" is not a date.
+    const body = blankToNull(await request.json())
 
-    // As POST: an amount, when sent, is a positive, finite number.
-    if ('amount' in safeBody) {
-      const amount = positiveAmount(safeBody.amount)
-      if (amount === null) {
-        return NextResponse.json(
-          { success: false, error: 'amount must be a positive number' },
-          { status: 400 }
-        )
-      }
-      safeBody.amount = amount
-    }
+    // Only the columns a caller may set (lib/payments/fields), as POST: org_id
+    // (a payment cannot be re-homed into another org), the receipt number and
+    // the recorded VAT are not the caller's.
+    const safeBody = pickPaymentFields(body)
     if (Object.keys(safeBody).length === 0) {
       return NextResponse.json({ success: false, error: 'Nothing to update' }, { status: 400 })
     }
 
+    // As POST, an amount must be a positive number.
+    if ('amount' in safeBody) {
+      const checked = checkPaymentAmount(safeBody.amount)
+      if (!checked.ok) return NextResponse.json({ success: false, error: checked.error }, { status: 400 })
+      safeBody.amount = checked.amount
+    }
+
     // As POST: the trip is this org's and the payment is in its currency.
-    if ('itinerary_id' in safeBody || 'currency' in safeBody) {
+    // A new amount, trip or currency re-records the VAT inside the payment.
+    if ('itinerary_id' in safeBody || 'currency' in safeBody || 'amount' in safeBody) {
       const { data: current } = await supabase
         .from('payments')
-        .select('itinerary_id')
+        .select('*')
         .eq('id', id)
         .eq('org_id', orgId)
         .maybeSingle()
@@ -104,14 +120,38 @@ export async function PUT(
         }
         const { data: trip } = await supabase
           .from('itineraries')
-          .select('id, currency')
+          .select('*')
           .eq('id', tripId)
           .eq('org_id', orgId)
           .maybeSingle()
         if (!trip) return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
-        const paid = paymentCurrencyFor(safeBody.currency, trip.currency)
-        if (!paid.ok) return NextResponse.json({ success: false, error: paid.error }, { status: 400 })
-        safeBody.currency = paid.currency
+        // A payment cannot be moved onto a trip that has an invoice: that trip
+        // takes its money on the invoice (lib/payments/ledger). One already on
+        // such a trip (recorded before the rule) can still be corrected.
+        if (tripId !== current.itinerary_id) {
+          const invoiceNumbers = await liveInvoicesOfTrip(supabase, orgId, trip.id)
+          if (invoiceNumbers.length) {
+            return NextResponse.json({ success: false, error: tripHasInvoiceMessage(invoiceNumbers) }, { status: 409 })
+          }
+        }
+        // Only a changed trip or currency is held to the trip's currency; a new
+        // amount alone leaves the payment's own.
+        let currency = current.currency
+        if ('itinerary_id' in safeBody || 'currency' in safeBody) {
+          const paid = paymentCurrencyFor(safeBody.currency, trip.currency)
+          if (!paid.ok) return NextResponse.json({ success: false, error: paid.error }, { status: 400 })
+          safeBody.currency = paid.currency
+          currency = paid.currency
+        }
+        // Same trip and a payment that already records its VAT: keep the
+        // flag and rate it was recorded with, re-work the amount.
+        const sameTrip = tripId === current.itinerary_id && typeof current.vat_applied === 'boolean'
+        const vatFacts = sameTrip ? { vat_applied: current.vat_applied, vat_rate: current.vat_rate } : trip
+        Object.assign(safeBody, tripPaymentVatColumns(
+          'amount' in safeBody ? safeBody.amount : current.amount,
+          vatFacts.vat_applied === true ? { ...vatFacts, ...(await loadTripVatExtras(supabase, trip.id)) } : vatFacts,
+          currency
+        ))
       }
     }
 

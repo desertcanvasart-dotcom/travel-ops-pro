@@ -34,6 +34,12 @@ export const CRON_JOBS: CronJob[] = [
   { name: 'data-invariants', schedule: '15 3 * * *', handler: () => import('@/app/api/cron/data-invariants/route').then(m => m.GET) },
   // Retention: destroy traveller passport scans once their trip has ended.
   { name: 'purge-traveller-documents', schedule: '45 3 * * *', handler: () => import('@/app/api/cron/purge-traveller-documents/route').then(m => m.GET) },
+  // Drafts Copilot replies for new customer messages (app/api/cron/copilot-drafts).
+  { name: 'copilot-drafts', schedule: '* * * * *', handler: () => import('@/app/api/cron/copilot-drafts/route').then(m => m.GET) },
+  // Releases the seat holds of quotes past their valid-until date
+  // (app/api/cron/release-expired-holds). 00:20 UTC = 09:20 in Tokyo, when
+  // Japan's date and the UTC date quotes read expiry by are the same day.
+  { name: 'release-expired-holds', schedule: '20 0 * * *', handler: () => import('@/app/api/cron/release-expired-holds/route').then(m => m.GET) },
   // The shared inbox: new mail and replies sent from Gmail directly, so
   // "awaiting reply" is current (lib/email/sync-mailbox).
   { name: 'gmail-sync', schedule: '*/10 * * * *', handler: () => import('@/app/api/cron/gmail-sync/route').then(m => m.GET) },

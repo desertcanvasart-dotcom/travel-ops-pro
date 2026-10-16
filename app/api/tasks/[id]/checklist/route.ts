@@ -6,6 +6,7 @@ import {
   type ChecklistChange,
   type ChecklistItem,
 } from '@/lib/tasks/itinerary-tasks'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,6 +26,8 @@ const supabaseAdmin = createClient(
 // (updated_at) — otherwise it re-reads and re-applies.
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
     const body = await request.json().catch(() => null)
     const change = parseChange(body)
@@ -37,6 +40,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
         .from('tasks')
         .select('id, status, checklist, updated_at, completed_at')
         .eq('id', id)
+        .eq('org_id', orgId)
         .maybeSingle()
       if (readError) throw readError
       if (!task) return NextResponse.json({ success: false, error: 'Task not found' }, { status: 404 })
@@ -53,7 +57,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
       if (status === 'done' && task.status !== 'done') fields.completed_at = now
       if (status !== 'done') fields.completed_at = null
 
-      let query = supabaseAdmin.from('tasks').update(fields).eq('id', id)
+      let query = supabaseAdmin.from('tasks').update(fields).eq('id', id).eq('org_id', orgId)
       query = task.updated_at ? query.eq('updated_at', task.updated_at) : query.is('updated_at', null)
       const { data: updated, error } = await query
         .select(`

@@ -11,8 +11,10 @@
 //
 // This test closes the drift: for each RATE_TABLE_CONFIGS entry, the schema
 // sources (the baseline dump or a migration) must declare a UNIQUE
-// constraint on that table's upsert key. Migrations must declare theirs as
-// LITERAL `ADD CONSTRAINT <table>_<col>_key UNIQUE (<col>)` statements —
+// constraint on that table's upsert key — PER COMPANY since 20261206: the
+// importer upserts ON CONFLICT (org_id, <key>), so one company's import can
+// never land on the other's row with the same code. Migrations must declare theirs as
+// LITERAL `ADD CONSTRAINT <table>_org_id_<col>_key UNIQUE (org_id, <col>)` statements —
 // dynamic EXECUTE format(...) constraints are invisible to this check, and
 // invisible is how the gap survived this long.
 import { describe, it, expect } from 'vitest'
@@ -50,10 +52,10 @@ describe('bulk importer upsert keys', () => {
   it('every upsert key is backed by a declared UNIQUE constraint', () => {
     const sql = schemaSources()
     const missing = keys.filter(([tbl, col]) => {
-      // pg_dump's baseline shape and a migration's literal shape both match:
-      //   ADD CONSTRAINT <anything> UNIQUE (col)  near  <table>
+      // A migration's literal shape:
+      //   ALTER TABLE <table> ADD CONSTRAINT <anything> UNIQUE (org_id, col)
       const re = new RegExp(
-        `ALTER TABLE (?:ONLY )?(?:public\\.)?${tbl}\\b[\\s\\S]{0,300}?ADD CONSTRAINT [a-z_]+ UNIQUE \\(${col}\\)`
+        `ALTER TABLE (?:ONLY )?(?:public\\.)?${tbl}\\b[\\s\\S]{0,300}?ADD CONSTRAINT [a-z_]+ UNIQUE \\(org_id, ${col}\\)`
       )
       return !re.test(sql)
     })

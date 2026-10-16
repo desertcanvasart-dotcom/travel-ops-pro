@@ -3,8 +3,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 
 const tables: Record<string, { data: any[] | null; error: { message: string } | null }> = {}
 vi.mock('@/lib/supabase-server', () => ({
-  createServerClient: () => ({ from: (t: string) => ({ select: async () => tables[t] }) }),
+  // select(…).eq('org_id', …): the company's own rows.
+  createServerClient: () => ({ from: (t: string) => ({ select: () => ({ eq: async (c: string, v: string) => (c === 'org_id' && v === 'org-1' ? tables[t] : { data: [], error: null }) }) }) }),
 }))
+
+// The caller's company: every rate route reads and stamps it (20261206).
+vi.mock('@/lib/auth/current-org', async () => {
+  const { NextResponse } = await import('next/server')
+  return {
+    getCurrentOrgId: async () => 'org-1',
+    getCurrentUserId: async () => 'u1',
+    getCurrentUserRole: async () => 'admin',
+    requireRole: async () => null,
+    noOrgResponse: () => NextResponse.json({ success: false }, { status: 403 }),
+  }
+})
 
 import { GET } from '@/app/api/cruises/assignable/route'
 

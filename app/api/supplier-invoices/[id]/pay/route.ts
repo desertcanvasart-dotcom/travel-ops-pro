@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { PAYABLE_EXPENSE_STATUSES } from '@/lib/expense-status'
+import { expensesSettledByPaidBills } from '@/lib/finance/supplier-bills'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -90,7 +91,27 @@ export async function POST(
     }
 
     if (links && links.length > 0) {
-      const expenseIds = links.map(l => l.expense_id)
+      // An expense is settled only when the amount matched to PAID bills
+      // covers it. Marking every linked expense paid wiped out what was still
+      // owed on one matched for part of its amount (EUR 600 of EUR 1,000).
+      const { data: linked } = await supabaseAdmin
+        .from('expenses')
+        .select('id, amount, status')
+        .in('id', links.map(l => l.expense_id))
+        .eq('org_id', orgId)
+      const { data: allLinks } = await supabaseAdmin
+        .from('supplier_invoice_expenses')
+        .select('expense_id, matched_amount, supplier_invoices(status)')
+        .in('expense_id', (linked || []).map(e => e.id))
+      const expenseIds = expensesSettledByPaidBills(
+        linked || [],
+        (allLinks || []).map((l: any) => ({
+          expense_id: l.expense_id,
+          matched_amount: l.matched_amount,
+          bill_status: (Array.isArray(l.supplier_invoices) ? l.supplier_invoices[0] : l.supplier_invoices)?.status ?? null,
+        })),
+      )
+      if (expenseIds.length === 0) return NextResponse.json({ success: true, data })
       // Org-scope the expense cascade. The junction rows above belong to a
       // supplier_invoice this org owns (the conditional UPDATE confirmed
       // ownership), but expenses gets its own filter as defense in depth.

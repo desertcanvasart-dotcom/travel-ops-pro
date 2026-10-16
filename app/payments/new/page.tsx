@@ -8,6 +8,8 @@ import Link from 'next/link'
 import { ArrowLeft, Save, FileText, MapPin, DollarSign } from 'lucide-react'
 import { usePreferences } from '@/app/contexts/PreferencesContext'
 import { formatMoney } from '@/lib/currency-totals'
+import { useTripPaid } from '@/lib/payments/use-trip-paid'
+import { invoicedTripIds } from '@/lib/payments/ledger'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
 
@@ -21,6 +23,7 @@ interface Invoice {
   balance_due: number
   currency: string
   status: string
+  itinerary_id?: string | null
 }
 
 interface Itinerary {
@@ -44,11 +47,16 @@ export default function RecordPaymentPage() {
   
   // Data sources
   const [invoices, setInvoices] = useState<Invoice[]>([])
+  // Every invoice (paid, draft...), to know which trips have one: such a trip
+  // takes its money on the invoice (lib/payments/ledger).
+  const [allInvoices, setAllInvoices] = useState<Invoice[]>([])
   const [itineraries, setItineraries] = useState<Itinerary[]>([])
   
   // Selected items
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null)
   const [selectedItinerary, setSelectedItinerary] = useState<Itinerary | null>(null)
+  // From the trip's payment rows: itineraries.total_paid is never updated.
+  const paidSoFar = useTripPaid(selectedItinerary?.id) ?? 0
   
   const [error, setError] = useState<string | null>(null)
   // This form is long enough that the error banner sits well above the submit
@@ -120,7 +128,7 @@ export default function RecordPaymentPage() {
           currency: selectedItinerary.currency || prev.currency
         }))
       } else {
-        const balance = selectedItinerary.total_cost - (selectedItinerary.total_paid || 0)
+        const balance = selectedItinerary.total_cost - paidSoFar
         setFormData(prev => ({
           ...prev,
           target_id: selectedItinerary.id,
@@ -129,7 +137,7 @@ export default function RecordPaymentPage() {
         }))
       }
     }
-  }, [selectedInvoice, selectedItinerary, paymentTarget, formData.payment_type])
+  }, [selectedInvoice, selectedItinerary, paymentTarget, formData.payment_type, paidSoFar])
 
   const fetchInvoices = async () => {
     try {
@@ -137,8 +145,11 @@ export default function RecordPaymentPage() {
       const response = await fetch('/api/invoices?limit=1000')
       if (response.ok) {
         const data = await response.json()
-        // Filter to show only invoices with balance due
-        const unpaidInvoices = data.filter((inv: Invoice) => Number(inv.balance_due) > 0)
+        setAllInvoices(data)
+        // Only invoices that can take a payment: a balance due, and sent (a
+        // draft or cancelled invoice is refused by the API).
+        const unpaidInvoices = data.filter((inv: Invoice & { status?: string }) =>
+          Number(inv.balance_due) > 0 && inv.status !== 'draft' && inv.status !== 'cancelled')
         setInvoices(unpaidInvoices)
       }
     } catch (error) {
@@ -181,6 +192,18 @@ export default function RecordPaymentPage() {
     setSelectedItinerary(itinerary || null)
   }
 
+  // The chosen trip already has a live invoice: the money is recorded there.
+  const tripInvoiceNumbers = selectedItinerary
+    ? allInvoices.filter(inv => inv.itinerary_id === selectedItinerary.id && invoicedTripIds([inv]).size > 0).map(inv => inv.invoice_number)
+    : []
+  const tripHasInvoice = paymentTarget === 'itinerary' && tripInvoiceNumbers.length > 0
+  const payableInvoiceOfTrip = selectedItinerary ? invoices.find(inv => inv.itinerary_id === selectedItinerary.id) : undefined
+  const useInvoiceInstead = () => {
+    const invoiceId = payableInvoiceOfTrip?.id
+    handleTargetChange('invoice')
+    if (invoiceId) setSelectedInvoice(invoices.find(inv => inv.id === invoiceId) || null)
+  }
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target
     setFormData(prev => ({ ...prev, [name]: value }))
@@ -193,6 +216,11 @@ export default function RecordPaymentPage() {
 
     if (!formData.target_id || !formData.amount) {
       setError(t('errorRequired'))
+      setLoading(false)
+      return
+    }
+    if (tripHasInvoice) {
+      setError(t('tripHasInvoice', { numbers: tripInvoiceNumbers.join(', ') }))
       setLoading(false)
       return
     }
@@ -256,7 +284,7 @@ export default function RecordPaymentPage() {
       return selectedInvoice.balance_due
     }
     if (paymentTarget === 'itinerary' && selectedItinerary) {
-      return selectedItinerary.total_cost - (selectedItinerary.total_paid || 0)
+      return selectedItinerary.total_cost - paidSoFar
     }
     return 0
   }
@@ -392,8 +420,22 @@ export default function RecordPaymentPage() {
                 </div>
               )}
 
+              {/* A trip with an invoice takes its money on the invoice. */}
+              {tripHasInvoice && (
+                <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+                  <p>{t('tripHasInvoice', { numbers: tripInvoiceNumbers.join(', ') })}</p>
+                  <button
+                    type="button"
+                    onClick={useInvoiceInstead}
+                    className="mt-2 px-3 py-1.5 bg-amber-600 text-white text-xs rounded-lg hover:bg-amber-700 font-semibold"
+                  >
+                    {t('useInvoiceInstead')}
+                  </button>
+                </div>
+              )}
+
               {/* Selected Item Info */}
-              {(selectedInvoice || selectedItinerary) && (
+              {(selectedInvoice || selectedItinerary) && !tripHasInvoice && (
                 <div className="mb-4 p-3 bg-primary-50 border border-primary-200 rounded-lg">
                   <div className="flex items-center gap-2 mb-2">
                     <DollarSign className="w-4 h-4 text-primary-600" />
@@ -434,12 +476,12 @@ export default function RecordPaymentPage() {
                         </div>
                         <div>
                           <span className="text-gray-600">{t('alreadyPaid')}:</span>
-                          <p className="font-bold text-success">{formatMoney(selectedItinerary.total_paid || 0, selectedItinerary.currency || formData.currency || 'EUR')}</p>
+                          <p className="font-bold text-success">{formatMoney(paidSoFar, selectedItinerary.currency || formData.currency || 'EUR')}</p>
                         </div>
                         <div>
                           <span className="text-gray-600">{t('balanceDue')}:</span>
                           <p className="font-bold text-orange-600">
-                            {formatMoney(selectedItinerary.total_cost - (selectedItinerary.total_paid || 0), selectedItinerary.currency || formData.currency || 'EUR')}
+                            {formatMoney(selectedItinerary.total_cost - paidSoFar, selectedItinerary.currency || formData.currency || 'EUR')}
                           </p>
                         </div>
                         <div>
@@ -633,9 +675,9 @@ export default function RecordPaymentPage() {
                 </Link>
                 <button
                   type="submit"
-                  disabled={loading || !formData.target_id || !formData.amount}
+                  disabled={loading || !formData.target_id || !formData.amount || tripHasInvoice}
                   className={`px-3 py-1.5 bg-primary-600 text-white text-sm rounded-lg hover:bg-primary-700 transition-colors font-semibold flex items-center gap-2 ${
-                    (loading || !formData.target_id || !formData.amount) ? 'opacity-50 cursor-not-allowed' : ''
+                    (loading || !formData.target_id || !formData.amount || tripHasInvoice) ? 'opacity-50 cursor-not-allowed' : ''
                   }`}
                 >
                   {loading ? (

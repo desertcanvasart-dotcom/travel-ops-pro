@@ -62,7 +62,7 @@ export async function GET(request: NextRequest) {
   const contact = async (type: string): Promise<{ person: PickupPerson | null; name: string | null }> => {
     const r = onDay.find(x => x.resource_type === type)
     if (!r) return { person: null, name: null }
-    const c = await resolveAssigneeContact(supabase as unknown as ContactClient, r)
+    const c = await resolveAssigneeContact(supabase as unknown as ContactClient, r, org_id)
     const name = (c?.name ?? r.resource_name ?? '').trim()
     return { person: name ? { name, phone: c?.phone ?? null } : null, name: r.resource_name ?? null }
   }
@@ -70,7 +70,7 @@ export async function GET(request: NextRequest) {
   // A driver assigned that day; else the vehicle's own driver.
   const vehicleRow = onDay.find(x => x.resource_type === 'vehicle')
   const { data: car } = !driver.person && vehicleRow?.resource_id
-    ? await supabase.from('vehicles').select('default_driver_name, default_driver_phone').eq('id', vehicleRow.resource_id).maybeSingle()
+    ? await supabase.from('vehicles').select('default_driver_name, default_driver_phone').eq('id', vehicleRow.resource_id).eq('org_id', org_id).maybeSingle()
     : { data: null }
   const carDriver: PickupPerson | null = car?.default_driver_name?.trim()
     ? { name: car.default_driver_name.trim(), phone: car.default_driver_phone ?? null }

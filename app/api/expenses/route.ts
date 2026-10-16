@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { syncExpense } from '@/lib/accounting'
-import { nextDocumentNumber, insertWithUniqueRetry } from '@/lib/document-numbering'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { insertWithUniqueRetry } from '@/lib/document-numbering'
+import { nextExpenseNumber } from '@/lib/expense-number'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
+import { getOrgDefaultCurrency } from '@/lib/org-default-currency'
 import { recordsInOrg } from '@/lib/org-refs'
-import { paymentDateForStatus } from '@/lib/expense-status'
+import { paymentDateForStatus, expenseFieldError, approvalDecision } from '@/lib/expense-status'
+import { withApproverNames } from '@/lib/expense-approver'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -15,6 +18,11 @@ export async function GET(request: NextRequest) {
   try {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
+
+    // Finance is admin and manager; the middleware prefix list says so too,
+    // checked here as well so the route does not rest on one table alone.
+    const forbidden = await requireRole(['admin', 'manager'])
+    if (forbidden) return forbidden
 
     const searchParams = request.nextUrl.searchParams
     const status = searchParams.get('status')
@@ -61,7 +69,8 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Failed to fetch expenses' }, { status: 500 })
     }
 
-    return NextResponse.json(data || [])
+    // "Approved by" shows a name, not an id.
+    return NextResponse.json(await withApproverNames(supabaseAdmin, data || []))
   } catch (error) {
     console.error('Error in expenses GET:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -72,6 +81,9 @@ export async function POST(request: NextRequest) {
   try {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
+
+    const forbidden = await requireRole(['admin', 'manager'])
+    if (forbidden) return forbidden
 
     const body = await request.json()
 
@@ -90,24 +102,36 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // The trip is this org's (lib/org-refs): the service role would book an
-    // expense against another org's trip.
-    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: body.itinerary_id }))) {
-      return NextResponse.json({ error: 'Itinerary not found' }, { status: 404 })
+    // Status, category and currency are checked against the same lists as the
+    // PUT: a status of "foo" was stored, shown as Pending and counted as a
+    // live cost by the P&L.
+    const fieldError = expenseFieldError(body)
+    if (fieldError) {
+      return NextResponse.json({ error: fieldError }, { status: 400 })
     }
 
-    // A picked supplier must exist (the picker sends its id; a stale or
-    // forged one would otherwise land as a dangling reference or 500).
-    if (body.supplier_id) {
-      const { data: supplier } = await supabaseAdmin
-        .from('suppliers')
-        .select('id')
-        .eq('id', body.supplier_id)
-        .maybeSingle()
-      if (!supplier) {
-        return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
-      }
+    // A picked supplier and a linked trip must exist in this company (the
+    // pickers send ids; a stale, forged or other company's one would otherwise
+    // land as a dangling or foreign reference — suppliers.org_id, 20261205).
+    if (!(await recordsInOrg(supabaseAdmin, orgId, { supplier_id: body.supplier_id, itinerary_id: body.itinerary_id }))) {
+      return NextResponse.json({ error: 'Supplier or trip not found' }, { status: 404 })
     }
+
+    // Who entered it, and, when it is entered already approved or paid, who
+    // approved it: the signed-in user, never a value from the request. A
+    // manager cannot enter an expense as approved (they would be approving their
+    // own); an owner or admin may.
+    const userId = await getCurrentUserId()
+    const isAdmin = (await requireRole(['admin'])) === null
+    const approval = approvalDecision({ from: null, to: body.status || 'pending', created_by: userId }, userId, isAdmin)
+    if (!approval.ok) {
+      return NextResponse.json({ error: approval.error }, { status: 403 })
+    }
+
+    // The company's own currency when none is sent — not a hardcoded EUR.
+    const currency = typeof body.currency === 'string' && body.currency.trim()
+      ? body.currency.trim().toUpperCase()
+      : await getOrgDefaultCurrency(supabaseAdmin, orgId)
 
     // M15: year-scoped, sequence-first generator with a year-scoped MAX
     // fallback (instead of the racy COUNT(*) + 1). Paired with the UNIQUE
@@ -121,7 +145,7 @@ export async function POST(request: NextRequest) {
       category: body.category,
       description: body.description || null,
       amount: body.amount,
-      currency: body.currency || 'EUR',
+      currency,
       expense_date: body.expense_date,
       supplier_name: body.supplier_name || null,
       supplier_type: body.supplier_type || null,
@@ -132,6 +156,8 @@ export async function POST(request: NextRequest) {
       payment_date: paymentDateForStatus(body.status || 'pending', body.payment_date),
       payment_reference: body.payment_reference || null,
       notes: body.notes || null,
+      created_by: userId,
+      ...(approval.set && approval.set.approved_by ? approval.set : {}),
       created_at: new Date().toISOString(),
       updated_at: new Date().toISOString()
     }
@@ -139,13 +165,9 @@ export async function POST(request: NextRequest) {
     const { data, error } = await insertWithUniqueRetry({
       generateRow: async () => ({
         ...baseExpense,
-        expense_number: await nextDocumentNumber({
-          supabase: supabaseAdmin,
-          prefix: 'EXP',
-          sequenceName: 'expense_number_seq',
-          table: 'expenses',
-          column: 'expense_number',
-        }),
+        // Per company (next_expense_number, migration 20261227); the global
+        // sequence only on a database that has not had it yet.
+        expense_number: await nextExpenseNumber(supabaseAdmin, orgId),
       }),
       insert: async (row) => await supabaseAdmin.from('expenses').insert([row]).select().single(),
     })

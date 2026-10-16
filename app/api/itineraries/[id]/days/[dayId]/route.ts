@@ -43,10 +43,19 @@ export async function PUT(
         overnight_city: body.overnight_city
       })
       .eq('id', dayId)
+      // A day OF this itinerary: the check above proves only that the
+      // itinerary is the org's, and dayId alone reached any company's day.
+      .eq('itinerary_id', id)
       .select()
-      .single()
+      .maybeSingle()
 
     if (error) throw error
+    if (!data) {
+      return NextResponse.json(
+        { success: false, error: 'Day not found' },
+        { status: 404 }
+      )
+    }
 
     return NextResponse.json({
       success: true,

@@ -4,7 +4,8 @@
 // Writes a validated+mapped brief into Autoura:
 //   1. find-or-create a clients prospect (by email, then phone)
 //   2. upsert client_preferences + append a client_notes summary
-//   3. upsert concierge_briefs (one current row per conversation_id)
+//   3. upsert concierge_briefs (one current row per conversation_id PER
+//      COMPANY — UNIQUE (org_id, conversation_id), migration 20261209)
 //   4. append concierge_brief_revisions (idempotency + history)
 //
 // Idempotency & ordering (spec §5/§6):
@@ -16,7 +17,6 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import type { MappedBrief } from './concierge-brief-schema'
-import { getDefaultOrgId } from './auth/default-org'
 
 export type IngestOutcome = 'received' | 'updated' | 'duplicate_ignored' | 'older_revision_filed'
 
@@ -41,29 +41,25 @@ const PG_UNIQUE_VIOLATION = '23505'
 async function findOrCreateClient(
   mapped: MappedBrief,
   supabase: SupabaseClient,
-  orgId: string | null
+  orgId: string
 ): Promise<string | null> {
   const { email, phone } = mapped.clientMatch
 
   // Matched WITHIN the org. clients is org-scoped as of
   // migrations/20260825_clients_org_id.sql, and an unscoped match on email or
   // phone would hand a brief to another operator's customer.
-  const scoped = <T>(q: T): T =>
-    orgId ? (q as { eq: (c: string, v: string) => T }).eq('org_id', orgId) : q
-
   if (email) {
-    const { data } = await scoped(supabase.from('clients').select('id').eq('email', email)).limit(1).maybeSingle()
+    const { data } = await supabase.from('clients').select('id').eq('email', email).eq('org_id', orgId).limit(1).maybeSingle()
     if (data?.id) return data.id
   }
   if (phone) {
-    const { data } = await scoped(supabase.from('clients').select('id').eq('phone', phone)).limit(1).maybeSingle()
+    const { data } = await supabase.from('clients').select('id').eq('phone', phone).eq('org_id', orgId).limit(1).maybeSingle()
     if (data?.id) return data.id
   }
 
   const { data: created, error } = await supabase
     .from('clients')
-    // org_id is NOT NULL: the webhook has no operator session, so it resolves
-    // to the same default org the brief row itself is stamped with.
+    // The brief's company — the one its signing secret named.
     .insert({ ...mapped.client, org_id: orgId })
     .select('id')
     .single()
@@ -145,30 +141,34 @@ async function insertRevision(
 }
 
 // ---- main entry ----
+/**
+ * `orgId` is the brief's company, resolved by the webhook from the secret
+ * that signed it (lib/concierge/brief-org.ts — DEFERRED_GATES.md G1). Every
+ * read and write here is in that company: the client match, the brief row
+ * (stamped at INSERT, never changed after), its revisions (through the
+ * brief), and — via promoteBriefToThread — the Copilot thread.
+ */
 export async function ingestBrief(
   mapped: MappedBrief,
   meta: IngestMeta,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  orgId: string
 ): Promise<IngestResult> {
   const conversationId = String(mapped.briefRow.conversation_id)
   const incomingRevision = mapped.briefRevision
-
-  // Phase 2 — intake-side org stamping. Webhook has no operator session, so
-  // we resolve to a default org. When the G1 gate flips (DEFERRED_GATES.md),
-  // this becomes per-webhook-secret resolution and commit reads thread.org_id.
-  // Resolved BEFORE the client write, which now needs it too (clients.org_id
-  // is NOT NULL).
-  const orgId = await getDefaultOrgId(supabase)
 
   // 1. Client (find-or-create). Best-effort: a brief is still stored even
   //    if the client write fails, so we never lose a lead.
   const clientId = await findOrCreateClient(mapped, supabase, orgId)
 
-  // 2. Look up the current brief row for this conversation.
+  // 2. Look up this company's current brief row for this conversation (the
+  //    same conversation id reaching another company is that company's own
+  //    lead, not an update of this one).
   const { data: current } = await supabase
     .from('concierge_briefs')
     .select('id, brief_revision')
     .eq('conversation_id', conversationId)
+    .eq('org_id', orgId)
     .maybeSingle()
 
   // ---- FIRST TIME: no current row ----
@@ -188,7 +188,7 @@ export async function ingestBrief(
 
     if (error && error.code === PG_UNIQUE_VIOLATION) {
       // Race: another request created it first. Re-run as an existing-row case.
-      return ingestBrief(mapped, meta, supabase)
+      return ingestBrief(mapped, meta, supabase, orgId)
     }
     if (error) throw error
 
@@ -216,7 +216,7 @@ export async function ingestBrief(
 
   // ---- NEWER REVISION: update in place, re-open for review ----
   if (incomingRevision > currentRevision) {
-    // org_id is stamped once at INSERT (Phase 2). Destructure it out of the
+    // org_id is stamped once at INSERT. Destructure it out of the
     // mapper's spread BEFORE building the update so it can't ride along into
     // the UPDATE and clobber the value set at intake. This is the structural
     // version of the protection — even if a future change adds org_id to the
@@ -238,7 +238,8 @@ export async function ingestBrief(
     const { data: updated } = await supabase
       .from('concierge_briefs')
       .update(updateRow)
-      .eq('conversation_id', conversationId)
+      .eq('id', briefId)
+      .eq('org_id', orgId)
       .lt('brief_revision', incomingRevision)
       .select('id, review_status')
       .maybeSingle()

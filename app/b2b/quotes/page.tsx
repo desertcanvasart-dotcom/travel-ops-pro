@@ -6,12 +6,14 @@ import { useTranslations } from 'next-intl'
 import {
   FileText, Search, Download, Trash2, Eye,
   Building2, Loader2, Plus, RefreshCw,
-  CheckCircle2, Clock, XCircle, Send
+  CheckCircle2, Clock, XCircle, Send, ArrowRightCircle
 } from 'lucide-react'
 import { LanguageIndicator } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
 import { useConfirm } from '@/components/ConfirmDialog'
-import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { formatMoney } from '@/lib/currency-totals'
+import { readVat } from '@/lib/vat'
+import { VatToken } from '@/app/components/Vat'
 
 // ============================================
 // B2B QUOTES LIST PAGE
@@ -27,8 +29,12 @@ interface Quote {
   tour_leader_included: boolean
   selling_price: number
   price_per_person: number
+  currency: string | null
   status: string
   created_at: string
+  vat_applied?: boolean
+  vat_rate?: number | null
+  vat_amount?: number
   trip_name: string | null
   source: string | null
   tour_variations: {
@@ -51,7 +57,6 @@ interface Quote {
 }
 
 export default function QuotesListPage() {
-  const { rateSymbol } = useCurrency()
   const t = useTranslations('b2bQuotes')
   const confirmDialog = useConfirm()
   const [quotes, setQuotes] = useState<Quote[]>([])
@@ -62,6 +67,8 @@ export default function QuotesListPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [bulkBusy, setBulkBusy] = useState(false)
   const [bulkStatus, setBulkStatus] = useState('')
+  // The company's whole book, counted by the server — not the rows loaded.
+  const [counts, setCounts] = useState<{ total: number; draft: number; sent: number; accepted: number } | null>(null)
 
   useEffect(() => {
     fetchQuotes()
@@ -87,6 +94,8 @@ export default function QuotesListPage() {
       })
       const data = await res.json()
       if (data.success) {
+        // Converted and booked quotes are kept; say so rather than look deleted.
+        if (data.skipped_count > 0) alert(`${data.skipped_count} quote(s) kept — converted or booked quotes cannot be deleted.`)
         setSelected(new Set())
         await fetchQuotes()
       } else {
@@ -110,7 +119,7 @@ export default function QuotesListPage() {
       const data = await res.json()
       if (data.success) {
         // Converted quotes keep their status; say so rather than look updated.
-        if (data.skipped_count > 0) alert(`${data.skipped_count} quote(s) skipped — converted quotes keep their status.`)
+        if (data.skipped_count > 0) alert(`${data.skipped_count} quote(s) skipped — converted or booked quotes keep their status, and an offer past its valid-until date is not accepted.`)
         setSelected(new Set())
         setBulkStatus('')
         await fetchQuotes()
@@ -133,6 +142,7 @@ export default function QuotesListPage() {
       const data = await res.json()
       if (data.success) {
         setQuotes(data.data || [])
+        if (data.counts) setCounts(data.counts)
       }
     } catch (err) {
       console.error('Failed to fetch quotes:', err)
@@ -150,6 +160,11 @@ export default function QuotesListPage() {
       const data = await res.json()
       if (data.success) {
         setQuotes(quotes.filter(q => q.id !== id))
+        setCounts(null)
+        void fetchQuotes()
+      } else {
+        // Refused (converted or booked, or not a manager): the reason, not silence.
+        alert(data.error || t('delete'))
       }
     } catch (err) {
       console.error('Failed to delete quote:', err)
@@ -165,6 +180,7 @@ export default function QuotesListPage() {
       accepted: { bg: 'bg-green-100', text: 'text-green-700', icon: CheckCircle2, label: t('statusAccepted') },
       rejected: { bg: 'bg-red-100', text: 'text-red-700', icon: XCircle, label: t('statusRejected') },
       expired: { bg: 'bg-amber-100', text: 'text-amber-700', icon: Clock, label: t('statusExpired') },
+      converted: { bg: 'bg-purple-100', text: 'text-purple-700', icon: ArrowRightCircle, label: t('statusConverted') },
     }
     const style = styles[status] || styles.draft
     const Icon = style.icon
@@ -193,12 +209,9 @@ export default function QuotesListPage() {
     )
   })
 
-  const stats = {
-    total: quotes.length,
-    draft: quotes.filter(q => q.status === 'draft').length,
-    sent: quotes.filter(q => q.status === 'sent').length,
-    accepted: quotes.filter(q => q.status === 'accepted').length,
-  }
+  const stats = counts ?? { total: 0, draft: 0, sent: 0, accepted: 0 }
+  // Each quote in its own currency and that currency's decimals (no ¥…​.00).
+  const money = (q: Quote, v: number | null | undefined) => formatMoney(Number(v) || 0, q.currency || 'EUR')
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -217,11 +230,12 @@ export default function QuotesListPage() {
           <button onClick={fetchQuotes} className="p-2 border rounded-lg hover:bg-gray-50" title={t('refresh')}>
             <RefreshCw className="w-4 h-4 text-gray-600" />
           </button>
-          {/* A B2B quote starts from a tour variation (manage → calculator →
-              save), so this deliberately opens the tour manager. The label
-              says so — a button reading just "New Quote" that lands on the
-              template manager reads as a wrong link (audit AUT-M04). */}
-          <Link href="/tours/manage" title={t('newQuoteHint')} className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium text-sm">
+          {/* A B2B quote starts from a tour variation (tour → calculator →
+              save), so this deliberately opens the tour list (Ready-made
+              Packages), where every role that quotes — agents included —
+              picks a tour and its "Quote this tour". Tour Manager is the
+              managers' template editor (audit AUT-M04, Tours audit). */}
+          <Link href="/tours" title={t('newQuoteHint')} className="flex items-center gap-2 px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium text-sm">
             <Plus className="w-4 h-4" />{t('newQuote')}
           </Link>
         </div>
@@ -258,6 +272,8 @@ export default function QuotesListPage() {
           <option value="sent">{t('statusSent')}</option>
           <option value="accepted">{t('statusAccepted')}</option>
           <option value="rejected">{t('statusRejected')}</option>
+          <option value="expired">{t('statusExpired')}</option>
+          <option value="converted">{t('statusConverted')}</option>
         </select>
       </div>
 
@@ -345,8 +361,9 @@ export default function QuotesListPage() {
                   <td className="px-4 py-3 text-center text-sm">{quote.num_adults}{quote.tour_leader_included && <span className="text-xs text-blue-500 ml-1">(+1)</span>}</td>
                   <td className="px-4 py-3 text-center text-sm">{quote.travel_date ? formatDate(quote.travel_date) : '-'}</td>
                   <td className="px-4 py-3 text-right">
-                    <p className="text-sm font-bold text-[#647C47]">{rateSymbol}{quote.selling_price?.toFixed(2)}</p>
-                    <p className="text-xs text-gray-500">{rateSymbol}{quote.price_per_person?.toFixed(2)}{t('perPerson')}</p>
+                    <p className="text-sm font-bold text-[#647C47]">{money(quote, quote.selling_price)}</p>
+                    <VatToken vat={readVat(quote)} currency={quote.currency} className="mt-1" />
+                    <p className="text-xs text-gray-500">{money(quote, quote.price_per_person)}{t('perPerson')}</p>
                   </td>
                   <td className="px-4 py-3 text-center">
                     <LanguageIndicator availableLanguages={quote.available_languages || []} size="sm" />

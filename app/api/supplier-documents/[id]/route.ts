@@ -2,6 +2,13 @@ import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { NextRequest, NextResponse } from 'next/server'
+import { recordsInOrg } from '@/lib/org-refs'
+import {
+  SUPPLIER_DOCUMENT_UPDATE_FIELDS, deleteBlockReason, isSupplierDocumentStatus, pickFields,
+} from '@/lib/documents/supplier-document-fields'
+import { convertVoucherMoney, planCurrencyChange } from '@/lib/documents/voucher-currency'
+import { voucherPickFx } from '@/lib/documents/voucher-pick-price'
+import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
 
 export async function GET(
   request: NextRequest,
@@ -18,7 +25,7 @@ export async function GET(
       .from('supplier_documents')
       .select(`
         *,
-        itinerary:itineraries(id, itinerary_code, trip_name, client_name)
+        itinerary:itineraries(id, itinerary_code, trip_name, client_name, currency, fx_frozen)
       `)
       .eq('id', id)
       .eq('org_id', orgId)
@@ -50,31 +57,53 @@ export async function PUT(
     const body = await request.json()
     console.log('Updating document:', id)
 
-    // Whitelist of allowed columns on supplier_documents table
-    // Only these fields will be sent to Supabase — everything else
-    // (joined relations, computed fields, non-column data) is ignored
-    // Not itinerary_id or org_id: a voucher stays on its trip, and its org
-    // comes from that trip (migrations/20261113_supplier_documents_org.sql).
-    const ALLOWED_FIELDS = [
-      'supplier_id', 'document_type', 'document_number',
-      'supplier_name', 'supplier_contact_name', 'supplier_contact_email',
-      'supplier_contact_phone', 'supplier_address', 'supplier_whatsapp',
-      'client_name', 'client_nationality', 'num_adults', 'num_children',
-      'services', 'selected_attractions', 'selected_routes', 'selected_meals', 'selected_guides',
-      'city', 'service_date', 'check_in', 'check_out',
-      'pickup_time', 'pickup_location', 'dropoff_location',
-      'vehicle_type', 'driver_name',
-      'currency', 'total_cost', 'payment_terms',
-      'special_requests', 'internal_notes',
-      'status', 'sent_at', 'confirmed_at', 'completed_at',
-      'sent_via',
-    ]
+    // Only real columns (lib/documents/supplier-document-fields): joined
+    // relations, computed fields and anything else in the body are ignored.
+    const updateData: Record<string, any> = pickFields(body, SUPPLIER_DOCUMENT_UPDATE_FIELDS)
 
-    // Only include fields that are actual table columns
-    const updateData: Record<string, any> = {}
-    for (const field of ALLOWED_FIELDS) {
-      if (field in body) {
-        updateData[field] = body[field]
+    // A status no screen knows would show as "Draft" everywhere.
+    if ('status' in updateData && !isSupplierDocumentStatus(updateData.status)) {
+      return NextResponse.json({ success: false, error: 'Unknown status' }, { status: 400 })
+    }
+
+    // A supplier must be this company's (suppliers.org_id, 20261205).
+    if (updateData.supplier_id === '') updateData.supplier_id = null
+    if (!(await recordsInOrg(supabase, orgId, { supplier_id: updateData.supplier_id }))) {
+      return NextResponse.json({ error: 'Supplier not found' }, { status: 404 })
+    }
+
+    // A new currency converts the amounts; it never just relabels them
+    // (lib/documents/voucher-currency). The body's amounts are in
+    // `amounts_currency` (absent: the stored currency).
+    let converted: { from: string; to: string; fx: number } | null = null
+    if ('currency' in updateData || body?.amounts_currency != null) {
+      const { data: stored, error: storedError } = await supabase
+        .from('supplier_documents')
+        .select('currency, total_cost, services, selected_routes, selected_meals, selected_guides, selected_attractions, itinerary:itineraries(fx_frozen)')
+        .eq('id', id)
+        .eq('org_id', orgId)
+        .maybeSingle()
+      if (storedError) {
+        console.error('Error reading document:', storedError)
+        return NextResponse.json({ success: false, error: clientMessage(storedError, 'Internal server error') }, { status: 500 })
+      }
+      if (!stored) return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 })
+      const { itinerary, ...storedRow } = stored as Record<string, any>
+      const plan = planCurrencyChange(storedRow, updateData, body?.amounts_currency)
+      if (plan.kind === 'refuse') {
+        return NextResponse.json({ success: false, error: plan.error }, { status: plan.status })
+      }
+      if (plan.kind === 'convert') {
+        // The trip's frozen rate, else today's — as a picked rate is converted.
+        const fx = voucherPickFx(plan.from, plan.to, itinerary?.fx_frozen, await fetchRunExchangeRates())
+        if (fx == null) {
+          return NextResponse.json({
+            success: false,
+            error: `No exchange rate from ${plan.from} to ${plan.to} is known, so the amounts cannot be converted. The currency was not changed.`,
+          }, { status: 422 })
+        }
+        Object.assign(updateData, convertVoucherMoney({ ...storedRow, ...updateData }, fx, plan.to))
+        converted = { ...plan, fx }
       }
     }
 
@@ -106,13 +135,17 @@ export async function PUT(
     if (error?.code === 'PGRST116') {
       return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 })
     }
+    // Numbers are unique within the company (20261216).
+    if (error?.code === '23505') {
+      return NextResponse.json({ success: false, error: 'Another of your documents already has this number' }, { status: 409 })
+    }
     if (error) {
       console.error('Error updating document:', error)
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
     console.log('Document updated successfully:', data)
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data, converted })
   } catch (error) {
     console.error('Error in PUT:', error)
     return NextResponse.json({ success: false, error: 'Server error' }, { status: 500 })
@@ -129,6 +162,25 @@ export async function DELETE(
   try {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
+
+    // A document the supplier holds is cancelled, not deleted.
+    const { data: existing, error: readError } = await supabase
+      .from('supplier_documents')
+      .select('id, status, sent_at')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (readError) {
+      console.error('Error reading document:', readError)
+      return NextResponse.json({ success: false, error: clientMessage(readError, 'Internal server error') }, { status: 500 })
+    }
+    if (!existing) {
+      return NextResponse.json({ success: false, error: 'Document not found' }, { status: 404 })
+    }
+    const blocked = deleteBlockReason(existing)
+    if (blocked) {
+      return NextResponse.json({ success: false, error: blocked }, { status: 409 })
+    }
 
     const { data, error } = await supabase
       .from('supplier_documents')

@@ -12,6 +12,7 @@ import type { RecipientLocale } from '@/lib/i18n/recipient-locale'
 import { formatMoney } from '@/lib/currency-totals'
 import { businessToday } from '@/lib/today'
 import { daysUntilDue } from '@/lib/invoices/reminder-schedule'
+import { readInvoiceVat, vatMarker } from '@/lib/vat'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function generateReminderEmail(invoice: any, reminderType: string, locale: RecipientLocale = 'en', identity: OrgIdentity = businessIdentity()): { subject: string; html: string } {
@@ -31,6 +32,8 @@ export function generateReminderEmail(invoice: any, reminderType: string, locale
   const balanceDue = formatMoney(Number(invoice.balance_due), invoice.currency)
   const totalAmount = formatMoney(Number(invoice.total_amount), invoice.currency)
   const dueDate = fmtDate(invoice.due_date)
+  // VAT, always stated (lib/vat.ts): the invoice's recorded rate and amount.
+  const vatLine = escapeHtml(vatMarker(readInvoiceVat(invoice), invoice.currency, locale === 'ja' ? 'ja' : 'en'))
 
   // Whole calendar days past due in the business's timezone (0 = due today).
   const daysOverdue = -daysUntilDue(invoice.due_date, businessToday())
@@ -129,6 +132,11 @@ export function generateReminderEmail(invoice: any, reminderType: string, locale
                         </td>
                         <td style="padding: 8px 0; text-align: right;">
                           <span style="color: #111827; font-size: 14px;">${totalAmount}</span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td colspan="2" style="padding: 0 0 8px; text-align: right;">
+                          <span style="color: #6b7280; font-size: 13px;">${vatLine}</span>
                         </td>
                       </tr>
                       <tr>

@@ -12,7 +12,8 @@
 // domestic flights included; AIR is the international fare the office types
 // per class (economy, business, one-way business); 燃油 is one typed number.
 // Each class gets its own total and website rate (lib/pricing/departure-buckets).
-// Still provisional: the FX source and rate (see resolveFx).
+// Currency: the company's own (lib/departures/grid-fx), converted from the
+// rate currency at the typed FX or the app's exchange rates.
 // Not yet wired: reading/writing the tour_departures cache columns
 // (air_pp/land_pp/priced_at) from migration 20261030 — this stub always
 // prices live. `?reprice=1` is accepted but currently a no-op distinction.
@@ -23,7 +24,11 @@ import { clientMessage } from '@/lib/api-errors'
 import { orgAuth } from '@/lib/auth/org-auth'
 import { calculateAutoPricing, ServiceTier } from '@/lib/auto-pricing-service'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
-import { getOrgRateCurrency } from '@/lib/org-rate-currency'
+import { getOrgRateCurrency, normaliseRateCurrency } from '@/lib/org-rate-currency'
+import { getOrgDefaultCurrency } from '@/lib/org-default-currency'
+import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
+import { resolveGridFx } from '@/lib/departures/grid-fx'
+import { withSeatCounts } from '@/lib/departures/seats'
 import { createServerClient } from '@/lib/supabase-server'
 import {
   AIR_COLUMN,
@@ -35,15 +40,6 @@ import {
   type FlightClass,
 } from '@/lib/pricing/departure-buckets'
 
-// TODO(operator): confirm the office rate. The office prices internally at
-// 160 JPY/USD, not the 157.15 live rate on file. Until it is a settable field,
-// a `fx` query param overrides this and this is the default. Expressed as
-// TARGET units per one RATE-currency unit (JPY per USD).
-const DEFAULT_OFFICE_FX_JPY_PER_USD = 160
-// The office quotes in JPY; the engine prices in the org's rate currency (USD
-// for ATS). Until price_currency is a setting, the grid targets JPY.
-const DEFAULT_TARGET_CURRENCY = 'JPY'
-
 interface GridBand {
   departureId: string
   startDate: string
@@ -54,7 +50,14 @@ interface GridBand {
   status: string
   maxPax: number
   minPax: number
+  /** Booked outside the app (booked_pax) — typed on the departure page. */
   bookedPax: number
+  /** Seat holds from website orders, by status (lib/departures/seats). */
+  heldConfirmed: number
+  heldPending: number
+  /** bookedPax + heldConfirmed + heldPending. */
+  seatsTaken: number
+  seatsFree: number
   /** 燃油, per person — one number whatever the class. Null = not entered. */
   fuelPp: number | null
   /** The engine's whole per-person gross for the date, domestic flights
@@ -69,20 +72,10 @@ interface GridBand {
   holes: string[]
 }
 
-/** TODO(operator): make FX a setting. For now: `fx` query param, else the
- *  office default; and no conversion when the rate currency already is the
- *  target. Returns target-per-source units. */
-function resolveFx(rateCurrency: string, targetCurrency: string, override: string | null): number {
-  if (rateCurrency === targetCurrency) return 1
-  const parsed = override != null ? Number(override) : NaN
-  if (Number.isFinite(parsed) && parsed > 0) return parsed
-  return DEFAULT_OFFICE_FX_JPY_PER_USD
-}
-
 /**
  * GET /api/departures/grid?template_id=…
  *   &tier=…&num_pax=2&is_eur=false&language=English
- *   &target_currency=JPY&fx=160&reprice=1
+ *   &target_currency=JPY&fx=150&reprice=1
  *
  * Returns one priced band per departure of the template, ordered by date.
  */
@@ -109,7 +102,9 @@ export async function GET(request: NextRequest) {
     // Guide mode: 'throughout' books one guide for the whole trip, 'spot' a
     // guide per touring day. Default spot (the common B2B case).
     const guideMode = searchParams.get('guide_mode') === 'throughout' ? 'throughout' : 'spot'
-    const targetCurrency = searchParams.get('target_currency') || DEFAULT_TARGET_CURRENCY
+    // The company's own currency unless the page names another.
+    const targetCurrency = normaliseRateCurrency(searchParams.get('target_currency'))
+      ?? await getOrgDefaultCurrency(createServerClient(), org_id)
 
     // Org context the engine needs: season premium (orgId), the currency its
     // rate tables are entered in (rateCurrency — NEVER omit, or it normalises to
@@ -119,7 +114,20 @@ export async function GET(request: NextRequest) {
       requested: searchParams.get('margin_percent') != null ? Number(searchParams.get('margin_percent')) : null,
       orgDefault: await getOrgDefaultMargin(createServerClient(), org_id),
     })
-    const fx = resolveFx(rateCurrency, targetCurrency, searchParams.get('fx'))
+    const typedFx = searchParams.get('fx')
+    const fxAnswer = resolveGridFx(
+      rateCurrency,
+      targetCurrency,
+      typedFx,
+      rateCurrency === targetCurrency || (typedFx && Number(typedFx) > 0) ? null : (await fetchRunExchangeRates()).rates,
+    )
+    if ('error' in fxAnswer) {
+      return NextResponse.json(
+        { success: false, error: fxAnswer.error, rate_currency: rateCurrency, target_currency: targetCurrency },
+        { status: 422 },
+      )
+    }
+    const fx = fxAnswer.fx
 
     // Bands = this template's departures, org-scoped, in date order.
     const { data: departures, error: depErr } = await supabase
@@ -136,7 +144,8 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    const rows = departures ?? []
+    // Seats as every screen counts them: booked outside the app + holds.
+    const rows = await withSeatCounts(supabase, org_id, departures ?? [])
     const bands: GridBand[] = []
 
     // Price each departure at its own date. Sequential on purpose for a stub —
@@ -162,7 +171,7 @@ export async function GET(request: NextRequest) {
       // for that basis. All of it is LND: the engine prices the ground
       // arrangements and domestic flights, never the international fare.
       const landPp = convertAtRate(result.pricePerPerson ?? 0, fx)
-      // Fuel and the AIR fares are typed in the target currency (JPY).
+      // Fuel and the AIR fares are typed in the target currency.
       const fuelPp = dep.fuel_surcharge_pp == null ? null : Number(dep.fuel_surcharge_pp)
       const num = (v: unknown) => (v == null ? null : Number(v))
       const classes = Object.fromEntries(
@@ -173,6 +182,7 @@ export async function GET(request: NextRequest) {
             fuelPp,
             airPp: num(dep[AIR_COLUMN[c]]),
             websiteTyped: num(dep[WEB_COLUMN[c]]),
+            currency: targetCurrency,
           }),
         ]),
       ) as Record<FlightClass, ClassColumn>
@@ -185,7 +195,11 @@ export async function GET(request: NextRequest) {
         status: dep.status ?? 'open',
         maxPax: Number(dep.max_pax ?? 0),
         minPax: Number(dep.min_pax ?? 0),
-        bookedPax: Number(dep.booked_pax ?? 0),
+        bookedPax: dep.booked_pax,
+        heldConfirmed: dep.held_confirmed,
+        heldPending: dep.held_pending,
+        seatsTaken: dep.seats_taken,
+        seatsFree: dep.seats_free,
         fuelPp,
         landPp,
         classes,
@@ -204,6 +218,7 @@ export async function GET(request: NextRequest) {
         rate_currency: rateCurrency,
         target_currency: targetCurrency,
         fx,
+        fx_source: fxAnswer.source,
         margin_percent: marginPercent,
         language,
         guide_mode: guideMode,

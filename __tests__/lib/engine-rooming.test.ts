@@ -22,7 +22,7 @@ import { calculateAutoPricing } from '@/lib/auto-pricing-service'
 
 const SUPP = 50
 const RED = 10
-const BASE = { templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0 }
+const BASE = { orgId: 'org-1', templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0 }
 
 function tables(withRooming: boolean) {
   const t = fullRateTables()

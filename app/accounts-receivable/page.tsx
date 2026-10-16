@@ -31,7 +31,9 @@ interface AgingBucket {
   current: number
   days30: number
   days60: number
+  days90: number
   days90Plus: number
+  noDueDate: number
 }
 
 interface ClientReceivable {
@@ -60,7 +62,10 @@ interface Invoice {
   balance_due: number
   status: string
   issue_date: string
-  due_date: string
+  due_date: string | null
+  /** Own due date, else issue date + payment terms; null when neither exists. */
+  effective_due_date: string | null
+  due_date_from_terms: boolean
   days_past_due: number
   aging_bucket: string
   is_overdue: boolean
@@ -70,7 +75,9 @@ interface AgingTotals {
   current: CurrencyTotals
   days30: CurrencyTotals
   days60: CurrencyTotals
+  days90: CurrencyTotals
   days90Plus: CurrencyTotals
+  noDueDate: CurrencyTotals
 }
 
 interface Summary {
@@ -84,9 +91,19 @@ interface Summary {
   aging: AgingTotals
   overdue_count: number
   overdue_amount: CurrencyTotals
+  truncated?: boolean
 }
 
 const ITEMS_PER_PAGE = 15
+
+// Row key and expand state: a client billed in two currencies is two rows.
+const rowKey = (c: { client_id: string; client_name: string; currency: string }) =>
+  `${c.client_id || c.client_name}::${c.currency}`
+
+const dueLabel = (inv: Invoice) =>
+  inv.effective_due_date
+    ? `${new Date(inv.effective_due_date).toLocaleDateString()}${inv.due_date_from_terms ? ' (from terms)' : ''}`
+    : 'No due date'
 
 export default function AccountsReceivablePage() {
   const dialog = useConfirmDialog()
@@ -157,11 +174,11 @@ export default function AccountsReceivablePage() {
     const body = encodeURIComponent(
       `Dear ${invoice.client_name},\n\n` +
       `This is a friendly reminder that invoice ${invoice.invoice_number} ` +
-      `for ${formatMoney(Number(invoice.balance_due), invoice.currency)} is ${invoice.days_past_due > 0 ? `${invoice.days_past_due} days overdue` : 'due soon'}.\n\n` +
+      `for ${formatMoney(Number(invoice.balance_due), invoice.currency)} is ${invoice.days_past_due > 0 ? `${invoice.days_past_due} days overdue` : 'outstanding'}.\n\n` +
       `Original amount: ${formatMoney(Number(invoice.total_amount), invoice.currency)}\n` +
       `Amount paid: ${formatMoney(Number(invoice.amount_paid), invoice.currency)}\n` +
       `Balance due: ${formatMoney(Number(invoice.balance_due), invoice.currency)}\n` +
-      `Due date: ${new Date(invoice.due_date).toLocaleDateString()}\n\n` +
+      `Due date: ${invoice.effective_due_date ? new Date(invoice.effective_due_date).toLocaleDateString() : 'not set'}\n\n` +
       `Please arrange payment at your earliest convenience.\n\n` +
       `Best regards,`
     )
@@ -185,9 +202,9 @@ export default function AccountsReceivablePage() {
   const getAgingColor = (bucket: string) => {
     switch (bucket) {
       case 'current': return 'text-green-600 bg-green-100'
-      case 'overdue':
       case '30': return 'text-yellow-600 bg-yellow-100'
       case '60': return 'text-orange-600 bg-orange-100'
+      case '90': return 'text-red-500 bg-red-50'
       case '90plus': return 'text-red-600 bg-red-100'
       default: return 'text-gray-600 bg-gray-100'
     }
@@ -196,10 +213,11 @@ export default function AccountsReceivablePage() {
   const getAgingLabel = (bucket: string) => {
     switch (bucket) {
       case 'current': return 'Current'
-      case 'overdue': return '1-30 Days'
       case '30': return '1-30 Days'
       case '60': return '31-60 Days'
+      case '90': return '61-90 Days'
       case '90plus': return '90+ Days'
+      case 'nodate': return 'No due date'
       default: return bucket
     }
   }
@@ -292,7 +310,7 @@ export default function AccountsReceivablePage() {
 
       {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-4">
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">💰</span>
@@ -342,12 +360,28 @@ export default function AccountsReceivablePage() {
 
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">⏳</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400"></span>
+            </div>
+            <p className="text-xs text-gray-500 mb-1">61-90 Days</p>
+            <p className="text-2xl font-semibold text-red-500">{formatTotals(summary.aging.days90, { defaultCurrency: listCurrency })}</p>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">🚨</span>
               <span className="w-1.5 h-1.5 rounded-full bg-red-500"></span>
             </div>
             <p className="text-xs text-gray-500 mb-1">90+ Days</p>
             <p className="text-2xl font-semibold text-red-600">{formatTotals(summary.aging.days90Plus, { defaultCurrency: listCurrency })}</p>
           </div>
+        </div>
+      )}
+
+      {summary?.truncated && (
+        <div className="flex items-center gap-2 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+          <AlertTriangle className="h-4 w-4 shrink-0" />
+          There are more open invoices than this page can load. The figures below are incomplete.
         </div>
       )}
 
@@ -383,6 +417,22 @@ export default function AccountsReceivablePage() {
                 {((inList(summary.aging.days60) / inList(summary.total_outstanding)) * 100).toFixed(0)}%
               </div>
             )}
+            {inList(summary.aging.days90) > 0 && (
+              <div className="bg-red-400 flex items-center justify-center text-white text-xs font-medium"
+                style={{ width: `${(inList(summary.aging.days90) / inList(summary.total_outstanding)) * 100}%` }}
+                title={`61-90 Days: ${formatMoney(inList(summary.aging.days90), listCurrency)}`}
+              >
+                {((inList(summary.aging.days90) / inList(summary.total_outstanding)) * 100).toFixed(0)}%
+              </div>
+            )}
+            {inList(summary.aging.noDueDate) > 0 && (
+              <div className="bg-gray-400 flex items-center justify-center text-white text-xs font-medium"
+                style={{ width: `${(inList(summary.aging.noDueDate) / inList(summary.total_outstanding)) * 100}%` }}
+                title={`No due date: ${formatMoney(inList(summary.aging.noDueDate), listCurrency)}`}
+              >
+                {((inList(summary.aging.noDueDate) / inList(summary.total_outstanding)) * 100).toFixed(0)}%
+              </div>
+            )}
             {inList(summary.aging.days90Plus) > 0 && (
               <div 
                 className="bg-red-500 flex items-center justify-center text-white text-xs font-medium"
@@ -407,10 +457,21 @@ export default function AccountsReceivablePage() {
               <span className="text-gray-600">31-60 Days</span>
             </div>
             <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-red-400"></div>
+              <span className="text-gray-600">61-90 Days</span>
+            </div>
+            <div className="flex items-center gap-2">
               <div className="w-3 h-3 rounded bg-red-500"></div>
               <span className="text-gray-600">90+ Days</span>
             </div>
+            <div className="flex items-center gap-2">
+              <div className="w-3 h-3 rounded bg-gray-400"></div>
+              <span className="text-gray-600">No due date</span>
+            </div>
           </div>
+          {Object.keys(summary.total_outstanding).length > 1 && (
+            <p className="text-xs text-gray-400 mt-2">The bar shows {listCurrency} only. The tiles above include every currency.</p>
+          )}
         </div>
       )}
 
@@ -456,7 +517,9 @@ export default function AccountsReceivablePage() {
           <option value="current">Current (Not Due)</option>
           <option value="30">1-30 Days Overdue</option>
           <option value="60">31-60 Days Overdue</option>
-          <option value="90">90+ Days Overdue</option>
+          <option value="90">61-90 Days Overdue</option>
+          <option value="90plus">90+ Days Overdue</option>
+          <option value="nodate">No due date</option>
         </select>
       </div>
 
@@ -470,9 +533,9 @@ export default function AccountsReceivablePage() {
             </div>
           ) : (
             (paginatedData as ClientReceivable[]).map((client) => (
-              <div key={client.client_id || client.client_name} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
+              <div key={rowKey(client)} className="bg-white border border-gray-200 rounded-lg overflow-hidden">
                 <button
-                  onClick={() => setExpandedClient(expandedClient === client.client_id ? null : client.client_id)}
+                  onClick={() => setExpandedClient(expandedClient === rowKey(client) ? null : rowKey(client))}
                   className="w-full px-5 py-4 flex items-center justify-between hover:bg-gray-50 transition-colors"
                 >
                   <div className="flex items-center gap-4">
@@ -508,19 +571,29 @@ export default function AccountsReceivablePage() {
                           {formatMoney(client.aging.days60, client.currency)}
                         </div>
                       )}
+                      {client.aging.days90 > 0 && (
+                        <div className="px-2 py-0.5 text-xs font-medium bg-red-50 text-red-600 rounded">
+                          {formatMoney(client.aging.days90, client.currency)}
+                        </div>
+                      )}
                       {client.aging.days90Plus > 0 && (
                         <div className="px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 rounded">
                           {formatMoney(client.aging.days90Plus, client.currency)}
                         </div>
                       )}
+                      {client.aging.noDueDate > 0 && (
+                        <div className="px-2 py-0.5 text-xs font-medium bg-gray-100 text-gray-600 rounded">
+                          {formatMoney(client.aging.noDueDate, client.currency)}
+                        </div>
+                      )}
                     </div>
 
-                    <ChevronRight className={`h-5 w-5 text-gray-400 transition-transform ${expandedClient === client.client_id ? 'rotate-90' : ''}`} />
+                    <ChevronRight className={`h-5 w-5 text-gray-400 transition-transform ${expandedClient === rowKey(client) ? 'rotate-90' : ''}`} />
                   </div>
                 </button>
 
                 {/* Expanded invoices */}
-                {expandedClient === client.client_id && (
+                {expandedClient === rowKey(client) && (
                   <div className="border-t border-gray-200 bg-gray-50 p-4">
                     <div className="space-y-2">
                       {client.invoices.map((invoice: Invoice) => (
@@ -532,7 +605,7 @@ export default function AccountsReceivablePage() {
                                 {invoice.invoice_number}
                               </Link>
                               <p className="text-xs text-gray-500">
-                                Due: {new Date(invoice.due_date).toLocaleDateString()}
+                                Due: {dueLabel(invoice)}
                                 {invoice.days_past_due > 0 && (
                                   <span className="text-red-500 ml-2">({invoice.days_past_due} days overdue)</span>
                                 )}
@@ -625,7 +698,7 @@ export default function AccountsReceivablePage() {
                       )}
                     </td>
                     <td className="px-4 py-3">
-                      <p className="text-sm text-gray-600">{new Date(invoice.due_date).toLocaleDateString()}</p>
+                      <p className="text-sm text-gray-600">{dueLabel(invoice)}</p>
                       {invoice.days_past_due > 0 && (
                         <p className="text-xs text-red-500">{invoice.days_past_due} days overdue</p>
                       )}

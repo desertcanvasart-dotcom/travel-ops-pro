@@ -3,6 +3,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { businessToday, shiftDateISO } from '@/lib/today'
+import { BOOKABLE_DEPARTURE_STATUSES, withSeatCounts } from '@/lib/departures/seats'
 
 // ============================================
 // DEPARTURE AVAILABILITY CHECK API
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
         cutoff_days, is_guaranteed
       `)
       .eq('org_id', org_id)
-      .in('status', ['open', 'limited', 'guaranteed']) // Only bookable statuses
+      .in('status', [...BOOKABLE_DEPARTURE_STATUSES]) // Only bookable statuses
       .order('start_date', { ascending: true })
 
     // Filter by tour name (fuzzy search)
@@ -134,10 +135,15 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Seats free as every screen counts them: max_pax − (booked outside the
+    // app + confirmed + pending web-order holds), lib/departures/seats.
+    // max_pax − booked_pax called a date fully held by web orders empty.
+    const counted = await withSeatCounts(supabase, org_id, departures || [])
+
     // Process departures
-    const availableDepartures: DepartureAvailability[] = (departures || [])
+    const availableDepartures: DepartureAvailability[] = counted
       .map(dep => {
-        const availableSpots = dep.max_pax - dep.booked_pax
+        const availableSpots = dep.seats_free
         // Bookable until the cutoff day itself (business calendar). `?? 3`,
         // not `|| 3`: a cutoff of 0 means "bookable up to departure day".
         const cutoffDate = shiftDateISO(dep.start_date, -(dep.cutoff_days ?? 3))
@@ -155,7 +161,7 @@ export async function POST(request: NextRequest) {
           booked_pax: dep.booked_pax,
           available_spots: availableSpots,
           price_per_person: dep.price_per_person,
-          currency: dep.currency || 'EUR',
+          currency: dep.currency || '',
           is_bookable: availableSpots >= num_travelers && isBeforeCutoff
         }
       })

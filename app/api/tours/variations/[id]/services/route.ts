@@ -2,9 +2,10 @@ import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { vehicleBands } from '@/lib/rates/vehicle-bands'
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
+import { variationInOrg, foreignRateIds } from '@/lib/tours/org-scope'
 
 // ============================================
 // TOUR VARIATION SERVICES API - CRUD + BULK
@@ -18,9 +19,25 @@ import { currencySymbol } from '@/lib/currency-totals'
 // 不明なユーザー" to the whole team (audit AUT-H04).
 const supabaseAdmin = createServerClient()
 
+/** 400 when a service names another company's rate (rates are per company
+ *  since 20261206; a variation's lines must price with its own company's). */
+async function refuseForeignRates(orgId: string, rateIds: Array<string | null | undefined>) {
+  const foreign = await foreignRateIds(supabaseAdmin, orgId, rateIds)
+  return foreign.length
+    ? NextResponse.json({ error: 'A service names a rate that is not this company\'s', rate_ids: foreign }, { status: 400 })
+    : null
+}
+
+// Matches no organisation: an org-less read finds no rate.
+const NO_ORG = '00000000-0000-0000-0000-000000000000'
+
 async function getRateDetails(rateType: string, rateId: string) {
+  // The rate is read from THIS company's rates only: a service naming another
+  // company's rate shows no details (20261207 pointed every variation's lines
+  // at its own company's rates; the ones it could not are on the review list).
+  const orgId = await getCurrentOrgId()
   // Rate amounts in the details text carry the org's rate-currency symbol, never a hard-coded euro.
-  const rateSym = currencySymbol(await getOrgRateCurrency(supabaseAdmin, await getCurrentOrgId()))
+  const rateSym = currencySymbol(await getOrgRateCurrency(supabaseAdmin, orgId))
   let result = null
 
   switch (rateType) {
@@ -28,6 +45,7 @@ async function getRateDetails(rateType: string, rateId: string) {
       const { data: transport } = await supabaseAdmin
         .from('transportation_rates')
         .select('id, service_code, service_type, route_name, city, origin_city, destination_city, vehicles')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('id', rateId)
         .single()
       if (transport) {
@@ -50,6 +68,7 @@ async function getRateDetails(rateType: string, rateId: string) {
       const { data: guide } = await supabaseAdmin
         .from('guide_rates')
         .select('id, guide_type, city, half_day_rate, full_day_rate')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('id', rateId)
         .single()
       if (guide) {
@@ -68,6 +87,7 @@ async function getRateDetails(rateType: string, rateId: string) {
       const { data: activity } = await supabaseAdmin
         .from('activity_rates')
         .select('id, activity_name, activity_category, city, base_rate_eur, base_rate_non_eur')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('id', rateId)
         .single()
       if (activity) {
@@ -86,6 +106,7 @@ async function getRateDetails(rateType: string, rateId: string) {
       const { data: meal } = await supabaseAdmin
         .from('meal_rates')
         .select('id, restaurant_name, meal_type, tier, city, base_rate_eur, base_rate_non_eur')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('id', rateId)
         .single()
       if (meal) {
@@ -104,6 +125,7 @@ async function getRateDetails(rateType: string, rateId: string) {
       const { data: hotel } = await supabaseAdmin
         .from('accommodation_rates')
         .select('id, hotel_name, room_type, city, rate_low_season_sgl, rate_high_season_sgl, rate_peak_season_sgl')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('id', rateId)
         .single()
       if (hotel) {
@@ -123,6 +145,7 @@ async function getRateDetails(rateType: string, rateId: string) {
       const { data: cruise } = await supabaseAdmin
         .from('nile_cruises')
         .select('id, ship_name, cabin_type, rate_low_season, rate_high_season, rate_peak_season')
+        .eq('org_id', orgId ?? NO_ORG)
         .eq('id', rateId)
         .single()
       if (cruise) {
@@ -147,6 +170,11 @@ export async function GET(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await variationInOrg(supabaseAdmin, orgId, id))) {
+      return NextResponse.json({ error: 'Variation not found' }, { status: 404 })
+    }
 
     const { data, error } = await supabaseAdmin
       .from('tour_variation_services')
@@ -178,7 +206,14 @@ export async function POST(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await variationInOrg(supabaseAdmin, orgId, id))) {
+      return NextResponse.json({ error: 'Variation not found' }, { status: 404 })
+    }
     const body = await request.json()
+    const refusedPost = await refuseForeignRates(orgId, [body.rate_id])
+    if (refusedPost) return refusedPost
 
     const { data: maxSeq } = await supabaseAdmin
       .from('tour_variation_services')
@@ -226,12 +261,19 @@ export async function PUT(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await variationInOrg(supabaseAdmin, orgId, id))) {
+      return NextResponse.json({ error: 'Variation not found' }, { status: 404 })
+    }
     const body = await request.json()
     const { services, mode } = body
 
     if (!Array.isArray(services)) {
       return NextResponse.json({ error: 'services array is required' }, { status: 400 })
     }
+    const refusedPut = await refuseForeignRates(orgId, services.map((sv: { rate_id?: string | null }) => sv?.rate_id))
+    if (refusedPut) return refusedPut
 
     // Mode: 'replace' = delete all and re-insert (default for ServiceLinkerModal)
     // Mode: 'update' = update existing by ID
@@ -381,6 +423,11 @@ export async function PATCH(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await variationInOrg(supabaseAdmin, orgId, id))) {
+      return NextResponse.json({ error: 'Variation not found' }, { status: 404 })
+    }
     const body = await request.json().catch(() => ({}))
     const serviceId = typeof body?.serviceId === 'string' ? body.serviceId : null
     if (!serviceId) {
@@ -437,6 +484,11 @@ export async function DELETE(
 ) {
   try {
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await variationInOrg(supabaseAdmin, orgId, id))) {
+      return NextResponse.json({ error: 'Variation not found' }, { status: 404 })
+    }
     const { searchParams } = new URL(request.url)
     const serviceId = searchParams.get('serviceId')
 

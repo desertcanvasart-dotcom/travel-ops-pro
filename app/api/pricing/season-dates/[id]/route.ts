@@ -1,15 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
-import { parseDateOnly } from '@/lib/pricing/season-admin'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { lengthError, parseDateOnly } from '@/lib/pricing/season-admin'
+import { recordChange } from '@/lib/activity-log'
+import { dateRange } from '@/lib/activity-detail'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
+/** The embedded season's name (PostgREST returns an object, or an array on some versions). */
+function seasonName(embed: unknown): string | null {
+  const row = Array.isArray(embed) ? embed[0] : embed
+  return (row as { name?: string } | null)?.name ?? null
+}
+
 // PATCH — move a window (next year's Golden Week is not this year's dates).
 // DELETE — drop it. The season survives with its other windows.
+// Both record the window before and after in the Activity Log: moving dates
+// changes which departures pay the premium.
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
@@ -32,6 +42,8 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     if ('label' in body) {
       update.label = typeof body.label === 'string' && body.label.trim() ? body.label.trim() : null
+      const tooLong = update.label ? lengthError('label', update.label as string) : null
+      if (tooLong) return NextResponse.json({ success: false, error: tooLong }, { status: 400 })
     }
     if (Object.keys(update).length === 0) {
       return NextResponse.json({ success: false, error: 'Nothing to update' }, { status: 400 })
@@ -41,7 +53,7 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     // what the row will actually hold — not against what arrived.
     const { data: existing, error: readError } = await supabaseAdmin
       .from('pricing_season_dates')
-      .select('id, start_date, end_date')
+      .select('id, start_date, end_date, pricing_seasons(name)')
       .eq('id', id)
       .eq('org_id', orgId)
       .maybeSingle()
@@ -72,6 +84,16 @@ export async function PATCH(request: NextRequest, { params }: { params: Promise<
     }
     if (!data) return NextResponse.json({ success: false, error: 'Dates not found' }, { status: 404 })
 
+    const was = dateRange(existing.start_date, existing.end_date)
+    const now = dateRange(data.start_date, data.end_date)
+    const userId = await getCurrentUserId()
+    if (userId && was !== now) {
+      await recordChange({
+        org_id: orgId, user_id: userId, method: 'PATCH', path: `/api/pricing/season-dates/${id}`,
+        detail: { target: seasonName(existing.pricing_seasons), changes: [{ field: 'dates', from: was, to: now }] },
+      })
+    }
+
     return NextResponse.json({ success: true, data })
   } catch (error) {
     console.error('Error in season-date PATCH:', error)
@@ -90,7 +112,7 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
       .delete()
       .eq('id', id)
       .eq('org_id', orgId)
-      .select('id')
+      .select('id, start_date, end_date, pricing_seasons(name)')
       .maybeSingle()
 
     if (error) {
@@ -98,6 +120,14 @@ export async function DELETE(_request: NextRequest, { params }: { params: Promis
       return NextResponse.json({ success: false, error: 'Failed to delete dates' }, { status: 500 })
     }
     if (!data) return NextResponse.json({ success: false, error: 'Dates not found' }, { status: 404 })
+
+    const userId = await getCurrentUserId()
+    if (userId) {
+      await recordChange({
+        org_id: orgId, user_id: userId, method: 'DELETE', path: `/api/pricing/season-dates/${id}`,
+        detail: { target: seasonName(data.pricing_seasons), changes: [{ field: 'dates', from: dateRange(data.start_date, data.end_date), to: null }] },
+      })
+    }
 
     return NextResponse.json({ success: true })
   } catch (error) {

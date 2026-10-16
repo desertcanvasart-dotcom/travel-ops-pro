@@ -12,7 +12,9 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 export interface TipRoleReader {
   from(table: 'tipping_rates'): {
     select(columns: string): {
-      in(column: string, values: string[]): PromiseLike<{ data: Array<{ id: string; role_type: string | null }> | null }>
+      eq(column: 'org_id', value: string): {
+        in(column: string, values: string[]): PromiseLike<{ data: Array<{ id: string; role_type: string | null }> | null }>
+      }
     }
   }
 }
@@ -20,14 +22,15 @@ export interface TipRoleReader {
 interface TipItem { rateId: string; tipRole?: string | null }
 interface DayLike { slots?: Array<{ slotId: string; selectedItems?: TipItem[] | null }> | null }
 
-/** Sets `tipRole` on every tipping item that lacks one and names a rate row. */
-export async function fillTipRoles(db: TipRoleReader, days: readonly DayLike[]): Promise<void> {
+/** Sets `tipRole` on every tipping item that lacks one and names a rate row
+ *  of THIS company's (another company's tipping rate tells it nothing). */
+export async function fillTipRoles(db: TipRoleReader, orgId: string, days: readonly DayLike[]): Promise<void> {
   const missing = days.flatMap(d => (d.slots ?? [])
     .filter(s => s.slotId === 'tipping')
     .flatMap(s => (s.selectedItems ?? []).filter(i => !i.tipRole && UUID_RE.test(String(i.rateId)))))
   if (missing.length === 0) return
   const ids = [...new Set(missing.map(i => String(i.rateId)))]
-  const { data } = await db.from('tipping_rates').select('id, role_type').in('id', ids)
+  const { data } = await db.from('tipping_rates').select('id, role_type').eq('org_id', orgId).in('id', ids)
   // A failed lookup leaves the items as they are: the rule then falls back
   // to the item's id, as it always did.
   const roleOf = new Map((data ?? []).map(r => [r.id, r.role_type]))

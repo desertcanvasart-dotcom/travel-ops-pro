@@ -17,7 +17,9 @@
 
 import { todayLocal } from '@/lib/today'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ChevronLeft, ChevronRight, Loader2, Save, X, CalendarDays } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Loader2, Save, X, CalendarDays, RotateCcw, AlertTriangle } from 'lucide-react'
+import { DEFAULT_MAX_GROUPS, overLimits, type DayLoad } from '@/lib/capacity-availability'
+import { useConfirm } from '@/components/ConfirmDialog'
 
 type Status = 'available' | 'limited' | 'busy' | 'blackout'
 
@@ -89,11 +91,16 @@ function datesBetween(a: string, b: string): string[] {
 }
 
 export default function CapacityPage() {
-  const today = new Date()
-  const [year, setYear] = useState(today.getUTCFullYear())
-  const [month, setMonth] = useState(today.getUTCMonth())
+  const confirmDialog = useConfirm()
+  // The month the user is in — their own calendar date (todayLocal), not the
+  // UTC one, which in Japan is still last month until 09:00 on the 1st.
+  const [year, setYear] = useState(() => Number(todayLocal().slice(0, 4)))
+  const [month, setMonth] = useState(() => Number(todayLocal().slice(5, 7)) - 1)
 
   const [rows, setRows] = useState<Record<string, CapacityRow>>({})
+  // Groups, guides and vehicles out on each day, counted by the server from
+  // sold trips and running departures (lib/capacity-load).
+  const [loads, setLoads] = useState<Record<string, DayLoad>>({})
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ kind: 'ok' | 'error'; text: string } | null>(null)
@@ -103,6 +110,7 @@ export default function CapacityPage() {
 
   // Draft for the selection's editor. Undefined = "leave as is", which is what
   // lets a bulk edit change only status without flattening everyone's counts.
+  // For Max guides / Max vehicles, null = "no limit" (cleared).
   const [draft, setDraft] = useState<Partial<CapacityRow>>({})
 
   const days = useMemo(() => gridDays(year, month), [year, month])
@@ -119,6 +127,7 @@ export default function CapacityPage() {
         const map: Record<string, CapacityRow> = {}
         for (const row of json.data as CapacityRow[]) map[row.date] = row
         setRows(map)
+        setLoads(json.loads ?? {})
       } else {
         setMessage({ kind: 'error', text: json.error || 'Could not load capacity' })
       }
@@ -158,8 +167,8 @@ export default function CapacityPage() {
         ? {
             status: existing.status,
             max_groups: existing.max_groups,
-            max_guides: existing.max_guides ?? undefined,
-            max_vehicles: existing.max_vehicles ?? undefined,
+            max_guides: existing.max_guides ?? null,
+            max_vehicles: existing.max_vehicles ?? null,
             reason: existing.reason ?? undefined,
             notes: existing.notes ?? undefined,
           }
@@ -182,10 +191,9 @@ export default function CapacityPage() {
         const entry: Record<string, unknown> = { date }
         entry.status = draft.status ?? existing?.status ?? 'available'
         entry.max_groups = draft.max_groups ?? existing?.max_groups ?? 3
+        // null clears the limit; left out, the server keeps the day's own.
         if (draft.max_guides !== undefined) entry.max_guides = draft.max_guides
-        else if (existing?.max_guides != null) entry.max_guides = existing.max_guides
         if (draft.max_vehicles !== undefined) entry.max_vehicles = draft.max_vehicles
-        else if (existing?.max_vehicles != null) entry.max_vehicles = existing.max_vehicles
         if (draft.reason !== undefined) entry.reason = draft.reason
         else if (existing?.reason) entry.reason = existing.reason
         if (draft.notes !== undefined) entry.notes = draft.notes
@@ -209,6 +217,39 @@ export default function CapacityPage() {
         kind: 'ok',
         text: `Saved ${selected.length} day${selected.length === 1 ? '' : 's'}.`,
       })
+      setSelected([])
+      setAnchor(null)
+      setDraft({})
+    } catch {
+      setMessage({ kind: 'error', text: 'Could not reach the server' })
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  /** Back to "not set": the selected days' rows are deleted, and the check
+   *  treats them as available with 3 groups again. */
+  const reset = async () => {
+    if (!selected.length) return
+    const first = selected[0]
+    const last = selected[selected.length - 1]
+    const set = selected.filter(d => rows[d]).length
+    if (set === 0) {
+      setMessage({ kind: 'ok', text: 'Those days are not set already.' })
+      return
+    }
+    if (!(await confirmDialog(`Reset ${set} day${set === 1 ? '' : 's'} to "not set"? Their status, limits and reason are removed.`))) return
+    setSaving(true)
+    setMessage(null)
+    try {
+      const res = await fetch(`/api/capacity?start_date=${first}&end_date=${last}`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!res.ok || !json.success) {
+        setMessage({ kind: 'error', text: json.error || 'Could not reset' })
+        return
+      }
+      await load()
+      setMessage({ kind: 'ok', text: `Reset ${set} day${set === 1 ? '' : 's'}.` })
       setSelected([])
       setAnchor(null)
       setDraft({})
@@ -266,6 +307,11 @@ export default function CapacityPage() {
         ))}
         <span className="text-gray-400">·</span>
         <span>Click a day to edit. Shift-click another to select the range between them.</span>
+        <span className="text-gray-400">·</span>
+        <span>
+          Groups are counted: each sold trip (confirmed or completed) and each running departure with seats taken, on the
+          road that day.
+        </span>
       </div>
 
       <div className="bg-white border border-gray-200 rounded-lg overflow-hidden">
@@ -288,7 +334,11 @@ export default function CapacityPage() {
               const status = (row?.status ?? 'available') as Status
               const isSelected = selected.includes(date)
               const isToday = date === todayLocal() // our date, not the UTC one iso() gives
-              const slotsLeft = row ? Math.max(0, (row.max_groups ?? 0) - (row.booked_groups ?? 0)) : null
+              const out = loads[date]
+              const groupsOut = out?.groups ?? 0
+              const maxGroups = row ? row.max_groups ?? 0 : DEFAULT_MAX_GROUPS
+              const slotsLeft = Math.max(0, maxGroups - groupsOut)
+              const over = overLimits(row ?? null, out)
 
               return (
                 <button
@@ -298,8 +348,9 @@ export default function CapacityPage() {
                     'h-24 border-b border-r border-gray-100 p-1.5 text-left align-top transition-colors',
                     inMonth ? '' : 'opacity-40',
                     row ? STATUS_STYLE[status].cell : 'bg-white',
-                    isSelected ? 'ring-2 ring-inset ring-[#647C47]' : 'hover:bg-gray-50',
+                    isSelected ? 'ring-2 ring-inset ring-[#647C47]' : over.length ? 'ring-1 ring-inset ring-red-400' : 'hover:bg-gray-50',
                   ].join(' ')}
+                  title={over.length ? `Over the day's limit: ${over.join(', ')}` : undefined}
                 >
                   <div className="flex items-center justify-between">
                     <span
@@ -317,10 +368,20 @@ export default function CapacityPage() {
                   {row ? (
                     <div className="mt-1 space-y-0.5">
                       <div className="text-[11px] text-gray-700">
-                        {row.booked_groups ?? 0}/{row.max_groups ?? 0} groups
+                        {groupsOut}/{maxGroups} groups
                       </div>
-                      {slotsLeft !== null && (
-                        <div className="text-[11px] text-gray-500">{slotsLeft} free</div>
+                      <div className="text-[11px] text-gray-500">{slotsLeft} free</div>
+                      {(row.max_guides != null || row.max_vehicles != null) && (
+                        <div className="text-[10px] text-gray-500">
+                          {row.max_guides != null && `guides ${out?.guides ?? 0}/${row.max_guides}`}
+                          {row.max_guides != null && row.max_vehicles != null && ' · '}
+                          {row.max_vehicles != null && `vehicles ${out?.vehicles ?? 0}/${row.max_vehicles}`}
+                        </div>
+                      )}
+                      {over.length > 0 && (
+                        <div className="text-[10px] text-red-600 flex items-center gap-0.5">
+                          <AlertTriangle className="w-3 h-3" /> over
+                        </div>
                       )}
                       {row.reason && (
                         <div className="text-[10px] text-gray-500 truncate" title={row.reason}>
@@ -331,7 +392,14 @@ export default function CapacityPage() {
                   ) : (
                     // Not the same as "available with 0 capacity" — this day has
                     // no entry at all, and the check treats it as open.
-                    <div className="mt-1 text-[11px] text-gray-300">not set</div>
+                    <div className="mt-1 space-y-0.5">
+                      <div className="text-[11px] text-gray-300">not set</div>
+                      {groupsOut > 0 && (
+                        <div className={`text-[11px] ${over.length ? 'text-red-600' : 'text-gray-500'}`}>
+                          {groupsOut}/{DEFAULT_MAX_GROUPS} groups
+                        </div>
+                      )}
+                    </div>
                   )}
                 </button>
               )
@@ -406,14 +474,16 @@ export default function CapacityPage() {
               <input
                 type="number"
                 min={0}
+                step={1}
                 value={draft.max_guides ?? ''}
                 onChange={e =>
                   setDraft(d => ({
                     ...d,
-                    max_guides: e.target.value === '' ? undefined : Number(e.target.value),
+                    // Emptied = no limit (null). Untouched in a range edit = unchanged.
+                    max_guides: e.target.value === '' ? null : Number(e.target.value),
                   }))
                 }
-                placeholder="unchanged"
+                placeholder={draft.max_guides === null ? 'no limit' : 'unchanged'}
                 className="mt-1 w-full text-sm border border-gray-300 rounded px-2 py-1.5"
               />
             </label>
@@ -423,14 +493,16 @@ export default function CapacityPage() {
               <input
                 type="number"
                 min={0}
+                step={1}
                 value={draft.max_vehicles ?? ''}
                 onChange={e =>
                   setDraft(d => ({
                     ...d,
-                    max_vehicles: e.target.value === '' ? undefined : Number(e.target.value),
+                    // Emptied = no limit (null). Untouched in a range edit = unchanged.
+                    max_vehicles: e.target.value === '' ? null : Number(e.target.value),
                   }))
                 }
-                placeholder="unchanged"
+                placeholder={draft.max_vehicles === null ? 'no limit' : 'unchanged'}
                 className="mt-1 w-full text-sm border border-gray-300 rounded px-2 py-1.5"
               />
             </label>
@@ -458,8 +530,17 @@ export default function CapacityPage() {
               {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
               Save {selected.length} day{selected.length === 1 ? '' : 's'}
             </button>
+            <button
+              onClick={reset}
+              disabled={saving}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 border border-gray-300 text-sm rounded hover:bg-gray-50 disabled:opacity-60"
+            >
+              <RotateCcw className="w-4 h-4" />
+              Reset to not set
+            </button>
             <span className="text-xs text-gray-500">
-              Fields left blank keep whatever each day already had.
+              Fields showing &ldquo;unchanged&rdquo; keep whatever each day already had. Empty Max guides or Max vehicles
+              to remove that limit; a day over a limit is outlined in red.
             </span>
           </div>
         </div>

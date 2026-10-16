@@ -17,6 +17,7 @@
 // chrome. A client should not see the operator's tooling.
 
 import { cache } from 'react'
+import { loadTripVatExtras, totalInclVatLabel, totalWithVat, vatMarker, vatOnLiveNet, type VatRecord } from '@/lib/vat'
 import type { Metadata } from 'next'
 import { createClient } from '@supabase/supabase-js'
 import { notFound } from 'next/navigation'
@@ -62,7 +63,7 @@ const DEFAULT_BRAND = '#647C47'
  */
 const loadShare = cache(async function loadShare(
   token: string
-): Promise<{ itinerary: ClientItinerary; operator: Operator; priceWithheld: boolean; messages: ClientTripMessage[] } | null> {
+): Promise<{ itinerary: ClientItinerary; operator: Operator; priceWithheld: boolean; messages: ClientTripMessage[]; vat: VatRecord } | null> {
   if (!isValidShareToken(token)) return null
   const supabase = admin()
 
@@ -129,14 +130,23 @@ const loadShare = cache(async function loadShare(
     : DEFAULT_BRAND
 
   const clientItinerary = toClientItinerary(itinerary, days ?? [])
+  const tripPrice = clientItinerary.totalPrice
   clientItinerary.totalPrice = shareTotalWithExtras(
     clientItinerary.totalPrice,
     clientItinerary.currency,
     (bookings ?? []) as Array<Record<string, unknown>>
   )
+  // Not taxed (owner, 2026-10-13): the booking's confirmed extras added just
+  // above, and the trip's own extras lines.
+  const vatExcluded = itinerary.vat_applied === true
+    ? (Number(clientItinerary.totalPrice) || 0) - (Number(tripPrice) || 0) + (await loadTripVatExtras(supabase, share.itinerary_id)).vat_excluded
+    : 0
 
   return {
     itinerary: clientItinerary,
+    // VAT on the total shown, at the rate the trip recorded from its quote
+    // (lib/vat.ts) — always stated beside the price.
+    vat: vatOnLiveNet({ ...itinerary, vat_excluded: vatExcluded }, clientItinerary.totalPrice, clientItinerary.currency),
     priceWithheld: !price.show,
     messages: toClientTripMessages((messageRows ?? []) as Array<Record<string, unknown>>),
     operator: {
@@ -224,7 +234,7 @@ export default async function SharedItineraryPage({
   const data = await loadShare(token)
   if (!data) notFound()
 
-  const { itinerary: it, operator: op, priceWithheld, messages } = data
+  const { itinerary: it, operator: op, priceWithheld, messages, vat } = data
   const travellers = it.numAdults + it.numChildren + it.numInfants
 
   return (
@@ -369,6 +379,11 @@ export default async function SharedItineraryPage({
               </p>
               <p className="text-2xl font-bold text-gray-900">
                 {fmtMoney(it.totalPrice, it.currency)}
+              </p>
+              {/* Never silent about VAT (lib/vat.ts). */}
+              <p className="text-sm text-gray-600 mt-1" data-vat={vat.vat_applied ? 'applied' : 'not-applied'}>
+                {vatMarker(vat, it.currency)}
+                {vat.vat_applied && <> · {totalInclVatLabel()}: <b>{fmtMoney(totalWithVat(it.totalPrice, vat, it.currency), it.currency)}</b></>}
               </p>
             </div>
             {it.code && <span className="text-xs text-gray-400 shrink-0">Ref: {it.code}</span>}

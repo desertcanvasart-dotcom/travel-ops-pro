@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { formatMoney } from '@/lib/currency-totals'
-import { templateSender, type TemplateSender } from '@/lib/template-sender'
+import { templateCurrency, templateSender, type TemplateSender } from '@/lib/template-sender'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
@@ -71,7 +71,13 @@ export async function GET(
 
     // Build the placeholder data
     const sender = await templateSender(supabase, orgId, await getCurrentUserId())
-    const placeholderData = buildItineraryPlaceholderData(itinerary, itineraryDays, sender)
+    // A trip with no currency of its own is in the company's.
+    let orgCurrency: string | null = null
+    if (!itinerary.currency) {
+      const { data: org } = await supabase.from('organizations').select('default_currency').eq('id', orgId).maybeSingle()
+      orgCurrency = org?.default_currency ?? null
+    }
+    const placeholderData = buildItineraryPlaceholderData(itinerary, itineraryDays, sender, templateCurrency(itinerary.currency, orgCurrency))
 
     return NextResponse.json({
       success: true,
@@ -90,10 +96,10 @@ export async function GET(
 function buildItineraryPlaceholderData(
   itinerary: any,
   days: any[],
-  sender: TemplateSender
+  sender: TemplateSender,
+  currency: string
 ): Record<string, string> {
   const data: Record<string, string> = {}
-  const currency = itinerary?.currency || 'USD'
 
   // Client/Guest data
   data.GuestName = itinerary.client_name || ''
@@ -197,7 +203,7 @@ function buildItineraryPlaceholderData(
   return data
 }
 
-function formatCurrency(amount: number | string | undefined, currency: string = 'USD'): string {
+function formatCurrency(amount: number | string | undefined, currency: string): string {
   if (amount === undefined || amount === null) return ''
   const num = typeof amount === 'string' ? parseFloat(amount) : amount
   if (isNaN(num)) return ''

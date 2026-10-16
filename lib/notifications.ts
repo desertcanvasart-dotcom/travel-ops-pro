@@ -28,9 +28,14 @@ export type NotificationType =
   | 'task_completed'
   | 'trip_assigned'
   | 'whatsapp_assigned'
+  | 'email_assigned'
   | 'whatsapp_new_message'
 
 export interface CreateNotificationInput {
+  /** The organisation the alert is about (notifications.org_id, migration
+   *  20261203). A person in two companies sees it only while working in this
+   *  one, and its email goes out from this organisation's own mailbox. */
+  org_id: string
   /** The login to notify — the normal address. */
   user_id?: string | null
   /** Legacy roster address; still honoured. One of the two is required. */
@@ -63,6 +68,7 @@ export async function createNotification(
   input: CreateNotificationInput
 ): Promise<CreateNotificationResult> {
   const {
+    org_id,
     user_id = null,
     team_member_id = null,
     type,
@@ -74,6 +80,9 @@ export async function createNotification(
     send_email = true,
   } = input
 
+  if (!org_id) {
+    return { success: false, emailed: false, error: 'org_id is required' }
+  }
   if (!user_id && !team_member_id) {
     return { success: false, emailed: false, error: 'user_id or team_member_id is required' }
   }
@@ -81,6 +90,7 @@ export async function createNotification(
   const { data: notification, error } = await supabaseAdmin
     .from('notifications')
     .insert({
+      org_id,
       user_id,
       team_member_id,
       type,
@@ -111,7 +121,7 @@ export async function createNotification(
     user_id ?? (notification as { team_member?: { user_id?: string | null } }).team_member?.user_id ?? null
   let emailWanted = send_email
   if (emailWanted && prefsUserId) {
-    const prefs = await getNotificationPreferences(supabaseAdmin, prefsUserId)
+    const prefs = await getNotificationPreferences(supabaseAdmin, prefsUserId, org_id)
     emailWanted = shouldEmailForType(prefs, String(type))
   }
 
@@ -136,7 +146,8 @@ export async function createNotification(
       title,
       message,
       link,
-      String(type)
+      String(type),
+      org_id
     )
     await supabaseAdmin.from('notifications').update({ email_sent: true }).eq('id', notification.id)
     return { success: true, notification, emailed: true }
@@ -181,6 +192,7 @@ const TYPE_STYLES: Record<string, TypeStyle> = {
   trip_assigned: { color: '#647C47', icon: '🗺️', label: 'Trip Assigned To You', buttonText: 'Open Trip' },
   whatsapp_assigned: { color: '#25D366', icon: '💬', label: 'WhatsApp Chat Assigned', buttonText: 'Open Chat' },
   whatsapp_new_message: { color: '#25D366', icon: '📱', label: 'New WhatsApp Message', buttonText: 'View Message' },
+  email_assigned: { color: '#2563EB', icon: '✉️', label: 'Email Conversation Assigned', buttonText: 'Open Conversation' },
 }
 
 /** Escape user/DB-sourced text before it goes into the email HTML. */
@@ -205,7 +217,11 @@ export async function sendNotificationEmail(
   subject: string,
   message: string,
   link: string | null,
-  type: string
+  type: string,
+  /** The organisation the alert is about: the email goes out from its own
+   *  connected mailbox (lib/email/org-gmail-sender), never another company's.
+   *  With none connected, no email is sent (the in-app row stands). */
+  orgId: string
 ) {
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net'
   const config = TYPE_STYLES[type] || {
@@ -272,6 +288,7 @@ export async function sendNotificationEmail(
     // literal &amp; into the subject line.
     subject: `[Autoura] ${subject}`,
     html: htmlContent,
+    orgId,
   })
 
   if (!result.success) {

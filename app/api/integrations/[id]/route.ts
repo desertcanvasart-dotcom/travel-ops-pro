@@ -34,7 +34,8 @@ export async function PATCH(
       return NextResponse.json({ success: false, error: 'Authentication failed' }, { status: 401 })
     }
 
-    const forbidden = await requireRole(['admin', 'manager'])
+    // Admin, as middleware gates every write under /api/integrations.
+    const forbidden = await requireRole(['admin'])
     if (forbidden) return forbidden
 
     const { id } = await params
@@ -145,7 +146,8 @@ export async function DELETE(
       return NextResponse.json({ success: false, error: 'Authentication failed' }, { status: 401 })
     }
 
-    const forbidden = await requireRole(['admin', 'manager'])
+    // Admin, as middleware gates every write under /api/integrations.
+    const forbidden = await requireRole(['admin'])
     if (forbidden) return forbidden
 
     const { id } = await params

@@ -23,6 +23,34 @@ export interface SeasonWindow {
   endDate: string
 }
 
+/**
+ * The windows a screen previews with, from /api/pricing/seasons. Inactive
+ * seasons are left out: every engine that charges reads only active ones
+ * (loadSeasonWindows, the Pricing Grid save), and a preview that showed a
+ * switched-off "Golden Week +15%" quoted a total the save would not charge.
+ */
+export function activeSeasonWindows(
+  seasons: ReadonlyArray<{
+    id: string
+    name: string
+    uplift_percent: number | string | null
+    is_active?: boolean | null
+    pricing_season_dates?: ReadonlyArray<{ start_date: string; end_date: string }> | null
+  }>
+): SeasonWindow[] {
+  return seasons
+    .filter(s => s.is_active === true)
+    .flatMap(s =>
+      (s.pricing_season_dates || []).map(w => ({
+        seasonId: s.id,
+        name: s.name,
+        upliftPercent: Number(s.uplift_percent) || 0,
+        startDate: w.start_date,
+        endDate: w.end_date,
+      }))
+    )
+}
+
 export interface SeasonMatch {
   seasonId: string
   name: string

@@ -4,7 +4,9 @@ import { REPLY_OVERDUE_HOURS, waitingLabel } from '@/lib/email/reply-status'
 import { waitingSince } from '@/lib/email/automated-senders'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserRole, noOrgResponse } from '@/lib/auth/current-org'
+import { attentionForRole, STAFF_ROLES } from '@/lib/dashboard/figures'
+import { roleAllows } from '@/lib/auth/roles'
 import { attentionFingerprint, attentionKey, withoutDismissed, type AttentionDismissal } from '@/lib/dashboard/attention-dismissals'
 import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
 
@@ -24,6 +26,9 @@ import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
 // migration 20261108): a dismissed row stays hidden until its state changes.
 // Severity:
 // 'urgent' = overdue or departing within 7 days; 'soon' = everything else.
+// The dashboard is open to viewers: what each role gets of this list is
+// decided by attentionForRole (lib/dashboard/figures) — no customer emails
+// below staff, no balance amounts below manager.
 
 const HORIZON_DAYS = 45
 
@@ -36,6 +41,9 @@ interface AttentionItem {
   tripName: string | null
   clientName: string | null
   startDate: string | null
+  /** The booking's currency, for a balance amount. Outside `detail` so it
+   *  is not part of the dismiss fingerprint. */
+  currency?: string | null
   detail: Record<string, unknown>
   href: string
 }
@@ -50,6 +58,7 @@ export async function GET(request: NextRequest) {
     if (!orgId) return noOrgResponse()
 
     const supabase = createServerClient()
+    const role = await getCurrentUserRole()
     // The caller's calendar date, not the UTC server's (see todayFromRequest).
     const today = todayFromRequest(request.url)
     const horizon = shiftDateISO(today, HORIZON_DAYS)
@@ -58,7 +67,7 @@ export async function GET(request: NextRequest) {
     // days, so surface at 14 days out ('soon') and escalate at 7/overdue.
     const in14 = shiftDateISO(today, 14)
 
-    const BOOKING_COLS = 'id, booking_code, trip_name, client_name, start_date, status, itinerary_id, balance_due, balance_due_date, payment_status'
+    const BOOKING_COLS = 'id, booking_code, trip_name, client_name, start_date, status, itinerary_id, balance_due, balance_due_date, payment_status, currency'
 
     // Two windows: departures inside the horizon (forms/guide/change-request
     // checks), PLUS any future booking whose balance deadline is overdue or
@@ -79,7 +88,8 @@ export async function GET(request: NextRequest) {
         .neq('status', 'cancelled')
         .gte('start_date', today)
         .gt('balance_due', 0)
-        .neq('payment_status', 'paid_in_full')
+        // 'paid' is what lib/booking-extras writes for a settled booking
+        .neq('payment_status', 'paid')
         .lte('balance_due_date', in14)
         .order('balance_due_date', { ascending: true }),
     ])
@@ -160,7 +170,7 @@ export async function GET(request: NextRequest) {
       }
 
       // 1. Balance unpaid: due date reached, within 7 days, or departure close
-      if (Number(b.balance_due) > 0 && b.payment_status !== 'paid_in_full') {
+      if (Number(b.balance_due) > 0 && b.payment_status !== 'paid') {
         const dueReached = !!b.balance_due_date && b.balance_due_date <= today
         const dueUrgent = !!b.balance_due_date && b.balance_due_date <= in7
         const dueSoon = !!b.balance_due_date && b.balance_due_date <= in14
@@ -169,6 +179,7 @@ export async function GET(request: NextRequest) {
             ...base,
             type: 'balance_due',
             severity: dueReached || dueUrgent || departsSoon ? 'urgent' : 'soon',
+            currency: b.currency ?? null,
             detail: { balanceDue: b.balance_due, dueDate: b.balance_due_date, overdue: dueReached },
             href: `/bookings/${b.id}`,
           })
@@ -221,18 +232,21 @@ export async function GET(request: NextRequest) {
       }
     }
 
-    // Customers waiting too long for an email answer. email_conversations has
-    // no org_id (one organisation per install — DEFERRED_GATES G1).
+    // Customers waiting too long for an email answer — staff only, like the
+    // /api/email gate (a viewer's list never reads the mailbox at all), and
+    // this org's conversations only (email_conversations.org_id, 20261204).
+    const isStaff = roleAllows(role, STAFF_ROLES)
     const overdueBefore = new Date(Date.now() - REPLY_OVERDUE_HOURS * 3_600_000).toISOString()
     // Only a connected address's mail (lib/email/connected-mailboxes).
-    const { data: waiting } = await scopedToConnectedMailboxes(supabase, (mailboxFilter) => {
-      let q = supabase
+    const { data: waiting } = !isStaff ? { data: [] } : await scopedToConnectedMailboxes(supabase, orgId, (mailboxFilter) => {
+      const q = supabase
         .from('email_conversations')
         .select('id, client_name, client_email, subject, awaiting_reply_since, last_message_at')
+        .eq('org_id', orgId)
         .not('awaiting_reply_since', 'is', null)
         .lte('awaiting_reply_since', overdueBefore)
         .or('is_hidden.is.null,is_hidden.eq.false')
-      if (mailboxFilter) q = q.or(mailboxFilter)
+        .or(mailboxFilter)
       return q
         .order('awaiting_reply_since', { ascending: true })
         // Read past the robots: the oldest rows were no-reply and ticket-system
@@ -271,7 +285,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       data: {
-        items: visible.items.map(i => ({ ...i, dismissKey: attentionKey(i), dismissFingerprint: attentionFingerprint(i) })),
+        // Key and fingerprint first, from the full item; then cut to the role.
+        items: attentionForRole(
+          visible.items.map(i => ({ ...i, dismissKey: attentionKey(i), dismissFingerprint: attentionFingerprint(i) })),
+          role,
+        ),
         scannedBookings: rows.length,
         dismissed: visible.dismissed,
       },

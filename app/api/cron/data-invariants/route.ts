@@ -29,7 +29,9 @@ export const dynamic = 'force-dynamic'
 
 const EPSILON = 0.01 // money comparisons
 
-type Finding = { check: string; table: string; id?: string; detail: string }
+// `org`: the company the row belongs to — the alert is grouped by it, and a
+// rate duplicate is only one WITHIN a company (each has its own rates).
+type Finding = { check: string; table: string; id?: string; detail: string; org?: string | null }
 
 function money(v: unknown): number {
   const n = Number(v)
@@ -37,15 +39,16 @@ function money(v: unknown): number {
 }
 
 // Natural keys mirror the route-level dedup rules (PR #37 + the 20260702
-// unique-index migration). transportation_rates has NO DB unique index (its
+// unique-index migration), within ONE company: two companies' identical
+// rates are two companies' rates (20261206), never a duplicate. transportation_rates has NO DB unique index (its
 // key is conditional), so this nightly check is that table's only global
 // duplicate detection.
 function guideRateKey(r: any): string {
   // Language by vocabulary key: "Japanese" and "japanese" are one rate.
-  return [r.supplier_id ?? 'null', guideLanguageKey(r.guide_language), r.guide_type, r.tour_duration, r.city ?? ''].join('|')
+  return [r.org_id, r.supplier_id ?? 'null', guideLanguageKey(r.guide_language), r.guide_type, r.tour_duration, r.city ?? ''].join('|')
 }
 function activityRateKey(r: any): string {
-  return [r.supplier_id ?? 'null', String(r.activity_name ?? '').toLowerCase(), r.city ?? ''].join('|')
+  return [r.org_id, r.supplier_id ?? 'null', String(r.activity_name ?? '').toLowerCase(), r.city ?? ''].join('|')
 }
 function transportRateKey(r: any): string {
   const intercity = r.service_type === 'intercity' || r.service_type === 'intercity_with_sightseeing'
@@ -56,7 +59,7 @@ function transportRateKey(r: any): string {
   // many rows per city/service_type distinguished only by service_code
   // (e.g. 15 named Aswan city-tour routes). The POST /api/rates/transportation
   // dedup key uses this same shape — keep the two in sync.
-  return [r.supplier_id ?? 'null', r.service_type, String(r.service_code ?? '').toLowerCase(), ...scope].join('|')
+  return [r.org_id, r.supplier_id ?? 'null', r.service_type, String(r.service_code ?? '').toLowerCase(), ...scope].join('|')
 }
 
 function findDuplicates(rows: any[], keyFn: (r: any) => string): Map<string, any[]> {
@@ -87,11 +90,11 @@ async function getHandler(request: NextRequest) {
       supabase.from('itineraries').select('id, org_id, total_cost, supplier_cost, total_paid, total_days, start_date, end_date, status'),
       supabase.from('itinerary_days').select('id, itinerary_id, day_number'),
       supabase.from('itinerary_services').select('id, itinerary_day_id'),
-      supabase.from('invoices').select('id, invoice_number, status, total_amount, amount_paid, balance_due'),
+      supabase.from('invoices').select('id, org_id, invoice_number, status, total_amount, amount_paid, balance_due'),
       supabase.from('invoice_payments').select('id, invoice_id, amount'),
-      supabase.from('guide_rates').select('id, supplier_id, guide_language, guide_type, tour_duration, city'),
-      supabase.from('activity_rates').select('id, supplier_id, activity_name, city'),
-      supabase.from('transportation_rates').select('id, supplier_id, service_type, service_code, city, origin_city, destination_city, duration, area'),
+      supabase.from('guide_rates').select('id, org_id, supplier_id, guide_language, guide_type, tour_duration, city'),
+      supabase.from('activity_rates').select('id, org_id, supplier_id, activity_name, city'),
+      supabase.from('transportation_rates').select('id, org_id, supplier_id, service_type, service_code, city, origin_city, destination_city, duration, area'),
     ])
 
   const readErrors = [itins, days, services, invoices, invoicePayments, guideRates, activityRates, transportRates]
@@ -109,40 +112,44 @@ async function getHandler(request: NextRequest) {
 
   // ── Itineraries ────────────────────────────────────────────────────────────
   const itinIds = new Set<string>()
+  const itinOrg = new Map<string, string | null>()
   for (const it of itins.data ?? []) {
     itinIds.add(it.id)
+    itinOrg.set(it.id, it.org_id ?? null)
     if (!it.org_id) {
-      violations.push({ check: 'itinerary_org_id_null', table: 'itineraries', id: it.id, detail: 'org_id is NULL — invisible to org-scoped reads (RLS + API filters)' })
+      violations.push({ check: 'itinerary_org_id_null', table: 'itineraries', id: it.id, org: it.org_id ?? null, detail: 'org_id is NULL — invisible to org-scoped reads (RLS + API filters)' })
     }
     const cost = money(it.supplier_cost)
     const price = money(it.total_cost)
     if (cost > EPSILON && price > EPSILON && price < cost - EPSILON) {
-      violations.push({ check: 'itinerary_price_below_cost', table: 'itineraries', id: it.id, detail: `total_cost (client price) ${price} < supplier_cost ${cost} — margin inversion` })
+      violations.push({ check: 'itinerary_price_below_cost', table: 'itineraries', id: it.id, org: it.org_id ?? null, detail: `total_cost (client price) ${price} < supplier_cost ${cost} — margin inversion` })
     }
     if (price > EPSILON && money(it.total_paid) > price + EPSILON) {
-      warnings.push({ check: 'itinerary_overpaid', table: 'itineraries', id: it.id, detail: `total_paid ${money(it.total_paid)} exceeds total_cost ${price}` })
+      warnings.push({ check: 'itinerary_overpaid', table: 'itineraries', id: it.id, org: it.org_id ?? null, detail: `total_paid ${money(it.total_paid)} exceeds total_cost ${price}` })
     }
     if (it.start_date && it.end_date) {
       const span = Math.round((Date.parse(it.end_date) - Date.parse(it.start_date)) / 86_400_000) + 1
       if (span < 1) {
-        violations.push({ check: 'itinerary_dates_inverted', table: 'itineraries', id: it.id, detail: `end_date ${it.end_date} before start_date ${it.start_date}` })
+        violations.push({ check: 'itinerary_dates_inverted', table: 'itineraries', id: it.id, org: it.org_id ?? null, detail: `end_date ${it.end_date} before start_date ${it.start_date}` })
       } else if (Number(it.total_days) && span !== Number(it.total_days)) {
-        warnings.push({ check: 'itinerary_daycount_drift', table: 'itineraries', id: it.id, detail: `date span is ${span} days but total_days=${it.total_days} (stale end_date bug class)` })
+        warnings.push({ check: 'itinerary_daycount_drift', table: 'itineraries', id: it.id, org: it.org_id ?? null, detail: `date span is ${span} days but total_days=${it.total_days} (stale end_date bug class)` })
       }
     }
   }
 
   // ── Days: orphans + duplicate day numbers ──────────────────────────────────
   const dayIds = new Set<string>()
+  const dayOrg = new Map<string, string | null>()
   const dayNumSeen = new Set<string>()
   for (const d of days.data ?? []) {
     dayIds.add(d.id)
+    dayOrg.set(d.id, itinOrg.get(d.itinerary_id) ?? null)
     if (!itinIds.has(d.itinerary_id)) {
-      violations.push({ check: 'day_orphaned', table: 'itinerary_days', id: d.id, detail: `itinerary_id ${d.itinerary_id} does not exist` })
+      violations.push({ check: 'day_orphaned', table: 'itinerary_days', id: d.id, org: itinOrg.get(d.itinerary_id) ?? null, detail: `itinerary_id ${d.itinerary_id} does not exist` })
     }
     const key = `${d.itinerary_id}#${d.day_number}`
     if (dayNumSeen.has(key)) {
-      violations.push({ check: 'day_number_duplicate', table: 'itinerary_days', id: d.id, detail: `duplicate day_number ${d.day_number} within itinerary ${d.itinerary_id}` })
+      violations.push({ check: 'day_number_duplicate', table: 'itinerary_days', id: d.id, org: itinOrg.get(d.itinerary_id) ?? null, detail: `duplicate day_number ${d.day_number} within itinerary ${d.itinerary_id}` })
     }
     dayNumSeen.add(key)
   }
@@ -150,7 +157,7 @@ async function getHandler(request: NextRequest) {
   // ── Services: orphans ──────────────────────────────────────────────────────
   for (const s of services.data ?? []) {
     if (!dayIds.has(s.itinerary_day_id)) {
-      violations.push({ check: 'service_orphaned', table: 'itinerary_services', id: s.id, detail: `itinerary_day_id ${s.itinerary_day_id} does not exist` })
+      violations.push({ check: 'service_orphaned', table: 'itinerary_services', id: s.id, org: dayOrg.get(s.itinerary_day_id) ?? null, detail: `itinerary_day_id ${s.itinerary_day_id} does not exist` })
     }
   }
 
@@ -162,14 +169,14 @@ async function getHandler(request: NextRequest) {
   for (const inv of invoices.data ?? []) {
     const expectedBalance = money(inv.total_amount) - money(inv.amount_paid)
     if (Math.abs(money(inv.balance_due) - expectedBalance) > EPSILON) {
-      violations.push({ check: 'invoice_balance_mismatch', table: 'invoices', id: inv.id, detail: `${inv.invoice_number}: balance_due ${money(inv.balance_due)} ≠ total_amount − amount_paid = ${expectedBalance.toFixed(2)}` })
+      violations.push({ check: 'invoice_balance_mismatch', table: 'invoices', id: inv.id, org: inv.org_id ?? null, detail: `${inv.invoice_number}: balance_due ${money(inv.balance_due)} ≠ total_amount − amount_paid = ${expectedBalance.toFixed(2)}` })
     }
     if (inv.status === 'paid' && money(inv.balance_due) > EPSILON) {
-      violations.push({ check: 'invoice_paid_with_balance', table: 'invoices', id: inv.id, detail: `${inv.invoice_number}: status=paid but balance_due=${money(inv.balance_due)}` })
+      violations.push({ check: 'invoice_paid_with_balance', table: 'invoices', id: inv.id, org: inv.org_id ?? null, detail: `${inv.invoice_number}: status=paid but balance_due=${money(inv.balance_due)}` })
     }
     const recorded = paymentsByInvoice.get(inv.id)
     if (recorded !== undefined && Math.abs(recorded - money(inv.amount_paid)) > EPSILON) {
-      violations.push({ check: 'invoice_payments_sum_mismatch', table: 'invoices', id: inv.id, detail: `${inv.invoice_number}: Σ invoice_payments ${recorded.toFixed(2)} ≠ amount_paid ${money(inv.amount_paid)}` })
+      violations.push({ check: 'invoice_payments_sum_mismatch', table: 'invoices', id: inv.id, org: inv.org_id ?? null, detail: `${inv.invoice_number}: Σ invoice_payments ${recorded.toFixed(2)} ≠ amount_paid ${money(inv.amount_paid)}` })
     }
   }
 
@@ -180,7 +187,7 @@ async function getHandler(request: NextRequest) {
     [transportRates.data ?? [], transportRateKey, 'transportation_rates'],
   ] as const) {
     for (const [key, dupes] of findDuplicates([...rows], keyFn)) {
-      violations.push({ check: 'rate_duplicate_natural_key', table, detail: `${dupes.length} rows share natural key [${key}]: ids ${dupes.map((d: any) => d.id).join(', ')}` })
+      violations.push({ check: 'rate_duplicate_natural_key', table, org: dupes[0]?.org_id ?? null, detail: `${dupes.length} rows share natural key [${key}]: ids ${dupes.map((d: any) => d.id).join(', ')}` })
     }
   }
 
@@ -201,13 +208,24 @@ async function getHandler(request: NextRequest) {
     // Best-effort nightly alert; never let email failure mask the report.
     if (process.env.BUSINESS_EMAIL) {
       try {
+        // One section per company: the sweep reads every company's rows, and
+        // one undivided list mixed them — no telling whose data was broken.
+        const { data: orgRows } = await supabase.from('organizations').select('id, name')
+        const orgName = new Map(((orgRows ?? []) as Array<{ id: string; name: string | null }>).map(o => [o.id, o.name || o.id]))
+        const byOrg = new Map<string, Finding[]>()
+        for (const v of violations) {
+          const k = v.org ?? ''
+          byOrg.set(k, [...(byOrg.get(k) ?? []), v])
+        }
+        const sections = [...byOrg].map(([org, list]) =>
+          `<h3>${escapeHtml(org ? orgName.get(org) ?? org : 'No company')} — ${list.length}</h3><ul>${list
+            // detail carries stored text (invoice numbers, natural keys): escaped.
+            .map((v) => `<li><b>${escapeHtml(v.check)}</b> (${escapeHtml(v.table)}${v.id ? ` ${escapeHtml(v.id)}` : ''}): ${escapeHtml(v.detail)}</li>`)
+            .join('')}</ul>`).join('')
         await sendEmailInternal({
           to: process.env.BUSINESS_EMAIL,
           subject: `⚠️ Data invariants: ${violations.length} violation(s) found`,
-          html: `<p>The nightly data-integrity sweep found ${violations.length} violation(s):</p><ul>${violations
-            // detail carries stored text (invoice numbers, natural keys): escaped.
-            .map((v) => `<li><b>${escapeHtml(v.check)}</b> (${escapeHtml(v.table)}${v.id ? ` ${escapeHtml(v.id)}` : ''}): ${escapeHtml(v.detail)}</li>`)
-            .join('')}</ul><p>Warnings: ${warnings.length}. Full report in the cron response/log.</p>`,
+          html: `<p>The nightly data-integrity sweep found ${violations.length} violation(s):</p>${sections}<p>Warnings: ${warnings.length}. Full report in the cron response/log.</p>`,
         })
       } catch (e) {
         console.error('data-invariants: alert email failed:', e)

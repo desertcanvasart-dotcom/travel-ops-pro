@@ -82,3 +82,35 @@ export const SUPPLIER_RETIRED_FORM_FIELDS = [
 
 export const COMMISSION_DIRECTIONS = ['payable', 'receivable'] as const
 export type CommissionDirection = (typeof COMMISSION_DIRECTIONS)[number]
+
+/**
+ * The commission a supplier row actually carries, as the engine reads it: a
+ * rate above 0 and its direction (none stated = "we receive", the
+ * generator's own fallback). A rate of 0 is NO commission — the generator
+ * skips it as no_rate (lib/commission-generation.ts), so a screen must not
+ * show it as "We receive 0%".
+ */
+export function commissionDirectionOf(s: { default_commission_rate?: number | string | null; commission_type?: string | null }): CommissionDirection | null {
+  if (s.default_commission_rate === null || s.default_commission_rate === undefined || s.default_commission_rate === '') return null
+  const rate = Number(s.default_commission_rate)
+  if (!Number.isFinite(rate) || rate <= 0) return null
+  return s.commission_type === 'payable' ? 'payable' : 'receivable'
+}
+
+/**
+ * Why a create / update body's commission fields are unacceptable, or null.
+ * The Commissions page checks 0–100 in the browser; a direct PUT could store
+ * -50 or 500, and the generator would pay it. Blank (null / '') clears.
+ */
+export function commissionFieldError(body: Record<string, unknown>): string | null {
+  const rate = body.default_commission_rate
+  if (rate !== undefined && rate !== null && rate !== '') {
+    const n = typeof rate === 'number' ? rate : typeof rate === 'string' ? Number(rate.trim()) : NaN
+    if (!Number.isFinite(n) || n < 0 || n > 100) return 'Commission rate must be a number from 0 to 100'
+  }
+  const type = body.commission_type
+  if (type !== undefined && type !== null && type !== '' && !(COMMISSION_DIRECTIONS as readonly unknown[]).includes(type)) {
+    return `Commission direction must be one of ${COMMISSION_DIRECTIONS.join(', ')}`
+  }
+  return null
+}

@@ -17,7 +17,9 @@ vi.mock('@supabase/supabase-js', async () => {
 
 import { calculateAutoPricing, collectTicketLegs, resolveTicketRow } from '@/lib/auto-pricing-service'
 
-const BASE = { templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'English', marginPercent: 0, numPax: 2 }
+// The engine reads the org's own airports and cruise packages (both carry
+// org_id): the fixtures are one org's.
+const BASE = { orgId: 'org-1', templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'English', marginPercent: 0, numPax: 2 }
 
 const day = (n: number, city: string, over: Record<string, unknown> = {}) => ({
   day: n, title: `Day ${n}`, city, overnight_city: city,
@@ -32,9 +34,9 @@ const day = (n: number, city: string, over: Record<string, unknown> = {}) => ({
  *  is what joins them to a leg's cities — Cairo and Giza share CAI, the way
  *  the station city alias works for sleepers. */
 const airports = () => [
-  { key: 'cai', label: 'Cairo', meta: { iata: 'CAI', city: 'Cairo', country_code: 'EG' }, is_active: true, kind: 'airport', rank: 1 },
-  { key: 'lxr', label: 'Luxor', meta: { iata: 'LXR', city: 'Luxor', country_code: 'EG' }, is_active: true, kind: 'airport', rank: 2 },
-  { key: 'asw', label: 'Aswan', meta: { iata: 'ASW', city: 'Aswan', country_code: 'EG' }, is_active: true, kind: 'airport', rank: 3 },
+  { key: 'cai', label: 'Cairo', meta: { iata: 'CAI', city: 'Cairo', country_code: 'EG' }, is_active: true, org_id: 'org-1', kind: 'airport', rank: 1 },
+  { key: 'lxr', label: 'Luxor', meta: { iata: 'LXR', city: 'Luxor', country_code: 'EG' }, is_active: true, org_id: 'org-1', kind: 'airport', rank: 2 },
+  { key: 'asw', label: 'Aswan', meta: { iata: 'ASW', city: 'Aswan', country_code: 'EG' }, is_active: true, org_id: 'org-1', kind: 'airport', rank: 3 },
 ]
 
 /** Rows carry no rate_currency → they are already in the run currency. */
@@ -120,8 +122,8 @@ describe('flight legs', () => {
   // not be priced and, on an install elsewhere, every airport was Cairo.
   const withTokyo = () => [
     ...airports(),
-    { key: 'nrt', label: 'Tokyo Narita', meta: { iata: 'NRT', city: 'Tokyo', country_code: 'JP' }, is_active: true, kind: 'airport', rank: 4 },
-    { key: 'hnd', label: 'Tokyo Haneda', meta: { iata: 'HND', city: 'Tokyo', country_code: 'JP' }, is_active: true, kind: 'airport', rank: 5 },
+    { key: 'nrt', label: 'Tokyo Narita', meta: { iata: 'NRT', city: 'Tokyo', country_code: 'JP' }, is_active: true, org_id: 'org-1', kind: 'airport', rank: 4 },
+    { key: 'hnd', label: 'Tokyo Haneda', meta: { iata: 'HND', city: 'Tokyo', country_code: 'JP' }, is_active: true, org_id: 'org-1', kind: 'airport', rank: 5 },
   ]
 
   it('prices the flight the customers actually arrive on, and calls it international', async () => {

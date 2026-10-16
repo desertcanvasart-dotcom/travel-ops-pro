@@ -12,6 +12,8 @@ import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import { BackLink } from '@/components/nav/TripNav'
 import { paymentInvoiceShape } from '@/lib/payment-invoice'
+import { vatInsideGross } from '@/lib/vat'
+import { VatToken } from '@/app/components/Vat'
 
 interface Payment {
   id: string
@@ -31,6 +33,12 @@ interface Payment {
   created_at: string
   /** The trip's total (the itinerary's total_cost); null when unpriced. */
   total_cost?: number | string | null
+  /** The trip's VAT (lib/vat.ts): the amount paid includes it. */
+  vat_applied?: boolean
+  vat_rate?: number | null
+  /** The trip's extras (not taxed) and the client total they are part of. */
+  vat_excluded?: number
+  vat_net?: number
 }
 
 export default function InvoicePage() {
@@ -94,6 +102,10 @@ export default function InvoicePage() {
     const invoiceNumber = `INV-${p.itinerary_code}-${p.id.slice(0, 4).toUpperCase()}`
     // From the payment and its trip's real total — not an assumed 30%.
     const shape = paymentInvoiceShape(p.payment_type, p.amount, p.total_cost)
+    // The VAT inside the amount paid, at the trip's recorded rate; the line
+    // carries the rest, so lines + VAT = the amount.
+    const vat = vatInsideGross(p.amount, p, p.currency)
+    const net = p.amount - vat.vat_amount
     return {
       id: p.id,
       invoice_number: invoiceNumber,
@@ -106,12 +118,15 @@ export default function InvoicePage() {
       line_items: [{
         description: `Payment for ${p.itinerary_code}`,
         quantity: 1,
-        unit_price: p.amount,
-        amount: p.amount
+        unit_price: net,
+        amount: net
       }],
-      subtotal: p.amount,
-      tax_rate: 0,
-      tax_amount: 0,
+      subtotal: net,
+      vat_applied: vat.vat_applied,
+      tax_rate: vat.vat_rate ?? 0,
+      tax_amount: vat.vat_amount,
+      // Set when the trip's extras were left out, so the PDF says so.
+      vat_base: vat.vat_base ?? null,
       discount_amount: 0,
       total_amount: p.amount,
       currency: p.currency,
@@ -297,6 +312,9 @@ export default function InvoicePage() {
                 <span className="text-sm font-medium text-gray-900">
                   {payment.currency} {payment.amount.toFixed(2)}
                 </span>
+              </div>
+              <div className="flex justify-end py-2">
+                <VatToken vat={vatInsideGross(payment.amount, payment, payment.currency)} currency={payment.currency} />
               </div>
               <div className="flex justify-between py-3 bg-gray-50 px-3 rounded-lg mt-2">
                 <span className="text-base font-bold text-gray-900">{t('total')}</span>

@@ -12,7 +12,7 @@ role gates for reads and writes) plus org-scoped queries in the routes.
 - **Fixed before the re-check:** C1–C4, H1, H2, H4–H6, H8–H19, H21, H23, H24, H27, H33, M1–M7, M10, M11, M13, M15–M23, M28, M29, L1, L5, L7, L9, L10.
 - **Obsolete (code removed):** H28, H29, M24, M25, M26.
 - **Leftovers fixed in the re-check:**
-  - H25/H26: payment POST/PUT keep only the payment's own fields (`lib/payment-fields.ts`); PUT checks the amount.
+  - H25/H26: payment POST/PUT keep only the payment's own fields (`lib/payments/fields.ts`); PUT checks the amount.
   - H20: commission PUT is an allow-list.
   - H22: an invoice edit cannot set paid/partial; they follow the payments, and an invoice whose payments are gone is sent again.
   - H32: a cancelled supplier invoice cannot be disputed.

@@ -8,12 +8,15 @@ type Db = { from(table: string): any; rpc(fn: string, args: Record<string, unkno
 
 import { bareAddress, isOfficeAddress, officeRule, type OfficeRule } from '@/lib/email/office-addresses'
 
-/** The rule for this install: every connected mailbox + every organisation's
- *  configured office addresses (one organisation per install today — G1). */
-export async function loadOfficeRule(db: Db): Promise<OfficeRule> {
+/** One organisation's rule: the mailboxes connected for it (gmail_tokens.
+ *  org_id, 20261204) + its own configured office addresses. It was every
+ *  company's mailboxes and lists together, so one company's address counted
+ *  as "the office" in the other's mail — a customer writing from it was
+ *  stored as our own reply. */
+export async function loadOfficeRule(db: Db, orgId: string): Promise<OfficeRule> {
   const [tokens, orgs] = await Promise.all([
-    db.from('gmail_tokens').select('email'),
-    db.from('organizations').select('office_email_addresses'),
+    db.from('gmail_tokens').select('email').eq('org_id', orgId),
+    db.from('organizations').select('office_email_addresses').eq('id', orgId),
   ])
   const mailboxes = ((tokens.data ?? []) as { email: string | null }[]).map(t => t.email || '').filter(Boolean)
   const configured = ((orgs.data ?? []) as { office_email_addresses: string[] | null }[]).flatMap(o => o.office_email_addresses ?? [])
@@ -21,18 +24,20 @@ export async function loadOfficeRule(db: Db): Promise<OfficeRule> {
 }
 
 /**
- * Mail stored as the customer writing that the rule says is ours: turn it into
- * our reply, recompute each conversation's reply state, and give a
- * conversation that the office itself started the customer's address instead
- * of the office's. Returns what changed.
+ * One organisation's mail stored as the customer writing that its rule says
+ * is ours: turn it into our reply, recompute each conversation's reply state,
+ * and give a conversation that the office itself started the customer's
+ * address instead of the office's. Returns what changed. Only that
+ * organisation's messages and conversations (it rewrote every company's).
  */
-export async function applyOfficeRule(db: Db, rule: OfficeRule): Promise<{ messages: number; conversations: number }> {
+export async function applyOfficeRule(db: Db, orgId: string, rule: OfficeRule): Promise<{ messages: number; conversations: number }> {
   if (rule.addresses.length === 0 && rule.domains.length === 0) return { messages: 0, conversations: 0 }
 
   const patterns = [...rule.addresses, ...rule.domains.map(d => `@${d}`)]
   const or = patterns.map(p => `from_address.ilike.%${p.replace(/[%_,()]/g, '')}%`).join(',')
   const { data: candidates, error } = await db.from('email_messages')
     .select('id, conversation_id, from_address')
+    .eq('org_id', orgId)
     .eq('direction', 'inbound')
     .or(or)
     .limit(2000)
@@ -43,14 +48,14 @@ export async function applyOfficeRule(db: Db, rule: OfficeRule): Promise<{ messa
     .filter(m => isOfficeAddress(rule, m.from_address))
   const touched = new Set<string>()
   for (const m of ours) {
-    const { error: upErr } = await db.from('email_messages').update({ direction: 'outbound' }).eq('id', m.id)
+    const { error: upErr } = await db.from('email_messages').update({ direction: 'outbound' }).eq('id', m.id).eq('org_id', orgId)
     if (upErr) throw upErr
     if (m.conversation_id) touched.add(m.conversation_id)
   }
 
   // Conversations whose customer address is the office's own.
   const convOr = patterns.map(p => `client_email.ilike.%${p.replace(/[%_,()]/g, '')}%`).join(',')
-  const { data: officeConvs } = await db.from('email_conversations').select('id, client_email').or(convOr).limit(2000)
+  const { data: officeConvs } = await db.from('email_conversations').select('id, client_email').eq('org_id', orgId).or(convOr).limit(2000)
   for (const c of ((officeConvs ?? []) as { id: string; client_email: string | null }[]).filter(c => isOfficeAddress(rule, c.client_email))) {
     touched.add(c.id)
   }
@@ -58,10 +63,10 @@ export async function applyOfficeRule(db: Db, rule: OfficeRule): Promise<{ messa
   for (const id of touched) {
     const { error: rpcErr } = await db.rpc('refresh_email_conversation_reply_state', { p_conversation: id })
     if (rpcErr) throw rpcErr
-    const { data: conv } = await db.from('email_conversations').select('client_email').eq('id', id).maybeSingle()
+    const { data: conv } = await db.from('email_conversations').select('client_email').eq('id', id).eq('org_id', orgId).maybeSingle()
     if (conv && isOfficeAddress(rule, conv.client_email)) {
-      const customer = await customerAddress(db, id, rule)
-      if (customer) await db.from('email_conversations').update({ client_email: customer }).eq('id', id)
+      const customer = await customerAddress(db, orgId, id, rule)
+      if (customer) await db.from('email_conversations').update({ client_email: customer }).eq('id', id).eq('org_id', orgId)
     }
   }
   return { messages: ours.length, conversations: touched.size }
@@ -78,10 +83,11 @@ export async function applyOfficeRule(db: Db, rule: OfficeRule): Promise<{ messa
 // mailbox connected. So the scheduled run repairs when the rule differs from
 // the last one applied in this process — and otherwise at most every
 // REPAIR_EVERY_MS, as a safety net for mail written by any other path.
-// In-process on purpose: a restart simply repairs once more.
+// In-process on purpose: a restart simply repairs once more. Per
+// organisation: each company's rule and repair are its own.
 
 const REPAIR_EVERY_MS = 6 * 60 * 60 * 1000
-let lastRepair: { fingerprint: string; at: number } | null = null
+const lastRepair = new Map<string, { fingerprint: string; at: number }>()
 
 const fingerprintOf = (rule: OfficeRule) =>
   JSON.stringify([[...rule.addresses].sort(), [...rule.domains].sort()])
@@ -90,26 +96,29 @@ const fingerprintOf = (rule: OfficeRule) =>
  *  last repair is older than six hours. Null when it was not due. */
 export async function applyOfficeRuleWhenDue(
   db: Db,
+  orgId: string,
   rule: OfficeRule,
   now: number = Date.now(),
 ): Promise<{ messages: number; conversations: number } | null> {
   const fingerprint = fingerprintOf(rule)
-  if (lastRepair && lastRepair.fingerprint === fingerprint && now - lastRepair.at < REPAIR_EVERY_MS) return null
-  const changed = await applyOfficeRule(db, rule)
+  const last = lastRepair.get(orgId)
+  if (last && last.fingerprint === fingerprint && now - last.at < REPAIR_EVERY_MS) return null
+  const changed = await applyOfficeRule(db, orgId, rule)
   // Recorded only after it worked: a failed repair is tried again next run.
-  lastRepair = { fingerprint, at: now }
+  lastRepair.set(orgId, { fingerprint, at: now })
   return changed
 }
 
-/** Tests only: forget the last repair. */
+/** Tests only: forget the last repairs. */
 export function resetOfficeRuleRepairSchedule(): void {
-  lastRepair = null
+  lastRepair.clear()
 }
 
 /** The first address in the conversation that is not the office's. */
-async function customerAddress(db: Db, conversationId: string, rule: OfficeRule): Promise<string | null> {
+async function customerAddress(db: Db, orgId: string, conversationId: string, rule: OfficeRule): Promise<string | null> {
   const { data } = await db.from('email_messages')
     .select('from_address, to_addresses, sent_at')
+    .eq('org_id', orgId)
     .eq('conversation_id', conversationId)
     .order('sent_at', { ascending: true })
     .limit(50)

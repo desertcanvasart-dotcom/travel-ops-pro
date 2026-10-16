@@ -2,6 +2,12 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import Papa from 'papaparse'
 import { parseTemplatesCsv, splitVirtualFields } from '@/lib/tours/template-csv'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { syncEnglishVersion } from '@/lib/tours/english-version'
+
+const CODE_PAGE = 1000
+type SavedTemplate = { id: string; template_name: string }
+const codeKey = (code: string) => code.trim().toLowerCase()
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,9 +24,17 @@ const supabaseAdmin = createClient(
  * summary sheet updates names/type/duration/cities/flags and never wipes the
  * day-by-day work. New codes are created as metadata shells (their itinerary is
  * built in the editor afterward).
+ *
+ * Keyed on (org_id, template_code), ignoring case: codes are unique per
+ * company (20261207),
+ * and both companies may hold the same one. A row matches ONLY the caller's
+ * company's template — another company's programme with that code is never
+ * updated; a new one is created in the caller's company.
  */
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
     const { csvData, dryRun = false } = body
     if (!csvData || typeof csvData !== 'string') {
@@ -40,18 +54,37 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'No valid template rows found', refused }, { status: 400 })
     }
 
-    // Which codes already exist here → update vs create.
-    const codes = records.map(r => r.template_code)
-    const { data: existing } = await supabaseAdmin
-      .from('tour_templates')
-      .select('template_code')
-      .in('template_code', codes)
-    const existingCodes = new Set((existing || []).map((r: any) => r.template_code))
+    // Which codes already exist here → update vs create. Matched ignoring
+    // case, as the in-file duplicate check already was: an exact match made
+    // `cai-day-001` a SECOND programme beside the stored `CAI-DAY-001` (the
+    // unique constraint is case-sensitive). The company's whole code list is
+    // read, a page at a time, because PostgREST has no case-insensitive IN.
+    const existingByCode = new Map<string, { id: string; template_code: string }>()
+    for (let from = 0; ; from += CODE_PAGE) {
+      const { data: page, error: codesError } = await supabaseAdmin
+        .from('tour_templates')
+        .select('id, template_code')
+        .eq('org_id', orgId)
+        .order('template_code', { ascending: true })
+        .range(from, from + CODE_PAGE - 1)
+      if (codesError) {
+        return NextResponse.json({ success: false, error: `Could not read existing codes: ${codesError.message}` }, { status: 500 })
+      }
+      for (const r of (page ?? []) as Array<{ id: string; template_code: string }>) {
+        const key = codeKey(r.template_code)
+        // Two stored codes differing only in case (made before this): the
+        // exact spelling wins below, else the first.
+        if (!existingByCode.has(key)) existingByCode.set(key, r)
+        else if (records.some(rec => rec.template_code === r.template_code)) existingByCode.set(key, r)
+      }
+      if (!page || page.length < CODE_PAGE) break
+    }
+    const match = (code: string) => existingByCode.get(codeKey(code)) ?? null
 
     const preview = {
       totalRows: records.length + refused.length,
-      willCreate: records.filter(r => !existingCodes.has(r.template_code)).length,
-      willUpdate: records.filter(r => existingCodes.has(r.template_code)).length,
+      willCreate: records.filter(r => !match(r.template_code)).length,
+      willUpdate: records.filter(r => match(r.template_code)).length,
       refusedRows: refused.length,
       refused,
     }
@@ -74,23 +107,45 @@ export async function POST(request: NextRequest) {
       // shipped with one filled in.
       const { row, virtual } = splitVirtualFields(rec as unknown as Record<string, unknown>)
       let templateId: string | null = null
-      if (existingCodes.has(rec.template_code)) {
+      let saved: SavedTemplate | null = null
+      const hit = match(rec.template_code)
+      if (hit) {
+        // The stored code's spelling is kept: a sheet typed in lower case
+        // updates CAI-DAY-001, it does not rename it.
+        const { template_code: _sheetCode, ...patch } = row as Record<string, unknown>
+        void _sheetCode
         const { data, error } = await supabaseAdmin
           .from('tour_templates')
-          .update(row as never)
-          .eq('template_code', rec.template_code)
-          .select('id')
+          .update({ ...patch, org_id: orgId } as never)
+          .eq('org_id', orgId)
+          .eq('id', hit.id)
+          .select('*')
           .maybeSingle()
         if (error) errors.push({ code: rec.template_code, message: error.message })
-        else { updated++; templateId = (data as { id: string } | null)?.id ?? null }
+        else { updated++; saved = data as SavedTemplate | null; templateId = saved?.id ?? null }
       } else {
         const { data, error } = await supabaseAdmin
           .from('tour_templates')
-          .insert(row as never)
-          .select('id')
+          .insert({ ...row, org_id: orgId } as never)
+          .select('*')
           .maybeSingle()
         if (error) errors.push({ code: rec.template_code, message: error.message })
-        else { created++; templateId = (data as { id: string } | null)?.id ?? null }
+        else {
+          created++
+          saved = data as SavedTemplate | null
+          templateId = saved?.id ?? null
+          // A later row of the same sheet with this code (any case) updates it.
+          if (saved) existingByCode.set(codeKey(rec.template_code), { id: saved.id, template_code: rec.template_code })
+        }
+      }
+
+      // The 'en' version row: created for a new template (the Lang column
+      // read empty, or JA only, for every imported programme) and kept in
+      // step with an updated one (lib/tours/english-version). Best-effort,
+      // like the Japanese name below.
+      if (saved) {
+        const enError = await syncEnglishVersion(supabaseAdmin, saved)
+        if (enError) warnings.push({ code: rec.template_code, message: `English version not saved: ${enError.message}` })
       }
 
       // The Japanese name belongs on the ja version row, keyed by
@@ -109,7 +164,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: errors.length === 0,
       ...(errors.length ? { error: `Import failed for ${errors.length} row(s): ${errors[0].message}` } : {}),
-      ...(warnings.length ? { warning: `${warnings.length} row(s) imported without their Japanese name: ${warnings[0].message}` } : {}),
+      ...(warnings.length ? { warning: `${warnings.length} row(s) imported without a language version: ${warnings[0].message}` } : {}),
       created, updated, refusedRows: refused.length, refused, errors, warnings,
     })
   } catch (error: any) {

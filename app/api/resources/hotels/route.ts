@@ -1,6 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
 
 // Actor-attributed service-role client (lib/supabase-actor): rate-table
 // writes from here reach fn_rate_audit_trigger, and without the actor
@@ -11,6 +14,8 @@ const supabaseAdmin = createServerClient()
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const supplierId = searchParams.get('supplier_id')
     const activeOnly = searchParams.get('active_only') === 'true'
@@ -18,9 +23,10 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('accommodation_rates')
       .select('*')
+      .eq('org_id', orgId)
       .order('property_name')
 
-    if (supplierId) query = query.eq('supplier_id', supplierId)
+    if (supplierId) query = query.eq('supplier_id', await ownSupplierFilterId(supabaseAdmin, supplierId))
     if (activeOnly) query = query.eq('is_active', true)
 
     const { data, error } = await query
@@ -46,6 +52,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
     console.log('=== HOTELS API POST START ===')
     console.log('Body received:', JSON.stringify(body, null, 2))
@@ -62,10 +70,21 @@ export async function POST(request: NextRequest) {
       is_active: body.is_active !== false
     }
 
+    // Only one of the caller's company's suppliers: another company's id is
+    // refused (400) — it used to be stored, and the rate lists then showed
+    // that company's supplier name, phone and email.
+    if (body.supplier_id || body.supplier_name) {
+      const supplierCheck = await validateAndResolveSupplierFields(
+        { supplier_id: body.supplier_id, supplier_name: body.supplier_name }, supabaseAdmin)
+      if (!supplierCheck.ok) {
+        return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+      }
+      if (supplierCheck.supplier_id) newRate.supplier_id = supplierCheck.supplier_id
+      if (supplierCheck.supplier_name) newRate.supplier_name = supplierCheck.supplier_name
+    }
+
     // Add optional fields
     if (body.city) newRate.city = body.city
-    if (body.supplier_id) newRate.supplier_id = body.supplier_id
-    if (body.supplier_name) newRate.supplier_name = body.supplier_name
     if (body.notes) newRate.notes = body.notes
 
     console.log('Inserting:', JSON.stringify(newRate, null, 2))
@@ -73,7 +92,7 @@ export async function POST(request: NextRequest) {
     // Try insert without select first to see if it works
     const { data: insertData, error: insertError, count, status, statusText } = await supabaseAdmin
       .from('accommodation_rates')
-      .insert(newRate)
+      .insert({ ...newRate, org_id: orgId })
       .select('*')
       .single()
 

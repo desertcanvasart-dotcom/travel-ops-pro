@@ -62,3 +62,16 @@ export function templateAccess(row: { org_id?: string | null } | null, orgId: st
   if (row.org_id == null) return 'shared'
   return 'none'
 }
+
+/** The message a duplicate save (unique org + name + channel + language) answers with. */
+export const DUPLICATE_TEMPLATE_MESSAGE = 'Your organization already has a template with this name, channel and language'
+
+/**
+ * A failed template insert/update as an HTTP answer. A duplicate is the
+ * operator's to fix (rename it), so it says so with a 409; anything else is ours.
+ */
+export function templateSaveFailure(error: { code?: string } | null, fallback: string): { status: number; error: string } | null {
+  if (!error) return null
+  if (error.code === '23505') return { status: 409, error: DUPLICATE_TEMPLATE_MESSAGE }
+  return { status: 500, error: fallback }
+}

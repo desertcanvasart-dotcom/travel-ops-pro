@@ -12,7 +12,7 @@ import { planDocuments, documentedKeys, missingDocuments, staleDocuments, vouche
  * its documents already hold — shared by POST (create what is missing) and
  * GET (list what is missing and what no longer matches).
  */
-async function planTrip(supabase: ReturnType<typeof createServerClient>, itineraryId: string) {
+async function planTrip(supabase: ReturnType<typeof createServerClient>, itineraryId: string, orgId: string) {
   // Fetch all days with services
   const { data: days, error: daysError } = await supabase
     .from('itinerary_days')
@@ -38,12 +38,14 @@ async function planTrip(supabase: ReturnType<typeof createServerClient>, itinera
     }
   }
 
-  // Fetch all suppliers at once
+  // Fetch all suppliers at once — the trip's company's only (suppliers.org_id,
+  // 20261205): a voucher is never addressed to another company's supplier.
   let suppliersMap: Record<string, any> = {}
   if (supplierIds.size > 0) {
     const { data: suppliers } = await supabase
       .from('suppliers')
       .select('*')
+      .eq('org_id', orgId)
       .in('id', Array.from(supplierIds))
     if (suppliers) suppliersMap = Object.fromEntries(suppliers.map(s => [s.id, s]))
   }
@@ -57,7 +59,7 @@ async function planTrip(supabase: ReturnType<typeof createServerClient>, itinera
     .eq('resource_type', 'guide')
   const guideIds = [...new Set((guideRows ?? []).map(r => r.resource_id).filter(Boolean))]
   const { data: guideRecords } = guideIds.length > 0
-    ? await supabase.from('guides').select('id, name, phone, email, whatsapp, languages').in('id', guideIds)
+    ? await supabase.from('guides').select('id, name, phone, email, whatsapp, languages').eq('org_id', orgId).in('id', guideIds)
     : { data: [] as any[] }
   const guideById = new Map((guideRecords ?? []).map((g: any) => [g.id, g]))
   const guides: PlanGuide[] = (guideRows ?? []).map(r => {
@@ -112,7 +114,7 @@ export async function GET(
       .maybeSingle()
     if (!itinerary) return NextResponse.json({ error: 'Itinerary not found' }, { status: 404 })
 
-    const planned = await planTrip(supabase, itineraryId)
+    const planned = await planTrip(supabase, itineraryId, orgId)
     if (planned.error) return planned.error
     return NextResponse.json({
       success: true,
@@ -142,7 +144,8 @@ export async function POST(
 
     const body = await request.json().catch(() => ({}))
     const document_types = requestedDocTypes(body)
-    const nextNumber = createDocumentNumberer(supabase, supplierDocumentPrefix)
+    // This company's own sequence (numbers are per company, 20261216).
+    const nextNumber = createDocumentNumberer(supabase, supplierDocumentPrefix, orgId)
 
     const createdBy = await getCurrentUserId()
 
@@ -195,7 +198,7 @@ export async function POST(
 
     console.log('✅ Found itinerary:', itinerary.itinerary_code)
     
-    const planned = await planTrip(supabase, itineraryId)
+    const planned = await planTrip(supabase, itineraryId, orgId)
     if (planned.error) return planned.error
     const { plans, suppliersMap, documented } = planned
 
@@ -258,10 +261,10 @@ export async function POST(
         .from('supplier_documents')
         .insert(documentsToCreate)
         .select()
-      // Another request took one of these numbers between our read and our
-      // insert (the column is UNIQUE): renumber from the new highest and retry.
+      // A number already taken in this company (typed by hand, or drawn by a
+      // request before the counter existed): renumber and retry.
       for (let attempt = 0; createError?.code === '23505' && attempt < 3; attempt++) {
-        const renumber = createDocumentNumberer(supabase, supplierDocumentPrefix)
+        const renumber = createDocumentNumberer(supabase, supplierDocumentPrefix, orgId)
         for (const doc of documentsToCreate) doc.document_number = await renumber(doc.document_type)
         ;({ data: createdDocs, error: createError } = await supabase
           .from('supplier_documents')

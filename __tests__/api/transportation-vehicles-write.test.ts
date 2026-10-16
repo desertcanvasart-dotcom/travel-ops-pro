@@ -13,6 +13,18 @@ vi.mock('@supabase/supabase-js', async () => {
   const mock = await import('../_mock-supabase')
   return { createClient: mock.createMockClient }
 })
+
+// The caller's company: every rate route reads and stamps it (20261206).
+vi.mock('@/lib/auth/current-org', async () => {
+  const { NextResponse } = await import('next/server')
+  return {
+    getCurrentOrgId: async () => 'org-1',
+    getCurrentUserId: async () => 'u1',
+    getCurrentUserRole: async () => 'admin',
+    requireRole: async () => null,
+    noOrgResponse: () => NextResponse.json({ success: false }, { status: 403 }),
+  }
+})
 vi.mock('@/lib/suppliers/validate-supplier-fields', () => ({
   validateAndResolveSupplierFields: vi.fn(async (body: Record<string, unknown>) => ({
     ok: true, supplier_id: body.supplier_id ?? null, supplier_name: body.supplier_name ?? null,

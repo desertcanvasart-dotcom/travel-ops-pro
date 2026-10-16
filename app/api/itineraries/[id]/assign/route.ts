@@ -105,10 +105,13 @@ export async function PUT(
     // false) — a trip owned by a deactivated account is an invisible orphan.
     let assignee: { id: string; name: string; email: string | null } | null = null
     if (assignedTo) {
+      // And the org's own: another company's member would be told — and
+      // emailed — this trip and its client.
       const { data: member } = await supabaseAdmin
         .from('team_members')
         .select('id, name, email, is_active')
         .eq('id', assignedTo)
+        .eq('org_id', orgId)
         .maybeSingle()
 
       if (!member) {
@@ -162,6 +165,7 @@ export async function PUT(
         : ''
 
       const result = await createNotification({
+        org_id: orgId,
         team_member_id: assignee.id,
         type: 'trip_assigned',
         title: `You now own ${trip.itinerary_code || label}`,

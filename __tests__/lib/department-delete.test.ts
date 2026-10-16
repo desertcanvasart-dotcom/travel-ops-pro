@@ -37,30 +37,33 @@ function fakeDb(tables: Record<string, Row[]>) {
   }
 }
 
+// Organisation A's departments, members and tasks (each carries org_id since
+// migration 20261203), and organisation B's own department.
 const seed = () =>
   fakeDb({
     departments: [
-      { id: 'res', name: 'Reservation', service_types: ['accommodation', 'cruise'], is_active: true },
-      { id: 'exe', name: 'Execution', service_types: ['guide'], is_active: true },
-      { id: 'old', name: 'Old', service_types: ['meal'], is_active: false },
+      { id: 'res', org_id: 'org-a', name: 'Reservation', service_types: ['accommodation', 'cruise'], is_active: true },
+      { id: 'exe', org_id: 'org-a', name: 'Execution', service_types: ['guide'], is_active: true },
+      { id: 'old', org_id: 'org-a', name: 'Old', service_types: ['meal'], is_active: false },
+      { id: 'b-exe', org_id: 'org-b', name: 'Execution', service_types: ['guide'], is_active: true },
     ],
     team_members: [
-      { id: 'm1', department_id: 'res' },
-      { id: 'm2', department_id: 'res' },
-      { id: 'm3', department_id: 'exe' },
+      { id: 'm1', org_id: 'org-a', department_id: 'res' },
+      { id: 'm2', org_id: 'org-a', department_id: 'res' },
+      { id: 'm3', org_id: 'org-a', department_id: 'exe' },
     ],
     tasks: [
-      { id: 't1', department_id: 'res' },
-      { id: 't2', department_id: 'exe' },
+      { id: 't1', org_id: 'org-a', department_id: 'res' },
+      { id: 't2', org_id: 'org-a', department_id: 'exe' },
     ],
   })
 
 describe('deleteDepartment', () => {
   it('moves members, tasks and routed service types to the target, then deletes', async () => {
     const db = seed()
-    const result = await deleteDepartment(db, 'res', 'exe')
+    const result = await deleteDepartment(db, 'res', 'exe', 'org-a')
     expect(result).toEqual({ ok: true, moved: { members: 2, tasks: 1 }, unrouted: [] })
-    expect(db.tables.departments.map(d => d.id)).toEqual(['exe', 'old'])
+    expect(db.tables.departments.map(d => d.id)).toEqual(['exe', 'old', 'b-exe'])
     expect(db.tables.team_members.every(m => m.department_id === 'exe')).toBe(true)
     expect(db.tables.tasks.every(t => t.department_id === 'exe')).toBe(true)
     expect(db.tables.departments[0].service_types).toEqual(['guide', 'accommodation', 'cruise'])
@@ -68,7 +71,7 @@ describe('deleteDepartment', () => {
 
   it('with no target, clears the references and reports the types left unrouted', async () => {
     const db = seed()
-    const result = await deleteDepartment(db, 'res', null)
+    const result = await deleteDepartment(db, 'res', null, 'org-a')
     expect(result).toEqual({ ok: true, moved: { members: 2, tasks: 1 }, unrouted: ['accommodation', 'cruise'] })
     expect(db.tables.team_members.filter(m => m.department_id === null).map(m => m.id)).toEqual(['m1', 'm2'])
     expect(db.tables.tasks.find(t => t.id === 't1')!.department_id).toBeNull()
@@ -76,7 +79,7 @@ describe('deleteDepartment', () => {
 
   it('an inactive department hands over no service types — it routed nothing', async () => {
     const db = seed()
-    const result = await deleteDepartment(db, 'old', 'exe')
+    const result = await deleteDepartment(db, 'old', 'exe', 'org-a')
     expect(result).toMatchObject({ ok: true, unrouted: [] })
     expect(db.tables.departments.find(d => d.id === 'exe')!.service_types).toEqual(['guide'])
   })
@@ -84,14 +87,22 @@ describe('deleteDepartment', () => {
   it('refuses a target that is itself, missing or inactive — and changes nothing', async () => {
     for (const [target, status] of [['res', 400], ['nope', 404], ['old', 400]] as const) {
       const db = seed()
-      const result = await deleteDepartment(db, 'res', target)
+      const result = await deleteDepartment(db, 'res', target, 'org-a')
       expect(result).toMatchObject({ ok: false, status })
-      expect(db.tables.departments).toHaveLength(3)
+      expect(db.tables.departments).toHaveLength(4)
       expect(db.tables.team_members.filter(m => m.department_id === 'res')).toHaveLength(2)
     }
   })
 
   it('404s for a department that does not exist', async () => {
-    expect(await deleteDepartment(seed(), 'nope', null)).toMatchObject({ ok: false, status: 404 })
+    expect(await deleteDepartment(seed(), 'nope', null, 'org-a')).toMatchObject({ ok: false, status: 404 })
+  })
+
+  it("another company's department can be neither deleted nor the target", async () => {
+    const db = seed()
+    expect(await deleteDepartment(db, 'b-exe', null, 'org-a')).toMatchObject({ ok: false, status: 404 })
+    expect(await deleteDepartment(db, 'res', 'b-exe', 'org-a')).toMatchObject({ ok: false, status: 404 })
+    expect(db.tables.departments).toHaveLength(4)
+    expect(db.tables.team_members.filter(m => m.department_id === 'res')).toHaveLength(2)
   })
 })

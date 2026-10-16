@@ -8,7 +8,6 @@ import {
 } from 'lucide-react'
 import CopilotContextCard from './CopilotContextCard'
 import type { CopilotThreadWithLatest, CopilotDraft, CopilotInboxMessage, CopilotContext } from '@/types/copilot'
-import { useAuth } from '@/app/contexts/AuthContext'
 
 interface CopilotReviewPanelProps {
   thread: CopilotThreadWithLatest | null
@@ -20,7 +19,6 @@ const WHATSAPP_WINDOW_MS = 23 * 60 * 60 * 1000 // 23 hours
 export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotReviewPanelProps) {
   const tConcierge = useTranslations('copilot.concierge')
   const tDraft = useTranslations('copilot.draft')
-  const { user } = useAuth()
   const [draft, setDraft] = useState<CopilotDraft | null>(null)
   const [inboxMessage, setInboxMessage] = useState<CopilotInboxMessage | null>(null)
   const [editableBody, setEditableBody] = useState('')
@@ -42,6 +40,9 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
   >(null)
   const [committing, setCommitting] = useState(false)
   const [commitError, setCommitError] = useState<string | null>(null)
+  // The company the itinerary will land in — the THREAD's (G1), named on the
+  // button so nobody is surprised whose books it goes into.
+  const [commitOrgName, setCommitOrgName] = useState<string | null>(null)
 
   // Fetch draft details when thread changes
   useEffect(() => {
@@ -193,7 +194,6 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           additional_instructions: additionalInstructions || undefined,
-          user_id: user?.id,
         }),
       })
       const data = await res.json()
@@ -221,6 +221,7 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
     if (!thread || thread.origin !== 'concierge') {
       setSpawnedItinerary(null)
       setCommitError(null)
+      setCommitOrgName(null)
       return
     }
     let cancelled = false
@@ -229,6 +230,7 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
         const res = await fetch(`/api/copilot/threads/${thread.id}/commit-itinerary`)
         const data = await res.json()
         if (cancelled) return
+        setCommitOrgName(data.success && data.org?.name ? data.org.name : null)
         if (data.success && data.itinerary) {
           setSpawnedItinerary(data.itinerary)
         } else {
@@ -285,7 +287,6 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
         body: JSON.stringify({
           inbox_message_id: inboxMessage.id,
           thread_id: thread.id,
-          user_id: user?.id,
         }),
       })
       const data = await res.json()
@@ -413,7 +414,11 @@ export default function CopilotReviewPanel({ thread, onThreadUpdate }: CopilotRe
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-purple-700 rounded-md hover:bg-purple-800 transition-colors disabled:opacity-50"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                {committing ? 'Creating…' : 'Create itinerary from brief'}
+                {committing
+                  ? 'Creating…'
+                  : commitOrgName
+                    ? `Create itinerary in ${commitOrgName}`
+                    : 'Create itinerary from brief'}
               </button>
             </div>
           )}

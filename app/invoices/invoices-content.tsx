@@ -5,7 +5,8 @@ import { addDays } from '@/lib/payment-schedule'
 import { useState, useEffect, useCallback } from 'react'
 import { useTranslations } from 'next-intl'
 import { fetchAllPages } from '@/lib/fetch-all-pages'
-import { formatMoney, formatTotals, sumByCurrency } from '@/lib/currency-totals'
+import { formatMoney, formatTotals } from '@/lib/currency-totals'
+import { displayStatus, invoiceTiles } from '@/lib/invoices/status'
 import {
   Search,
   Plus,
@@ -26,6 +27,8 @@ import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { usePreferences } from '@/app/contexts/PreferencesContext'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
+import { readInvoiceVat, vatFor } from '@/lib/vat'
+import { VatToken, VatToggle, useOrgVatRate } from '@/app/components/Vat'
 
 interface Invoice {
   id: string
@@ -56,6 +59,7 @@ interface Invoice {
   updated_at: string
   sent_at: string | null
   paid_at: string | null
+  vat_applied?: boolean
 }
 
 interface LineItem {
@@ -77,6 +81,8 @@ interface Itinerary {
   client_name: string
   client_email: string
   total_cost: number
+  /** From the quote the trip came from (lib/vat.ts); the invoice inherits it. */
+  vat_applied?: boolean
 }
 
 interface FormData {
@@ -89,9 +95,10 @@ interface FormData {
   full_trip_cost: number
   line_items: LineItem[]
   subtotal: number
-  tax_rate: number
-  tax_amount: number
+  /** VAT on top of the net, at the company's rate — worked out by the server. */
+  vat_applied: boolean
   discount_amount: number
+  /** The NET: subtotal − discount. The server adds the VAT. */
   total_amount: number
   currency: string
   issue_date: string
@@ -111,8 +118,7 @@ const initialFormData: FormData = {
   full_trip_cost: 0,
   line_items: [{ description: '', quantity: 1, unit_price: 0, amount: 0 }],
   subtotal: 0,
-  tax_rate: 0,
-  tax_amount: 0,
+  vat_applied: false,
   discount_amount: 0,
   total_amount: 0,
   currency: '',
@@ -141,6 +147,8 @@ const TYPE_CONFIG: Record<string, { label: string; color: string; bg: string; ic
 
 export default function InvoicesContent() {
   const t = useTranslations('invoices')
+  const tVat = useTranslations('vat')
+  const orgVatRate = useOrgVatRate()
   const dialog = useConfirmDialog()
   const [invoices, setInvoices] = useState<Invoice[]>([])
   const [clients, setClients] = useState<Client[]>([])
@@ -151,6 +159,12 @@ export default function InvoicesContent() {
   const [typeFilter, setTypeFilter] = useState('')
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [formData, setFormData] = useState<FormData>(initialFormData)
+  // The VAT the form previews (lib/vat.ts); the server records the real one.
+  // An invoice for a trip leaves out the trip's extras and the confirmed
+  // insurance and extras the server adds on save, which the form cannot see:
+  // no number is shown for it rather than one larger than the saved VAT.
+  const vatSetOnSave = formData.vat_applied && !!formData.itinerary_id
+  const formVat = formData.vat_applied && !vatSetOnSave ? vatFor(formData.total_amount, orgVatRate, formData.currency || 'EUR') : 0
 
   // An invoice is denominated in what the operator bills in. initialFormData is
   // a module constant and cannot read a hook, so the currency is filled in when
@@ -166,6 +180,40 @@ export default function InvoicesContent() {
     }
   }, [prefsLoading, preferences?.default_currency])
   const [saving, setSaving] = useState(false)
+
+  // What the SERVER will bill for the chosen trip (GET /api/invoices/amounts —
+  // the same function POST /api/invoices uses). The form shows it instead of
+  // its own sum on the price it read earlier; billing another amount is a
+  // manual amount an admin or manager gives a reason for.
+  const [serverAmount, setServerAmount] = useState<{ amount: number; trip_total: number; currency: string; can_override: boolean } | null>(null)
+  const [manualReason, setManualReason] = useState('')
+  useEffect(() => {
+    if (!isModalOpen || !formData.itinerary_id) {
+      setServerAmount(null)
+      return
+    }
+    let cancelled = false
+    const query = new URLSearchParams({ itineraryId: formData.itinerary_id, type: formData.invoice_type, percent: String(formData.deposit_percent || 10) })
+    fetch(`/api/invoices/amounts?${query}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(json => {
+        if (cancelled || !json || typeof json.amount !== 'number') return
+        setServerAmount({ amount: json.amount, trip_total: json.trip_total, currency: json.currency, can_override: json.can_override === true })
+        setManualReason('')
+        setFormData(prev => ({
+          ...prev,
+          currency: json.currency || prev.currency,
+          full_trip_cost: json.trip_total,
+          line_items: [{ ...prev.line_items[0], quantity: 1, unit_price: json.amount, amount: json.amount }],
+          subtotal: json.amount,
+          discount_amount: 0,
+          total_amount: json.amount,
+        }))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [isModalOpen, formData.itinerary_id, formData.invoice_type, formData.deposit_percent])
+  const differsFromServer = !!serverAmount && Math.abs(formData.total_amount - serverAmount.amount) >= 0.005
 
   const getStatusLabel = (status: string) => {
     const labels: Record<string, string> = {
@@ -192,7 +240,9 @@ export default function InvoicesContent() {
   const fetchInvoices = useCallback(async () => {
     try {
       const params = new URLSearchParams()
-      if (statusFilter) params.append('status', statusFilter)
+      // The status filter is applied below on the status the table SHOWS:
+      // 'overdue' is never stored, so asking the API for it (or for 'sent')
+      // gave an empty list (or one that still held overdue invoices).
       if (typeFilter) params.append('type', typeFilter)
 
       // Walk every page — this IS the invoices list, and a one-shot request
@@ -204,7 +254,7 @@ export default function InvoicesContent() {
     } finally {
       setLoading(false)
     }
-  }, [statusFilter, typeFilter])
+  }, [typeFilter])
 
   const fetchClients = async () => {
     try {
@@ -312,6 +362,8 @@ export default function InvoicesContent() {
         client_name: itinerary.client_name || prev.client_name,
         client_email: itinerary.client_email || prev.client_email,
         full_trip_cost: fullCost,
+        // As the trip carries it (from its quote); the toggle can change it.
+        vat_applied: itinerary.vat_applied === true,
         line_items: [{
           description: lineItemDescription,
           quantity: 1,
@@ -417,14 +469,12 @@ export default function InvoicesContent() {
       }
       
       const subtotal = newItems.reduce((sum, item) => sum + item.amount, 0)
-      const taxAmount = subtotal * (prev.tax_rate / 100)
-      const totalAmount = subtotal + taxAmount - prev.discount_amount
+      const totalAmount = subtotal - prev.discount_amount
       
       return {
         ...prev,
         line_items: newItems,
         subtotal,
-        tax_amount: taxAmount,
         total_amount: totalAmount
       }
     })
@@ -442,30 +492,20 @@ export default function InvoicesContent() {
     setFormData(prev => {
       const newItems = prev.line_items.filter((_, i) => i !== index)
       const subtotal = newItems.reduce((sum, item) => sum + item.amount, 0)
-      const taxAmount = subtotal * (prev.tax_rate / 100)
-      const totalAmount = subtotal + taxAmount - prev.discount_amount
+      const totalAmount = subtotal - prev.discount_amount
       
       return {
         ...prev,
         line_items: newItems,
         subtotal,
-        tax_amount: taxAmount,
         total_amount: totalAmount
       }
     })
   }
 
-  const updateTaxRate = (rate: number) => {
-    setFormData(prev => {
-      const taxAmount = prev.subtotal * (rate / 100)
-      const totalAmount = prev.subtotal + taxAmount - prev.discount_amount
-      return { ...prev, tax_rate: rate, tax_amount: taxAmount, total_amount: totalAmount }
-    })
-  }
-
   const updateDiscount = (discount: number) => {
     setFormData(prev => {
-      const totalAmount = prev.subtotal + prev.tax_amount - discount
+      const totalAmount = prev.subtotal - discount
       return { ...prev, discount_amount: discount, total_amount: totalAmount }
     })
   }
@@ -477,13 +517,28 @@ export default function InvoicesContent() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
+
+    // A trip's invoice bills the server's amount. Another amount goes as a
+    // manual amount with its reason, which only an admin or manager may send.
+    if (differsFromServer && serverAmount) {
+      if (!serverAmount.can_override) {
+        await dialog.alert(t('error'), t('manualAmountNeedsManager'), 'warning')
+        return
+      }
+      if (!manualReason.trim()) {
+        await dialog.alert(t('error'), t('manualAmountReasonRequired'), 'warning')
+        return
+      }
+    }
     setSaving(true)
 
     try {
       const response = await fetch('/api/invoices', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(differsFromServer
+          ? { ...formData, manual_override: { amount: formData.total_amount, reason: manualReason.trim() } }
+          : formData)
       })
 
       if (response.ok) {
@@ -510,7 +565,9 @@ export default function InvoicesContent() {
       if (response.ok) {
         fetchInvoices()
       } else {
-        await dialog.alert(t('error'), t('failedToDeleteInvoice'), 'warning')
+        // The API says why (409: payments are recorded, cancel it instead).
+        const refusal = await response.json().catch(() => null)
+        await dialog.alert(t('error'), refusal?.error || t('failedToDeleteInvoice'), 'warning')
       }
     } catch (error) {
       console.error('Error deleting invoice:', error)
@@ -533,35 +590,28 @@ export default function InvoicesContent() {
     }
   }
 
-  // Check for overdue invoices
-  const processedInvoices = invoices.map(inv => {
-    if (inv.status !== 'paid' && inv.status !== 'cancelled' && inv.due_date) {
-      const dueDate = new Date(inv.due_date)
-      const today = new Date()
-      today.setHours(0, 0, 0, 0)
-      if (dueDate < today && inv.balance_due > 0) {
-        return { ...inv, status: 'overdue' }
-      }
-    }
-    return inv
-  })
+  // The status each invoice SHOWS: overdue is worked out, not stored, by the
+  // rule every finance screen shares (lib/invoices/status) — a draft that was
+  // never sent is not overdue.
+  const today = todayLocal()
+  const processedInvoices = invoices.map(inv => ({ ...inv, status: displayStatus(inv, today) }))
 
   const filteredInvoices = processedInvoices.filter(invoice => {
     const matchesSearch = 
       invoice.invoice_number.toLowerCase().includes(searchTerm.toLowerCase()) ||
       invoice.client_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       invoice.client_email?.toLowerCase().includes(searchTerm.toLowerCase())
-    return matchesSearch
+    return matchesSearch && (!statusFilter || invoice.status === statusFilter)
   })
 
   // Stats
   const totalInvoices = invoices.length
   // Summed PER CURRENCY. A yen invoice and a euro invoice do not add up to a
   // number that is true in either, and this operator bills in yen while the
-  // rate tables are in euro — so the tiles have to say which is which.
-  const totalRevenue = sumByCurrency(invoices, inv => inv.total_amount, inv => inv.currency)
-  const totalPaid = sumByCurrency(invoices, inv => inv.amount_paid, inv => inv.currency)
-  const totalOutstanding = sumByCurrency(invoices, inv => inv.balance_due, inv => inv.currency)
+  // rate tables are in euro — so the tiles have to say which is which. Drafts
+  // (never sent) and cancelled invoices are not billed or owed, so they are
+  // not in Billed, Paid, Outstanding or Overdue.
+  const { billed: totalRevenue, paid: totalPaid, outstanding: totalOutstanding, overdue: overdueAmount } = invoiceTiles(invoices, today)
   // A tile that sums to zero still has to pick a symbol. Use the currency this
   // operator actually bills in — the invoices on screen — before falling back
   // to their preference, so an empty "Outstanding" does not read as euro on a
@@ -571,11 +621,6 @@ export default function InvoicesContent() {
     || preferences?.default_currency
     || 'EUR'
 
-  const overdueAmount = sumByCurrency(
-    processedInvoices.filter(inv => inv.status === 'overdue'),
-    inv => inv.balance_due,
-    inv => inv.currency
-  )
   const depositCount = invoices.filter(inv => inv.invoice_type === 'deposit').length
   const finalCount = invoices.filter(inv => inv.invoice_type === 'final').length
 
@@ -816,6 +861,7 @@ export default function InvoicesContent() {
                       <span className="text-sm font-medium text-gray-900">
                         {formatMoney(Number(invoice.total_amount), invoice.currency)}
                       </span>
+                      <div><VatToken vat={readInvoiceVat(invoice)} currency={invoice.currency} className="mt-0.5" /></div>
                     </td>
                     <td className="px-4 py-2 text-right">
                       <span className={`text-sm font-medium ${Number(invoice.balance_due) > 0 ? 'text-orange-600' : 'text-gray-400'}`}>
@@ -1114,21 +1160,6 @@ export default function InvoicesContent() {
                     <span className="font-medium text-gray-900">{formatMoney(formData.subtotal, formData.currency)}</span>
                   </div>
                   <div className="flex items-center justify-between text-sm">
-                    <span className="text-gray-600">Tax Rate (%)</span>
-                    <input
-                      type="number"
-                      value={formData.tax_rate}
-                      onChange={(e) => updateTaxRate(parseFloat(e.target.value) || 0)}
-                      step="0.1"
-                      min="0"
-                      className="w-24 px-3 py-2 text-sm text-right border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] shadow-sm"
-                    />
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Tax Amount</span>
-                    <span className="text-gray-900">{formatMoney(formData.tax_amount, formData.currency)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-sm">
                     <span className="text-gray-600">{t('discount')}</span>
                     <input
                       type="number"
@@ -1139,12 +1170,53 @@ export default function InvoicesContent() {
                       className="w-24 px-3 py-2 text-sm text-right border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] shadow-sm"
                     />
                   </div>
+                  {/* VAT on top of the net. A preview at the company's rate:
+                      the server works out and records the real amount. */}
+                  <VatToggle
+                    checked={formData.vat_applied}
+                    onChange={(on) => setFormData(prev => ({ ...prev, vat_applied: on }))}
+                  />
+                  {vatSetOnSave ? (
+                    <p className="text-xs text-gray-600">{tVat('appliedOnSave', { rate: orgVatRate })}</p>
+                  ) : (
+                    <VatToken
+                      vat={{ vat_applied: formData.vat_applied, vat_rate: orgVatRate, vat_amount: formVat }}
+                      currency={formData.currency}
+                    />
+                  )}
                   <div className="flex justify-between pt-3 border-t border-gray-200">
                     <span className="font-semibold text-gray-900">{t('total')}</span>
-                    <span className="font-bold text-xl text-gray-900">{formatMoney(formData.total_amount, formData.currency)}</span>
+                    <span className="font-bold text-xl text-gray-900">
+                      {formatMoney(formData.total_amount + formVat, formData.currency)}{vatSetOnSave ? ` + ${tVat('vatShort')}` : ''}
+                    </span>
                   </div>
                 </div>
               </div>
+
+              {/* The server's amount for the chosen trip, and the reason for any other. */}
+              {serverAmount && (
+                <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg space-y-3">
+                  <p className="text-sm text-blue-800">
+                    {t('serverAmountNote', { amount: formatMoney(serverAmount.amount, serverAmount.currency || formData.currency) })}
+                  </p>
+                  {differsFromServer && !serverAmount.can_override && (
+                    <p className="text-sm text-red-700">{t('manualAmountNeedsManager')}</p>
+                  )}
+                  {differsFromServer && serverAmount.can_override && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">{t('manualAmountReason')}</label>
+                      <input
+                        type="text"
+                        value={manualReason}
+                        onChange={(e) => setManualReason(e.target.value)}
+                        placeholder={t('manualAmountReasonPlaceholder')}
+                        maxLength={500}
+                        className="w-full px-4 py-2.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-[#647C47] shadow-sm"
+                      />
+                    </div>
+                  )}
+                </div>
+              )}
 
               {/* Notes & Terms */}
               <div className="grid grid-cols-2 gap-4">

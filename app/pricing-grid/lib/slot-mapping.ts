@@ -2,9 +2,10 @@
 // Bidirectional mapping: Grid Slots ↔ Itinerary Services
 // ============================================
 
-import type { GridDay, GridConfig, SlotValue, SelectedItem } from '../types'
+import type { SlotValue } from '../types'
 import { SLOT_DEFINITIONS } from '../types'
 import { normalizeServiceType } from '@/lib/service-types'
+import { storedUnitPrice, type StoredServiceRow } from './saved-price'
 
 // --- Slot → Service Type ---
 
@@ -22,7 +23,6 @@ export const SLOT_TO_SERVICE_TYPE: Record<string, string> = {
   flights: 'flight',
   experiences: 'activity',
   meals: 'meal',
-  water: 'supplies',
   cruise: 'cruise',
   other_group: 'extra',
   other_pp: 'extra',
@@ -43,7 +43,14 @@ export function serviceTypeToSlotId(serviceType: string, serviceName: string, qu
     case 'entrance': return 'entrance_fees'
     case 'flight': return 'flights'
     case 'meal': return 'meals'
-    case 'supplies': return 'water'
+    // Fixed costs (water, wifi …) are no slot any more: the grid charges them
+    // itself on every sightseeing day, so a saved line of them — the old Water
+    // pick, a later grid save's cost lines, the engine's or the AI builder's —
+    // is not loaded as a pick (it would be charged twice). Not a slot id, so
+    // mapServicesToSlots leaves it out.
+    case 'supplies':
+    case 'water':
+      return 'fixed_cost'
     case 'cruise': return 'cruise'
     case 'activity':
       // Disambiguate: boat rides vs experiences
@@ -57,110 +64,12 @@ export function serviceTypeToSlotId(serviceType: string, serviceName: string, qu
   }
 }
 
-// --- Grid Slots → Service Inserts ---
-
-export interface ServiceInsert {
-  service_type: string
-  service_name: string
-  quantity: number
-  rate_eur: number
-  rate_non_eur: number
-  total_cost: number
-  notes: string | null
-}
-
-const GROUP_SLOT_IDS = new Set([
-  'route', 'guide', 'airport_services', 'hotel_services',
-  'tipping', 'boat_rides', 'other_group'
-])
-
-export function mapSlotsToServices(day: GridDay, config: GridConfig): ServiceInsert[] {
-  const services: ServiceInsert[] = []
-  const passport = config.passport
-
-  for (const slot of day.slots) {
-    const serviceType = SLOT_TO_SERVICE_TYPE[slot.slotId]
-    if (!serviceType) continue
-
-    const isGroup = GROUP_SLOT_IDS.has(slot.slotId)
-
-    // Handle custom amount slots (other_group, other_pp)
-    if (slot.customAmount > 0) {
-      const slotDef = SLOT_DEFINITIONS.find(d => d.slotId === slot.slotId)
-      services.push({
-        service_type: serviceType,
-        service_name: slotDef?.label || slot.slotId,
-        quantity: isGroup ? 1 : config.pax,
-        rate_eur: slot.customAmount,
-        rate_non_eur: slot.customAmount,
-        total_cost: isGroup ? slot.customAmount : slot.customAmount * config.pax,
-        notes: `custom_amount|${slot.slotId}`,
-      })
-      continue
-    }
-
-    // Handle selected items
-    for (const item of slot.selectedItems) {
-      const rate = passport === 'eu' ? item.rateEur : item.rateNonEur
-      services.push({
-        service_type: serviceType,
-        service_name: item.name,
-        quantity: isGroup ? 1 : config.pax,
-        rate_eur: item.rateEur,
-        rate_non_eur: item.rateNonEur,
-        total_cost: isGroup ? rate : rate * config.pax,
-        notes: `slot:${slot.slotId}|rate_id:${item.rateId}`,
-      })
-    }
-  }
-
-  // The throughout guide's own money (2026-09-04) — synthetic GROUP rows so
-  // the saved itinerary (and the B2B quote built from it) carries what the
-  // grid's totals already include. Their `slot:throughout_guide` tag names
-  // no real slot, so mapServicesToSlots skips them on reload instead of
-  // doubling them back into the day's picks.
-  if (config.guideMode === 'throughout' && config.withGuide) {
-    const passportRate = (item: { rateEur: number; rateNonEur: number }) =>
-      config.passport === 'eu' ? item.rateEur : item.rateNonEur
-    for (const slot of day.slots) {
-      if ((slot.slotId === 'accommodation' || slot.slotId === 'cruise') && slot.selectedItems.length > 0) {
-        const bed = Number(slot.selectedItems[0].guideRate) || 0
-        if (bed > 0) {
-          services.push({
-            service_type: SLOT_TO_SERVICE_TYPE[slot.slotId],
-            service_name: `Throughout Guide — bed (${slot.selectedItems[0].name})`,
-            quantity: 1, rate_eur: bed, rate_non_eur: bed, total_cost: bed,
-            notes: 'slot:throughout_guide|bed',
-          })
-        }
-      }
-      if (slot.slotId === 'flights') {
-        for (const item of slot.selectedItems) {
-          const fare = item.guideRate != null ? Number(item.guideRate) || 0 : passportRate(item)
-          services.push({
-            service_type: 'flight',
-            service_name: `Throughout Guide — seat (${item.name})`,
-            quantity: 1, rate_eur: fare, rate_non_eur: fare, total_cost: fare,
-            notes: 'slot:throughout_guide|seat',
-          })
-        }
-      }
-      if (slot.slotId === 'meals' && config.pax <= 3) {
-        for (const item of slot.selectedItems) {
-          const rate = passportRate(item)
-          services.push({
-            service_type: 'meal',
-            service_name: `Throughout Guide — ${item.name}`,
-            quantity: 1, rate_eur: item.rateEur, rate_non_eur: item.rateNonEur, total_cost: rate,
-            notes: 'slot:throughout_guide|meal',
-          })
-        }
-      }
-    }
-  }
-
-  return services
-}
+// --- Grid Slots → Service Rows ---
+// One writer: the save route (app/api/pricing-grid/save) — the sold items, at
+// each day's rate, the throughout guide's rows, priced from the stored rates.
+// A second copy of those rules lived here (mapSlotsToServices), used by tests
+// only and already out of step with the save (no guide switch, no dated
+// rates); it was removed so nobody builds on it.
 
 // --- Service Rows → Grid Slots ---
 
@@ -175,8 +84,14 @@ export function mapServicesToSlots(
     total_cost: number
     notes?: string | null
     description?: string | null
+    supplier_currency?: string | null
+    exchange_rate_used?: number | string | null
   }>,
-  pax: number
+  pax: number,
+  /** The trip's currency and the grid's rate currency (with today's rates):
+   *  given, each line carries its stored price in the rate currency, kept
+   *  when it has no current rate (saved-price.ts). */
+  savedPrices?: Parameters<typeof storedUnitPrice>[1]
 ): SlotValue[] {
   // Start with empty slots for all definitions
   const slotMap = new Map<string, SlotValue>()
@@ -216,11 +131,19 @@ export function mapServicesToSlots(
     const rateMatch = metaSource.match(/rate_id:(.+?)(\||$)/)
     if (rateMatch) rateId = rateMatch[1]
 
+    // The page re-prices every pick from the rate it names (hydrate-items.ts)
+    // — periods, guide bed, supplement key, the vehicle for the group. A line
+    // with no current rate keeps the price stored on its row, in the rate
+    // currency, marked as such; one that cannot be put in the rate currency
+    // has no price.
+    const stored = savedPrices ? storedUnitPrice(svc as StoredServiceRow, savedPrices) : null
     slot.selectedItems.push({
       rateId,
       name: svc.service_name,
-      rateEur: svc.rate_eur,
-      rateNonEur: svc.rate_non_eur,
+      rateEur: stored ? stored.rateEur : savedPrices ? 0 : svc.rate_eur,
+      rateNonEur: stored ? stored.rateNonEur : savedPrices ? 0 : svc.rate_non_eur,
+      serviceId: svc.id,
+      ...(stored ? { savedPrice: true } : {}),
     })
   }
 

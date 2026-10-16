@@ -52,13 +52,13 @@ describe('pricing finds the guide by exact language', () => {
 
   it('a word asks for a key-stored row and a key asks for a word-stored row', async () => {
     install()
-    expect(await getGuideRate('Portuguese', 'standard', undefined, { grade: 'senior' })).toMatchObject({ id: 'g-pt', name: 'Portuguese Speaking Guide' })
-    expect(await getGuideRate('japanese', 'standard')).toMatchObject({ id: 'g-ja', name: 'Japanese Speaking Guide' })
+    expect(await getGuideRate('org-1', 'Portuguese', 'standard', undefined, { grade: 'senior' })).toMatchObject({ id: 'g-pt', name: 'Portuguese Speaking Guide' })
+    expect(await getGuideRate('org-1', 'japanese', 'standard')).toMatchObject({ id: 'g-ja', name: 'Japanese Speaking Guide' })
   })
 
   it('"Portuguese" never prices the Brazilian Portuguese guide (the old substring match did)', async () => {
     install()
-    const r = await getGuideRate('Portuguese', 'standard')
+    const r = await getGuideRate('org-1', 'Portuguese', 'standard')
     // Egyptologist asked: falls back to the first Portuguese row (senior), not Brazilian's 999.
     expect(r?.id).toBe('g-pt')
   })

@@ -8,8 +8,8 @@ import { todayLocal } from '@/lib/today'
 import React, { useState, useEffect, useRef, Fragment, Suspense } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
+import { VatToggle } from '@/app/components/Vat'
 import { useTranslations } from 'next-intl'
-import { isBookableLine } from '@/lib/pricing/breakdown-order'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { useTierLabel } from '@/hooks/useTierLabel'
 import { useTierOptions } from '@/hooks/useTierOptions'
@@ -275,6 +275,11 @@ function TourPriceCalculatorInner() {
     return p ? p === 'eu' : true
   })
   const [marginPercent, setMarginPercent] = useState(25)
+  // Until the operator sets a margin, the engine picks it — the partner's,
+  // else the company's (lib/b2b/partner-margin.ts) — and the box shows what
+  // it picked. Once they set one, theirs is sent and wins, partner or not.
+  const [marginEdited, setMarginEdited] = useState(false)
+  const editMargin = (next: (m: number) => number) => { setMarginEdited(true); setMarginPercent(next) }
   // WHICH options the customer wants, not merely whether. This used to be one
   // boolean for the whole quote, so a customer who wanted the balloon ride but
   // not the second Abu Simbel day could not be quoted — see
@@ -325,6 +330,9 @@ function TourPriceCalculatorInner() {
   const [showSaveModal, setShowSaveModal] = useState(false)
   const [saving, setSaving] = useState(false)
   const [savedQuote, setSavedQuote] = useState<SavedQuote | null>(null)
+  // "Apply VAT" on the quote being saved: off unless chosen. The server adds
+  // VAT at the company's rate on its own price and records both (lib/vat.ts).
+  const [vatApplied, setVatApplied] = useState(false)
   const [partners, setPartners] = useState<Partner[]>([])
   const [quoteForm, setQuoteForm] = useState({
     partner_id: '',
@@ -641,6 +649,13 @@ function TourPriceCalculatorInner() {
     }
   }
 
+  /** The margin and partner every engine call carries — the calculator's,
+   *  the rate sheet's and the save's alike, so all three agree. */
+  const marginRequest = () => ({
+    margin_percent: marginEdited ? marginPercent : null,
+    partner_id: quoteForm.partner_id || null,
+  })
+
   /**
    * Price, and nothing else.
    *
@@ -652,6 +667,7 @@ function TourPriceCalculatorInner() {
   const runPricing = async (opts: { optionalIds: string[]; resetView: boolean }) => {
     setLoading(true)
     setError(null)
+    pricedPartner.current = quoteForm.partner_id
     try {
       const res = await fetch('/api/b2b/calculate-price', {
         method: 'POST',
@@ -661,7 +677,7 @@ function TourPriceCalculatorInner() {
           num_pax: numPax,
           travel_date: travelDate,
           is_eur_passport: isEurPassport,
-          margin_percent: marginPercent,
+          ...marginRequest(),
           selected_optional_ids: opts.optionalIds,
           extras: selectedExtraIds,
           tour_leader_included: tourLeaderIncluded,
@@ -674,6 +690,12 @@ function TourPriceCalculatorInner() {
       const data = await res.json()
       if (data.success) {
         setResult(data.data)
+        // The margin the engine chose, shown in the box — and marked as
+        // priced, so showing it does not trigger a re-price of its own.
+        if (!marginEdited && typeof data.data.margin_percent === 'number') {
+          pricedMargin.current = data.data.margin_percent
+          setMarginPercent(data.data.margin_percent)
+        }
         if (opts.resetView) {
           // Initialize all days as expanded
           const dayNumbers = [...new Set<number>((data.data.services || []).map((s: any) => s.day_number ?? -1))]
@@ -710,6 +732,15 @@ function TourPriceCalculatorInner() {
    * once per click, and each run re-reads the whole rate catalogue.
    */
   const pricedMargin = useRef<number | null>(null)
+  // The partner the price on screen was worked out for: picking another one
+  // in the Save dialog re-prices, so the price saved is the price shown.
+  const pricedPartner = useRef('')
+  useEffect(() => {
+    if (!result || loading) return
+    if (pricedPartner.current === quoteForm.partner_id) return
+    void runPricing({ optionalIds: selectedOptionals, resetView: false })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quoteForm.partner_id, result])
   useEffect(() => {
     if (!result) return
     if (pricedMargin.current === null) { pricedMargin.current = marginPercent; return }
@@ -737,7 +768,7 @@ function TourPriceCalculatorInner() {
           num_pax: 2,
           travel_date: travelDate,
           is_eur_passport: isEurPassport,
-          margin_percent: marginPercent,
+          ...marginRequest(),
           tour_leader_included: tourLeaderIncluded,
           guide_grade: guideGrade,
           guide_mode: guideMode,
@@ -796,7 +827,6 @@ function TourPriceCalculatorInner() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           variation_id: variationId,
-          partner_id: quoteForm.partner_id || null,
           client_name: quoteForm.client_name || null,
           client_email: quoteForm.client_email || null,
           client_phone: quoteForm.client_phone || null,
@@ -804,32 +834,27 @@ function TourPriceCalculatorInner() {
           travel_date: travelDate,
           num_adults: numPax,
           num_children: 0,
-          // The CHOSEN optional services travel with the quote. Without them
-          // the itinerary built at conversion carries their money in
-          // selling_price and none of the services, and the first save on the
-          // edit page recomputes the total from the services it can see and
-          // loses the difference (docs/plans/extras-and-upgrades.md §5a).
-          services_snapshot: [
-            ...result.services.filter(isBookableLine),
-            ...(result.optional_services || []).filter(s => s.is_selected),
-          ],
-          // The currency the engine priced in (the org's rate currency). Without
-          // it the quotes route used to default to EUR.
-          currency: result.currency,
-          total_cost: result.total_cost,
-          margin_percent: result.margin_percent,
-          margin_amount: result.margin_amount,
-          selling_price: result.selling_price,
-          price_per_person: result.price_per_person,
+          // The server prices the quote itself, with the same engine and these
+          // same inputs (lib/b2b/quote-pricing.ts): the chosen options and
+          // extras, the margin, tier, guide, passport and tour leader. The
+          // prices on screen are not stored from here — selling_price is sent
+          // only so the server can refuse a save whose price moved since it
+          // was calculated. The season premium is the engine's and is stored
+          // with the quote.
+          is_eur_passport: isEurPassport,
+          // The partner and margin exactly as the price on screen was asked
+          // for: no margin set means the partner's (else the company's), on
+          // both sides.
+          ...marginRequest(),
+          selected_optional_ids: selectedOptionals,
+          extras: selectedExtraIds,
           tour_leader_included: tourLeaderIncluded,
-          tour_leader_cost: result.tour_leader_cost || null,
           guide_grade: guideGrade,
           guide_mode: guideMode,
-          single_supplement: result.single_supplement || null,
-          is_eur_passport: isEurPassport,
-          // What the quote was priced in, if anything — the operator's own
-          // season, not a guess from the month.
-          season: result.season_uplift?.season_name ?? null,
+          tier: variationTier,
+          language: guideLanguage || 'English',
+          selling_price: result.selling_price,
+          vat_applied: vatApplied,
           notes: quoteForm.notes || null
         })
       })
@@ -842,9 +867,10 @@ function TourPriceCalculatorInner() {
           quote_number: data.data.quote_number
         })
         setShowSaveModal(false)
-        // Reset form
+        // Reset form. The partner stays: the price on screen is that
+        // partner's, and clearing it would re-price it under the saved quote.
         setQuoteForm({
-          partner_id: '',
+          partner_id: quoteForm.partner_id,
           client_name: '',
           client_email: '',
           client_phone: '',
@@ -901,7 +927,7 @@ function TourPriceCalculatorInner() {
     <div className="min-h-screen bg-gray-50 p-6">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
-          <Link href="/tours/manage" className="p-2 hover:bg-gray-200 rounded-lg">
+          <Link href="/tours" className="p-2 hover:bg-gray-200 rounded-lg">
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </Link>
           <div>
@@ -1099,7 +1125,7 @@ function TourPriceCalculatorInner() {
                 <div className="flex items-stretch gap-1">
                   <button
                     type="button"
-                    onClick={() => setMarginPercent(m => Math.max(0, Math.round((m - 1) * 100) / 100))}
+                    onClick={() => editMargin(m => Math.max(0, Math.round((m - 1) * 100) / 100))}
                     disabled={marginPercent <= 0}
                     aria-label={t('marginDown')}
                     className="px-3 border rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40"
@@ -1107,14 +1133,14 @@ function TourPriceCalculatorInner() {
                   <input
                     type="number"
                     value={marginPercent}
-                    onChange={(e) => setMarginPercent(parseFloat(e.target.value) || 0)}
+                    onChange={(e) => { const v = parseFloat(e.target.value) || 0; editMargin(() => v) }}
                     min="0"
                     max="100"
                     className="flex-1 min-w-0 px-3 py-2 border rounded-lg text-center focus:ring-2 focus:ring-[#647C47] outline-none"
                   />
                   <button
                     type="button"
-                    onClick={() => setMarginPercent(m => Math.min(100, Math.round((m + 1) * 100) / 100))}
+                    onClick={() => editMargin(m => Math.min(100, Math.round((m + 1) * 100) / 100))}
                     disabled={marginPercent >= 100}
                     aria-label={t('marginUp')}
                     className="px-3 border rounded-lg text-gray-600 hover:bg-gray-50 disabled:opacity-40"
@@ -1681,7 +1707,7 @@ function TourPriceCalculatorInner() {
                       <div className="flex items-center gap-0.5">
                         <button
                           type="button"
-                          onClick={() => setMarginPercent(m => Math.max(0, Math.round((m - 1) * 100) / 100))}
+                          onClick={() => editMargin(m => Math.max(0, Math.round((m - 1) * 100) / 100))}
                           disabled={marginPercent <= 0}
                           aria-label={t('marginDown')}
                           className="w-5 h-5 leading-none rounded border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-40"
@@ -1689,7 +1715,7 @@ function TourPriceCalculatorInner() {
                         <span className="w-12 text-center text-xs font-semibold tabular-nums text-gray-700">{marginPercent}%</span>
                         <button
                           type="button"
-                          onClick={() => setMarginPercent(m => Math.min(100, Math.round((m + 1) * 100) / 100))}
+                          onClick={() => editMargin(m => Math.min(100, Math.round((m + 1) * 100) / 100))}
                           disabled={marginPercent >= 100}
                           aria-label={t('marginUp')}
                           className="w-5 h-5 leading-none rounded border border-gray-300 text-gray-600 hover:bg-white disabled:opacity-40"
@@ -2048,6 +2074,11 @@ function TourPriceCalculatorInner() {
                     </option>
                   ))}
                 </select>
+                {quoteForm.partner_id && result && (
+                  <p className="mt-1 text-xs text-gray-500">
+                    {loading ? t('repricingForPartner') : marginEdited ? t('partnerMarginYours', { percent: result.margin_percent }) : t('partnerMarginApplied', { percent: result.margin_percent })}
+                  </p>
+                )}
               </div>
 
               <div className="border-t pt-4">
@@ -2119,6 +2150,8 @@ function TourPriceCalculatorInner() {
                 />
               </div>
 
+              <VatToggle checked={vatApplied} onChange={setVatApplied} />
+
               {/* Quote Summary */}
               <div className="bg-gray-50 rounded-lg p-3 text-sm">
                 <div className="flex justify-between mb-1">
@@ -2149,7 +2182,7 @@ function TourPriceCalculatorInner() {
               </button>
               <button
                 onClick={handleSaveQuote}
-                disabled={saving}
+                disabled={saving || loading}
                 className="flex-1 px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] font-medium disabled:opacity-50 flex items-center justify-center gap-2"
               >
                 {saving ? (

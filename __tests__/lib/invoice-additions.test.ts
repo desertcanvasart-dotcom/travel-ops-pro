@@ -75,9 +75,11 @@ describe('partitionAdditions', () => {
 })
 
 describe('toLineItems', () => {
-  it('produces the invoice line shape, amount = unit price × quantity', () => {
+  // The line keeps its source since VAT leaves insurance and extras out
+  // (owner, 2026-10-13; lib/vat.ts): switching VAT on later must find them.
+  it('produces the invoice line shape, amount = unit price × quantity, tagged with its source', () => {
     expect(toLineItems([extra({ unit_price: 120, quantity: 2 })], 'EUR')).toEqual([
-      { description: 'Extra day at Abu Simbel', quantity: 2, unit_price: 120, amount: 240 },
+      { description: 'Extra day at Abu Simbel', quantity: 2, unit_price: 120, amount: 240, source: 'extra' },
     ])
   })
 

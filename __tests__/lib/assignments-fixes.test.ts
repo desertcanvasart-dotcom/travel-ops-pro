@@ -81,8 +81,8 @@ describe('a restaurant’s WhatsApp notice', () => {
       { id: 'itn-1', org_id: 'org-1', client_name: 'Tersa', num_adults: 2 },
       { id: 'itn-other', org_id: 'org-2', client_name: 'Someone else', client_phone: '+819000000000', num_adults: 2 },
     ]
-    db.tables.meal_rates = [{ id: 'meal-1', restaurant_name: 'Fish Market', supplier: { name: 'Fish Market Alexandria', whatsapp: '+201000000001' } }]
-    db.tables.restaurant_contacts = [{ id: 'rc-1', name: 'Kebabgy', phone: '+201000000002', whatsapp: null }]
+    db.tables.meal_rates = [{ id: 'meal-1', org_id: 'org-1', restaurant_name: 'Fish Market', supplier: { name: 'Fish Market Alexandria', whatsapp: '+201000000001' } }]
+    db.tables.restaurant_contacts = [{ id: 'rc-1', org_id: 'org-1', name: 'Kebabgy', phone: '+201000000002', whatsapp: null }]
   })
   it('a restaurant picked from Rates → Meals reaches its meal rate’s supplier (it was "Resource not found")', async () => {
     const res = await notify('meal-1')

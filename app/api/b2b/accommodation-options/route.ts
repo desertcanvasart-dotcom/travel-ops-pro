@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { cruiseCandidates, hotelCandidates } from '@/lib/pricing/property-candidates'
 import { supplementsForRow } from '@/lib/rates/supplements'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export const dynamic = 'force-dynamic'
 
@@ -45,11 +46,15 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: false, error: 'city is required for hotels' }, { status: 400 })
   }
 
+  // This company's hotels and ships only.
+  const orgId = await getCurrentOrgId()
+  if (!orgId) return noOrgResponse()
+
   try {
     const db = createServerClient()
     const rows = kind === 'hotel'
-      ? await hotelCandidates(db, city, tier)
-      : await cruiseCandidates(db, tier, params.get('embark'), Number(params.get('nights')) || null)
+      ? await hotelCandidates(db, orgId, city, tier)
+      : await cruiseCandidates(db, orgId, tier, params.get('embark'), Number(params.get('nights')) || null)
 
     const options: AccommodationOption[] = rows.map(r => ({
       id: String(r.id),

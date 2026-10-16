@@ -13,19 +13,41 @@ PROJECT_HANDOVER.md → Known Issues. Items in this file BLOCK something.
 
 ## G1. org_id authority must move to the thread before any second org onboards
 
-**Status:** Deferred — solo operation today, work is gated, not abandoned.
-**Trigger:** [GATE — REQUIRED BEFORE SECOND ORG ONBOARDS]
+**Status:** ✅ Shipped (2026-10-13) — the commit authority flip, NOT NULL,
+membership check and UI label (2026-10-12), and the per-org Concierge webhook
+secret (2026-10-13, below). Nothing in this gate is open.
+**Trigger:** [GATE — REQUIRED BEFORE SECOND ORG ONBOARDS] — a second org (ATS)
+is live.
 **Owner:** Architecture / multi-tenancy.
-**Related code:** `lib/auth/current-org.ts`, `app/api/copilot/threads/[id]/commit-itinerary/route.ts`, `migrations/20260626_*concierge*.sql`, `migrations/20260627_itinerary_thread_id.sql`.
+**Related code:** `lib/auth/current-org.ts`, `app/api/copilot/threads/[id]/commit-itinerary/route.ts`, `lib/concierge/commit-brief-to-itinerary.ts`, `components/copilot/CopilotReviewPanel.tsx`, `migrations/20260626_*concierge*.sql`, `migrations/20260627_itinerary_thread_id.sql`, `migrations/20261204_email_org_id.sql`.
+
+**Shipped (2026-10-12, tenancy batch 3b):** `communication_threads.org_id` is
+NOT NULL (migration 20261204 backfilled every thread to its company first).
+`commitBriefToItinerary(threadId, db)` no longer takes an org at all: it stamps
+the itinerary with `thread.org_id`, and uses that company's
+`organizations.default_currency` (not a hard-coded EUR). The commit route
+checks the caller is a MEMBER of the thread's company
+(`lib/auth/org-members.ts isOrgMember`) — the session is an access check, not
+an attribution — so a person in both companies commits a thread into the
+thread's company whichever workspace is active. A non-member gets **404
+"Thread not found"**, not 403: the cross-company hotfix already answered 404
+so another company's thread ids are not confirmed to exist, and that is kept
+deliberately. GET returns the thread company's name and the button reads
+"Create itinerary in `<org name>`". Also fixed while there: a 23505 on the
+random `ITN-S-<year>-<nnn>` code was read as a concurrent commit of the same
+thread and failed ("re-lookup found no row"); now a re-lookup that finds no
+row for the thread means the code was taken, and the insert retries with a new
+code (5 attempts).
 
 **Progress (2026-10-10):** WhatsApp is per org. Each organization has its own
 sender (`organizations.whatsapp_number`, migration 20261125); the webhook
 resolves the org from the number written TO (`lib/whatsapp-org.ts`) and stamps
 it on the conversation and the copilot thread; `whatsapp_conversations.org_id`
 scopes every inbox route; sends go out from the org's own number. Still
-deferred: the commit authority flip below, and email intake's org resolution.
+deferred then: the commit authority flip (shipped 2026-10-12, above), and email
+intake's org resolution (email threads carry org_id since 20261204).
 
-### What's broken (today, only in a multi-org world)
+### What was broken (fixed 2026-10-12 — kept for the record)
 
 `org_id` on every committed itinerary is currently stamped from
 `getCurrentOrgId()` — the operator's session — at the moment they click "Create
@@ -38,7 +60,7 @@ actually came from. There is no automatic correction path post-stamp.
 `communication_threads.org_id` already exists (Phase 2 intake-stamping shipped),
 but commit does not yet read it.
 
-### What ships when the gate trips
+### What shipped (the agreed fix shape; item 1 partly open)
 
 Agreed fix shape (from prior design conversation, recorded here so it can't drift):
 
@@ -58,7 +80,7 @@ Agreed fix shape (from prior design conversation, recorded here so it can't drif
    "Create itinerary in `<org name>`" so the operator sees what's about to happen
    and has no surprise about which org's books the itinerary will land in.
 
-### Why this isn't built yet
+### Why it waited
 
 Phase 2 intentionally split the work: it shipped the **intake stamping** (cheap,
 no behavior change), so when the gate trips the data is already populated and
@@ -90,51 +112,69 @@ destructure-and-omit and the mapper comment.
 
 ### Verification checklist for when the gate trips
 
-- [ ] Per-org webhook secret resolver in `app/api/webhooks/concierge/route.ts`
-      and per-channel resolver in WhatsApp intake
-- [ ] Backfill any `communication_threads.org_id IS NULL` to the per-org resolved
-      value, then `ALTER TABLE ... ALTER COLUMN org_id SET NOT NULL`
-- [ ] `commit-brief-to-itinerary.ts` takes thread.org_id as authority, not the
-      param `orgId`; route passes session user to a `verifyMembership(orgId,
-      userId)` check
-- [ ] Commit route returns 403 with a clear message on cross-org access attempts
-- [ ] `CopilotReviewPanel` button label shows the resolved org name
-- [ ] End-to-end test: two orgs, brief lands in org A; operator B (member of
-      org B only) sees 403 on commit; operator A (member of org A) succeeds and
-      the itinerary lands in org A regardless of who else is logged in
+- [x] Per-org webhook secret resolver in `app/api/webhooks/concierge/route.ts`
+      (2026-10-13). `CONCIERGE_WEBHOOK_SECRETS` is JSON keyed by
+      `organizations.slug` — `{"ats":"<secret>","travel2egypt":"<secret>"}`,
+      a value may be a list `["<new>","<old>"]` to rotate. The verifier
+      (`lib/concierge-webhook-auth.ts`) checks every secret and returns the
+      matched one's slug; `lib/concierge/brief-org.ts` turns it into the org
+      (an unknown slug → 500, refused, never guessed; the same secret under
+      two companies → 500 `ambiguous_secret`; unparseable JSON → 500
+      `secret_config_invalid`). The legacy single `CONCIERGE_WEBHOOK_SECRET`
+      (+ `_PREVIOUS`) still verifies and files under the default org
+      (`lib/auth/default-org.ts`), as before. `ingestBrief(…, orgId)` stamps
+      that org on the client, the brief (once, at INSERT — the
+      destructure-guard and the mapper comment were revisited together) and,
+      through the brief, its revisions and its Copilot thread
+      (`promoteBriefToThread` reads `concierge_briefs.org_id`).
+      Uniqueness is per company (migration 20261209):
+      `concierge_briefs UNIQUE (org_id, conversation_id)` and
+      `concierge_brief_revisions UNIQUE (brief_id, brief_revision)` —
+      decided because one Concierge deployment can hold both companies'
+      secrets, so the same conversation id can reach both; each keeps its own
+      lead instead of the second being filed as the first's revision. The
+      revisions' "any signed-in user" SELECT policy is now the brief's
+      company. Tests: `__tests__/lib/concierge-org-secret.test.ts`,
+      `__tests__/migrations/tenancy-followups.test.ts`. The per-channel
+      WhatsApp resolver is done (`lib/whatsapp-org.ts`, 20261125).
+- [x] Backfill any `communication_threads.org_id IS NULL` to the per-org resolved
+      value, then `ALTER TABLE ... ALTER COLUMN org_id SET NOT NULL` (20261204)
+- [x] `commit-brief-to-itinerary.ts` takes thread.org_id as authority, not the
+      param `orgId`; route checks the session user is a member of the
+      thread's org (`isOrgMember`)
+- [x] Commit route refuses cross-org access attempts — with 404 "Thread not
+      found" (kept from the hotfix; see Shipped above), not 403
+- [x] `CopilotReviewPanel` button label shows the resolved org name
+- [x] Two-org test (`__tests__/api/commit-itinerary-thread-authority.test.ts`):
+      brief lands in org A; an operator of org B only is refused; an
+      operator of org A — or one in both orgs with B active — succeeds and the
+      itinerary lands in org A
 
-### Bundled into this gate: suppliers.org_id (Phase 3 step 2 finding)
+### Bundled into this gate: suppliers.org_id (Phase 3 step 2 finding) — ✅ DONE
 
-The `suppliers` table has NO `org_id` column today. For solo operation this
-is the same kind of latent issue as `communication_threads.org_id` was —
-trivially correct under one org, structurally broken under two. But it is
-WORSE than the thread case: a shared unscoped suppliers table is a
-**CROSS-TENANT DATA LEAK** the instant a second org exists, not just a
-misattribution risk. Any second org's operator would see every other org's
-supplier roster, rate cards, contact info, payment terms, and commission
-agreements.
+**Done by migrations `20261205_suppliers_org_id.sql` (suppliers, supplier
+properties, the guides / airport_staff / hotel_staff views) and
+`20261206_rates_org_id.sql` (every rate table).** Kept for the record: the
+`suppliers` table used to have no `org_id`, which would have been a
+cross-tenant leak of every company's roster, rate cards, contacts and
+commission agreements the moment a second company existed.
 
-Phase 3 step 2 added FK constraints from itinerary_services, expenses,
-booking_supplier_status, supplier_invoices to suppliers — making the
-referential link real but NOT solving the multi-tenancy of the suppliers
-table itself. That work belongs here:
-
-- [ ] `ALTER TABLE suppliers ADD COLUMN org_id UUID REFERENCES organizations(id)`,
-      backfill from a per-org resolver (same mechanism as threads/briefs)
-- [ ] RLS on suppliers with `user_is_in_org(org_id)` predicate
-- [ ] All write-paths in `app/api/suppliers/*` and `app/api/rates/*` stamp
-      org_id from session
-- [ ] All read-paths (suppliers UI, rate dropdowns, sync-suppliers) scope by
-      `org_id`. Note that several rate routes already use service-role; those
-      need an explicit `.eq('org_id', orgId)` added since RLS won't filter for
-      them
-- [ ] `accommodation_rates`, `transportation_rates`, `nile_cruises`,
-      `guide_rates`, `activity_rates`, `meal_rates` all carry supplier_id but
-      no org_id — they inherit org-scoping transitively via the FK to
-      suppliers. Decide whether to denormalize org_id onto rate rows for
-      faster filtering vs always joining through suppliers
-- [ ] End-to-end test: two orgs each have their own suppliers + rates;
-      neither sees the other's
+- [x] `suppliers.org_id` added and backfilled per company; a supplier both
+      companies used was copied, one per company (`org_backfill_supplier_copies`), and
+      every reference re-pointed at its own company's copy
+- [x] RLS on suppliers: `user_is_in_org(org_id)` to read, plus
+      `is_manager_or_above()` to write (`suppliers_org_*` policies)
+- [x] Write paths in `app/api/suppliers/*` and `app/api/rates/*` stamp
+      `org_id` from the session; supplier codes are unique per company
+      (`UNIQUE(org_id, supplier_code)`), rate keys per company
+      (`UNIQUE(org_id, service_code / cruise_code / cost_type)`)
+- [x] Read paths (suppliers screen, rate pickers, CSV import/export, bulk rate
+      import) scope by `org_id` explicitly — they run on the service role, so
+      RLS does not filter for them
+- [x] Rate tables carry their own `org_id` (denormalised, stamped on write)
+      rather than inheriting it through the supplier
+- [x] Two-company tests: `__tests__/api/suppliers-org-scope.test.ts`,
+      `__tests__/api/rates-org-scope.test.ts`
 
 ---
 

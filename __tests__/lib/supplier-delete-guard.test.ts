@@ -18,12 +18,13 @@ describe('describeBlockers', () => {
     expect(msg).toBe('Supplier is referenced by 3 invoices, 2 child properties — deactivate it instead')
   })
 
-  it('guards the money tables, not the rate tables', () => {
-    // Rates are ON DELETE SET NULL by design — a deleted supplier's rates
-    // become unattributed, as single-row delete has always behaved.
+  it('guards the money tables AND the rate tables', () => {
+    // Rates are ON DELETE SET NULL — a deleted supplier's rates used to stay
+    // behind, bought from nobody. A supplier with rates is now refused
+    // (deactivate instead), like one with money attached.
     const tables = SUPPLIER_REFERENCE_CHECKS.map((c) => c.table)
     for (const t of ['supplier_invoices', 'expenses', 'commissions', 'itinerary_services']) expect(tables).toContain(t)
-    for (const t of ['guide_rates', 'transportation_rates', 'hotel_staff_rates']) expect(tables).not.toContain(t)
+    for (const t of ['guide_rates', 'transportation_rates', 'hotel_staff_rates']) expect(tables).toContain(t)
   })
 
   it('does not query the dropped supplier-IS-property column', () => {

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { calculateDay, calculatePaxRange, buildTransportTierIndex } from '@/app/pricing-grid/lib/calculator'
-import { attachPricingBasis } from '@/app/pricing-grid/lib/attach-basis'
+import { hydrateDays } from '@/app/pricing-grid/lib/hydrate-items'
 import type { AllRates, GridConfig, GridDay, SelectedItem, SlotValue } from '@/app/pricing-grid/types'
 
 // The Pricing Grid prices airport / hotel services and activities by each
@@ -49,13 +49,15 @@ describe('the B2B sheet across group sizes', () => {
   })
 })
 
+// The item is rebuilt from its rate (hydrate-items.ts) — basis AND price:
+// the save prices from the stored rate too, so the screen must not keep the
+// saved one (attach-basis.ts, which kept it, was replaced).
 describe('a reloaded or parsed item takes its rate’s basis', () => {
-  it('without moving its saved price', () => {
+  it('and its rate’s price today', () => {
     const rates = { airport_services: [{ id: 'a1', name: 'ASW', rateEur: 800, rateNonEur: 800, pricing_basis: 'per_person', unit_capacity: null }] } as unknown as AllRates
     const d = day(slot('airport_services', [{ rateId: 'a1', name: 'ASW', rateEur: 700, rateNonEur: 700 }]))
-    const { days, changed } = attachPricingBasis([d], rates)
-    expect(changed).toBe(1)
-    expect(days[0].slots[0].selectedItems[0]).toMatchObject({ rateEur: 700, pricingBasis: 'per_person' })
-    expect(attachPricingBasis(days, rates).changed).toBe(0)
+    const { days } = hydrateDays([d], rates, 2)
+    expect(days[0].slots[0].selectedItems[0]).toMatchObject({ rateEur: 800, pricingBasis: 'per_person' })
+    expect(hydrateDays(days, rates, 2).days).toBe(days)
   })
 })

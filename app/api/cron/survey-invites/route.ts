@@ -2,8 +2,8 @@
 // CRON: guest survey invites
 // File: app/api/cron/survey-invites/route.ts
 //
-// Once a day, for every itinerary that ENDS today (the day the party lands back
-// in Japan), mint a survey token and send the /survey/<token> link by email and
+// Once a day, for every sold (confirmed or completed) itinerary that ENDS today (the day the party lands back
+// in Japan) of an organisation that has the guest questionnaire, mint a survey token and send the /survey/<token> link by email and
 // WhatsApp — the Japanese invitation. Idempotent: the unique index on
 // guest_surveys.itinerary_id means a re-run never double-creates, and an
 // itinerary already surveyed is skipped.
@@ -18,6 +18,8 @@ import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { orgIdentity } from '@/lib/org-identity'
 import { businessToday } from '@/lib/today'
 import { ensureSurvey } from '@/lib/surveys/ensure-survey'
+import { orgHasDocumentTemplate } from '@/lib/documents/org-templates'
+import { isSoldStatus } from '@/lib/itineraries/statuses'
 
 const APP_URL = (process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net').replace(/\/$/, '')
 /** How many days (today included) an unsent survey keeps being retried. */
@@ -49,6 +51,8 @@ async function getHandler(request: NextRequest): Promise<Response> {
   // HOST's day — UTC on the server — not the day the trip ends for the office.
   const today = businessToday()
   const identities = new Map<string, string>()
+  // Which orgs survey their guests, read once per org.
+  const surveying = new Map<string, boolean>()
 
   // Itineraries that ended in the last RETRY_DAYS days (today included) and
   // represent a real trip. Today's trips get their first invite; a survey from
@@ -72,7 +76,28 @@ async function getHandler(request: NextRequest): Promise<Response> {
   let skipped = 0
 
   for (const it of itineraries ?? []) {
-    if (['draft', 'cancelled'].includes(String(it.status ?? ''))) {
+    // Only a trip the client bought (confirmed or completed). Skipping just
+    // draft and cancelled thanked the client of an unaccepted quote ('quoted',
+    // 'sent') "for joining our tour" once its dates had passed.
+    if (!isSoldStatus(it.status)) {
+      skipped++
+      continue
+    }
+    // Only an organisation that has the guest questionnaire (lib/documents/
+    // org-templates.ts — the rule the printed sheet, survey-pdf, applies). This
+    // ran for every org's trips, so another company's guests were sent this
+    // operator's survey under their own company's name. A failed read skips
+    // the org this run rather than guessing.
+    if (!surveying.has(it.org_id)) {
+      let has = false
+      try {
+        has = !!it.org_id && await orgHasDocumentTemplate(db, it.org_id, 'ats-questionnaire')
+      } catch (e) {
+        console.error(`[survey-invites] could not read document templates of org ${it.org_id}:`, e)
+      }
+      surveying.set(it.org_id, has)
+    }
+    if (!surveying.get(it.org_id)) {
       skipped++
       continue
     }

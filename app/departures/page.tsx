@@ -40,6 +40,11 @@ interface TourDeparture {
   end_date: string
   max_pax: number
   booked_pax: number
+  /** Booked outside the app + confirmed + pending web-order holds. */
+  seats_taken?: number
+  held_pending?: number
+  held_confirmed?: number
+  externally_managed?: boolean
   min_pax: number
   status: 'draft' | 'open' | 'limited' | 'full' | 'guaranteed' | 'cancelled'
   price_per_person: number | null
@@ -87,6 +92,10 @@ export default function DeparturesPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
+  // The company's own currency (organizations.default_currency), from the
+  // list call: a new departure is priced in it.
+  const [orgCurrency, setOrgCurrency] = useState('')
+
   // Filters
   const [statusFilter, setStatusFilter] = useState<string>('upcoming')
   const [searchQuery, setSearchQuery] = useState('')
@@ -103,8 +112,10 @@ export default function DeparturesPage() {
     min_pax: 2,
     price_per_person: '',
     // The price's currency. A clone keeps its source's — the create call used
-    // to leave it out, so a JPY departure cloned came back priced in EUR.
-    currency: 'EUR',
+    // to leave it out, so a JPY departure cloned came back priced in EUR. A
+    // new one starts in the company's own (set when the list loads); blank
+    // lets the server use it.
+    currency: '',
     status: 'open'
   })
 
@@ -142,6 +153,10 @@ export default function DeparturesPage() {
 
       const depResult = await depResponse.json()
       setDepartures(depResult.data || [])
+      if (depResult.default_currency) {
+        setOrgCurrency(depResult.default_currency)
+        setNewDeparture(prev => (prev.currency ? prev : { ...prev, currency: depResult.default_currency }))
+      }
 
       if (templateResponse.ok) {
         const templateResult = await templateResponse.json()
@@ -200,7 +215,7 @@ export default function DeparturesPage() {
         max_pax: 20,
         min_pax: 2,
         price_per_person: '',
-        currency: 'EUR',
+        currency: orgCurrency,
         status: 'open'
       })
       loadData()
@@ -230,7 +245,7 @@ export default function DeparturesPage() {
       max_pax: departure.max_pax,
       min_pax: departure.min_pax,
       price_per_person: departure.price_per_person != null ? String(departure.price_per_person) : '',
-      currency: departure.currency || 'EUR',
+      currency: departure.currency || orgCurrency,
       status: departure.status === 'cancelled' || departure.status === 'full' ? 'open' : departure.status,
     })
     setError(null)
@@ -241,7 +256,17 @@ export default function DeparturesPage() {
   // UPDATE STATUS
   // ============================================
 
-  const updateStatus = async (id: string, status: string) => {
+  const updateStatus = async (departure: TourDeparture, status: string) => {
+    const id = departure.id
+    // Cancelling releases the date's pending web-order holds (migration
+    // 20261215); confirmed ones stay until released on the departure page.
+    if (status === 'cancelled' && ((departure.held_pending ?? 0) > 0 || (departure.held_confirmed ?? 0) > 0)) {
+      const parts = [
+        departure.held_pending ? `its ${departure.held_pending} pending held seat(s) are released` : null,
+        departure.held_confirmed ? `its ${departure.held_confirmed} confirmed seat(s) stay held until you release them on the departure's page` : null,
+      ].filter(Boolean)
+      if (!(await confirmDialog(`Cancel this departure? ${parts.join('; ')}.`))) return
+    }
     try {
       const response = await fetch(`/api/departures/${id}`, {
         method: 'PUT',
@@ -490,8 +515,13 @@ export default function DeparturesPage() {
                         <div className="flex items-center justify-end gap-2 mb-1">
                           <Users className="w-4 h-4 text-gray-400" />
                           <span className="font-medium text-gray-900">{sum.booked}/{sum.seats}</span>
-                          <span className="text-sm text-gray-500">booked</span>
+                          <span className="text-sm text-gray-500" title="Seats booked outside the app plus confirmed and pending web-order holds, over the shown dates that are not cancelled">
+                            taken
+                          </span>
                         </div>
+                        {sum.pending > 0 && (
+                          <div className="text-xs text-amber-700 mb-1">{sum.pending} held seat{sum.pending === 1 ? '' : 's'} pending</div>
+                        )}
                         <div className="w-32 h-1.5 bg-gray-200 rounded-full overflow-hidden ml-auto">
                           <div
                             className="h-full bg-green-500"
@@ -541,16 +571,23 @@ export default function DeparturesPage() {
                       {group.departures.map(departure => (
                         <div key={departure.id} className="flex items-center justify-between gap-4 py-2 text-sm">
                           <div className="flex items-center gap-3">
-                            <span className="text-gray-900">{shortDate(departure.start_date)}</span>
+                            <Link href={`/departures/${departure.id}`} className="text-gray-900 hover:text-[#647C47] hover:underline">
+                              {shortDate(departure.start_date)}
+                            </Link>
                             <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_CONFIG[departure.status].color}`}>
                               {STATUS_CONFIG[departure.status].label}
                             </span>
-                            <span className="text-gray-500">{departure.booked_pax}/{departure.max_pax} booked</span>
+                            <span className="text-gray-500">{departure.seats_taken ?? departure.booked_pax}/{departure.max_pax} taken</span>
+                            {(departure.held_pending ?? 0) > 0 && (
+                              <span className="text-xs text-amber-700">{departure.held_pending} pending</span>
+                            )}
                           </div>
                           <div className="flex items-center gap-1">
                             <select
                               value={departure.status}
-                              onChange={(e) => updateStatus(departure.id, e.target.value)}
+                              disabled={departure.externally_managed}
+                              title={departure.externally_managed ? 'Kept in sync by an integration — change it at the partner' : undefined}
+                              onChange={(e) => updateStatus(departure, e.target.value)}
                               className="px-2 py-1 text-xs border border-gray-200 rounded focus:outline-none focus:ring-1 focus:ring-[#647C47] bg-white"
                             >
                               <option value="draft">Draft</option>
@@ -701,7 +738,7 @@ export default function DeparturesPage() {
               {/* Price */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Price per Person ({newDeparture.currency})
+                  Price per Person{newDeparture.currency ? ` (${newDeparture.currency})` : ''}
                 </label>
                 <input
                   type="number"

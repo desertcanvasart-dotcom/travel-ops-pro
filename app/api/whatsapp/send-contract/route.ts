@@ -6,6 +6,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createServerClient } from '@/lib/supabase-server'
 import { generateContractPDF } from '@/lib/contract-pdf-generator'
+import { loadTripVatExtras, vatMarker, vatOnLiveNet } from '@/lib/vat'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { orgIdentity } from '@/lib/org-identity'
 import { contractNumberFor, contractPrice, describeDestinations } from '@/lib/contract-facts'
@@ -87,6 +88,13 @@ export async function POST(request: NextRequest) {
       // The trip's own destinations — it printed "Cairo, Luxor, Aswan" for all.
       destinations: contract.destinations?.trim() || describeDestinations(itinerary.destinations),
       totalCost,
+      // The trip's VAT (lib/vat.ts): stated under the price, not on its
+      // extras lines.
+      vat: {
+        vat_applied: itinerary.vat_applied === true,
+        vat_rate: itinerary.vat_rate ?? null,
+        vat_excluded: itinerary.vat_applied === true ? (await loadTripVatExtras(supabase, itinerary.id)).vat_excluded : 0,
+      },
       document: {
         ...contract,
         // Sent without the page (an older client): the trip's own lists.
@@ -122,7 +130,10 @@ export async function POST(request: NextRequest) {
       `📅 *Dates:* ${contractDay(itinerary.start_date)} - ${contractDay(itinerary.end_date)}\n` +
       `👥 *Travelers:* ${itinerary.num_adults} adult${itinerary.num_adults > 1 ? 's' : ''}` +
       `${itinerary.num_children > 0 ? `, ${itinerary.num_children} child${itinerary.num_children > 1 ? 'ren' : ''}` : ''}\n` +
-      `💰 *Total:* ${contractPrice(totalCost, itinerary.currency)}\n\n` +
+      `💰 *Total:* ${contractPrice(totalCost, itinerary.currency)}\n` +
+      // VAT, always stated with the price (lib/vat.ts), as on the PDF.
+      (totalCost !== null ? `🧾 ${vatMarker(vatOnLiveNet(contractData.vat, totalCost, contractData.currency), contractData.currency)}\n` : '') +
+      `\n` +
       `📄 Please review the attached contract carefully.\n\n` +
       `✍️ *Next Steps:*\n` +
       `1. Review all terms and conditions\n` +
