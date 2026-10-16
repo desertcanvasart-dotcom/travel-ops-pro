@@ -29,6 +29,7 @@ import {
   UtensilsCrossed,
   Plane,
   Coins,
+  ClipboardCheck,
   LogOut,
   Ticket,
   Contact,
@@ -196,6 +197,7 @@ const navigationConfig: NavConfig[] = [
     items: [
       { labelKey: 'suppliers', href: '/suppliers', icon: Building },
       { labelKey: 'ratesHub', href: '/rates', icon: Coins },
+      { labelKey: 'ratesCheck', href: '/rates/check', icon: ClipboardCheck },
       {
         labelKey: 'accommodation', href: '/rates#accommodation', icon: Hotel,
         children: [

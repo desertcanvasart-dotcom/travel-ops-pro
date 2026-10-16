@@ -36,6 +36,21 @@ export function packageRules(pkg: PackageTypeConfig): string {
   if (!pkg.includes.internalTransfers) {
     rules.push(`- NO internal transfers: leave intercity routes out.`)
   }
+  if (!pkg.includes.overnightMoves) {
+    rules.push(
+      `- ONE base: every day starts and ends at the same place. No transfer that moves the party to sleep in another city; a visit to another city is a day trip from the base, back the same day.`
+    )
+  }
+  if (pkg.includes.startPoint === 'port') {
+    rules.push(
+      `- SHORE EXCURSIONS: each day starts and ends at the cruise port or terminal (the day's city is the port city). Transport is from the port and back; no hotels, no airport transfers.`
+    )
+  }
+  if (pkg.includes.cruise) {
+    rules.push(
+      `- CRUISE INCLUDED: the nights on board take the "cruise" slot (the ship the text names, else a cruise from the catalog on that route) and NO hotel on those nights.`
+    )
+  }
   if (pkg.includes.meals === 'none') {
     rules.push(`- NO meals: leave the "meals" slot EMPTY.`)
   }
