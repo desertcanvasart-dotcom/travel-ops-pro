@@ -1,16 +1,16 @@
 -- ============================================================
--- RESUME step 1 from 20261205 — for the Supabase SQL editor (v2)
+-- RESUME step 1 from 20261205 — for the Supabase SQL editor (v3)
 -- ============================================================
--- The SQL editor keeps no temporary table or temporary function from one
--- statement to the next, so 20261205–20261208's backfills failed
--- ("relation _sup_use does not exist") while the migrations were recorded.
--- This is 20261205–20261209 exactly as in 1-before-deploy.sql, except that
--- the helpers and working tables live in a scratch schema, release_tmp,
--- made here and removed at the end. Each migration is written to be safe
--- to run again, so this completes what was skipped and applies 20261209.
-DROP SCHEMA IF EXISTS release_tmp CASCADE;
-CREATE SCHEMA release_tmp;
-
+-- ONE statement. The SQL editor split the earlier scripts into pieces and
+-- lost what one piece made before the next used it ("_sup_use does not
+-- exist", then "schema release_tmp does not exist"). Here 20261205–20261209,
+-- exactly as in 1-before-deploy.sql, run inside a single DO block: one
+-- session, one transaction. If anything fails, all of it is undone.
+-- Each migration is written to be safe to run again: this completes the
+-- backfills that were skipped and applies 20261209.
+DO $release$
+BEGIN
+  EXECUTE $s0001$
 -- 20261205_suppliers_org_id
 -- ==================================================================
 -- ============================================
@@ -139,15 +139,16 @@ CREATE SCHEMA release_tmp;
 -- company's original; review rows ON CONFLICT DO NOTHING; policies dropped
 -- before created; every table and column guarded. On a bare replay (no
 -- organisations) nothing is written.
-BEGIN;
 
 -- pg_temp helpers for this migration only.
-CREATE OR REPLACE FUNCTION release_tmp.has_col(t text, c text) RETURNS boolean
+CREATE OR REPLACE FUNCTION pg_temp.has_col(t text, c text) RETURNS boolean
   LANGUAGE sql STABLE AS $$
   SELECT EXISTS (SELECT 1 FROM information_schema.columns
                   WHERE table_schema = 'public' AND table_name = t AND column_name = c)
-$$;
-CREATE OR REPLACE FUNCTION release_tmp.set_trigger(t text, trg text, enabled boolean) RETURNS void
+$$
+$s0001$;
+  EXECUTE $s0002$
+CREATE OR REPLACE FUNCTION pg_temp.set_trigger(t text, trg text, enabled boolean) RETURNS void
   LANGUAGE plpgsql AS $$
 BEGIN
   IF to_regclass('public.' || t) IS NOT NULL
@@ -155,34 +156,44 @@ BEGIN
     EXECUTE format('ALTER TABLE public.%I %s TRIGGER %I', t, CASE WHEN enabled THEN 'ENABLE' ELSE 'DISABLE' END, trg);
   END IF;
 END
-$$;
-
+$$
+$s0002$;
+  EXECUTE $s0003$
 -- ---------------------------------------------------------------------------
 -- Columns, copy maps, the per-company code
 -- ---------------------------------------------------------------------------
-ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES public.organizations(id) ON DELETE CASCADE;
+ALTER TABLE public.suppliers ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES public.organizations(id) ON DELETE CASCADE
+$s0003$;
+  EXECUTE $s0004$
 DO $$
 BEGIN
   IF to_regclass('public.supplier_properties') IS NOT NULL THEN
     ALTER TABLE public.supplier_properties ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES public.organizations(id) ON DELETE CASCADE;
   END IF;
 END
-$$;
-
+$$
+$s0004$;
+  EXECUTE $s0005$
 -- supplier_code is unique per company from here on (a copy keeps its
 -- original's code).
-DROP INDEX IF EXISTS public.suppliers_supplier_code_key;
-
+DROP INDEX IF EXISTS public.suppliers_supplier_code_key
+$s0005$;
+  EXECUTE $s0006$
 CREATE TABLE IF NOT EXISTS public.org_backfill_supplier_copies (
   original_id uuid NOT NULL REFERENCES public.suppliers(id) ON DELETE CASCADE,
   copy_id uuid NOT NULL REFERENCES public.suppliers(id) ON DELETE CASCADE,
   org_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (original_id, org_id)
-);
-ALTER TABLE public.org_backfill_supplier_copies ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.org_backfill_supplier_copies FROM PUBLIC, anon, authenticated;
-
+)
+$s0006$;
+  EXECUTE $s0007$
+ALTER TABLE public.org_backfill_supplier_copies ENABLE ROW LEVEL SECURITY
+$s0007$;
+  EXECUTE $s0008$
+REVOKE ALL ON public.org_backfill_supplier_copies FROM PUBLIC, anon, authenticated
+$s0008$;
+  EXECUTE $s0009$
 DO $$
 BEGIN
   IF to_regclass('public.supplier_properties') IS NOT NULL THEN
@@ -197,8 +208,9 @@ BEGIN
     REVOKE ALL ON public.org_backfill_property_copies FROM PUBLIC, anon, authenticated;
   END IF;
 END
-$$;
-
+$$
+$s0009$;
+  EXECUTE $s0010$
 -- The code trigger of 20261029, with "taken" asked within the row's company.
 -- Same contract otherwise: mint when blank, never blank a code on update,
 -- an explicit SUP-#### fast-forwards the shared sequence past itself.
@@ -244,14 +256,15 @@ BEGIN
 
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
-
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+$s0010$;
+  EXECUTE $s0011$
 -- ---------------------------------------------------------------------------
 -- Backfill
 -- ---------------------------------------------------------------------------
-DROP TABLE IF EXISTS release_tmp._sup_use;
-CREATE TABLE release_tmp._sup_use (supplier_id uuid NOT NULL, org_id uuid NOT NULL, signal text NOT NULL);
-
+CREATE TEMP TABLE _sup_use (supplier_id uuid NOT NULL, org_id uuid NOT NULL, signal text NOT NULL) ON COMMIT DROP
+$s0011$;
+  EXECUTE $s0012$
 DO $$
 DECLARE
   dflt uuid;
@@ -276,8 +289,8 @@ BEGIN
 
   -- The backfill must not stamp every row as just edited, nor recompute a
   -- trip's totals because a service's supplier id moved to the copy.
-  PERFORM release_tmp.set_trigger('suppliers', 'set_updated_at', false);
-  PERFORM release_tmp.set_trigger('suppliers', 'update_suppliers_timestamp', false);
+  PERFORM pg_temp.set_trigger('suppliers', 'set_updated_at', false);
+  PERFORM pg_temp.set_trigger('suppliers', 'update_suppliers_timestamp', false);
 
   -- 1–2. Who uses each supplier still without a company.
   FOREACH spec SLICE 1 IN ARRAY ARRAY[
@@ -294,20 +307,20 @@ BEGIN
   ] LOOP
     tbl := spec[1];
     col := spec[2];
-    IF NOT release_tmp.has_col(tbl, col) OR NOT release_tmp.has_col(tbl, 'org_id') THEN CONTINUE; END IF;
+    IF NOT pg_temp.has_col(tbl, col) OR NOT pg_temp.has_col(tbl, 'org_id') THEN CONTINUE; END IF;
     EXECUTE format($f$
-      INSERT INTO release_tmp._sup_use (supplier_id, org_id, signal)
+      INSERT INTO _sup_use (supplier_id, org_id, signal)
       SELECT s.id, r.org_id, 'use'
         FROM public.%1$I r JOIN public.suppliers s ON s.id = r.%2$I
        WHERE r.org_id IS NOT NULL AND s.org_id IS NULL
     $f$, tbl, col);
   END LOOP;
 
-  IF release_tmp.has_col('itinerary_services', 'itinerary_day_id') AND to_regclass('public.itinerary_days') IS NOT NULL THEN
+  IF pg_temp.has_col('itinerary_services', 'itinerary_day_id') AND to_regclass('public.itinerary_days') IS NOT NULL THEN
     FOREACH col IN ARRAY ARRAY['supplier_id', 'sold_by_supplier_id'] LOOP
-      IF NOT release_tmp.has_col('itinerary_services', col) THEN CONTINUE; END IF;
+      IF NOT pg_temp.has_col('itinerary_services', col) THEN CONTINUE; END IF;
       EXECUTE format($f$
-        INSERT INTO release_tmp._sup_use (supplier_id, org_id, signal)
+        INSERT INTO _sup_use (supplier_id, org_id, signal)
         SELECT s.id, i.org_id, 'use'
           FROM public.itinerary_services r
           JOIN public.itinerary_days d ON d.id = r.itinerary_day_id
@@ -318,8 +331,8 @@ BEGIN
     END LOOP;
   END IF;
 
-  IF release_tmp.has_col('itinerary_resources', 'resource_id') THEN
-    INSERT INTO release_tmp._sup_use (supplier_id, org_id, signal)
+  IF pg_temp.has_col('itinerary_resources', 'resource_id') THEN
+    INSERT INTO _sup_use (supplier_id, org_id, signal)
     SELECT s.id, i.org_id, 'use'
       FROM public.itinerary_resources r
       JOIN public.itineraries i ON i.id = r.itinerary_id
@@ -327,8 +340,8 @@ BEGIN
      WHERE i.org_id IS NOT NULL AND s.org_id IS NULL;
   END IF;
 
-  IF release_tmp.has_col('booking_supplier_status', 'supplier_id') THEN
-    INSERT INTO release_tmp._sup_use (supplier_id, org_id, signal)
+  IF pg_temp.has_col('booking_supplier_status', 'supplier_id') THEN
+    INSERT INTO _sup_use (supplier_id, org_id, signal)
     SELECT s.id, b.org_id, 'use'
       FROM public.booking_supplier_status r
       JOIN public.bookings b ON b.id = r.booking_id
@@ -344,16 +357,16 @@ BEGIN
       'nile_cruises', 'seasonal_rates', 'sleeping_train_rates', 'train_rates',
       'transportation_rates', 'vehicle_rates'
     ] LOOP
-      IF NOT release_tmp.has_col(tbl, 'supplier_id') THEN CONTINUE; END IF;
+      IF NOT pg_temp.has_col(tbl, 'supplier_id') THEN CONTINUE; END IF;
       EXECUTE format($f$
-        INSERT INTO release_tmp._sup_use (supplier_id, org_id, signal)
+        INSERT INTO _sup_use (supplier_id, org_id, signal)
         SELECT s.id, public.org_backfill_user_org(l.changed_by), 'rate'
           FROM public.%1$I r
           JOIN public.suppliers s ON s.id = r.supplier_id
           JOIN public.rate_audit_log l ON l.table_name = %1$L AND l.record_id = r.id AND l.action = 'INSERT'
          WHERE s.org_id IS NULL AND l.changed_by IS NOT NULL
            AND public.org_backfill_user_org(l.changed_by) IS NOT NULL
-           AND NOT EXISTS (SELECT 1 FROM release_tmp._sup_use u WHERE u.supplier_id = s.id AND u.signal = 'use')
+           AND NOT EXISTS (SELECT 1 FROM _sup_use u WHERE u.supplier_id = s.id AND u.signal = 'use')
       $f$, tbl);
     END LOOP;
   END IF;
@@ -361,15 +374,14 @@ BEGIN
   -- The plan: per supplier, its companies ranked — most rows first, a tie to
   -- the catalogue default, then the lower id. Rank 1 keeps the original;
   -- every other company gets a copy.
-  DROP TABLE IF EXISTS release_tmp._sup_plan;
-  CREATE TABLE release_tmp._sup_plan AS
+  CREATE TEMP TABLE _sup_plan ON COMMIT DROP AS
   SELECT supplier_id, org_id, n,
          row_number() OVER (PARTITION BY supplier_id ORDER BY n DESC, (org_id = cat) DESC, org_id::text) AS rnk,
          count(*) OVER (PARTITION BY supplier_id) AS orgs
-    FROM (SELECT supplier_id, org_id, count(*) AS n FROM release_tmp._sup_use GROUP BY supplier_id, org_id) g;
+    FROM (SELECT supplier_id, org_id, count(*) AS n FROM _sup_use GROUP BY supplier_id, org_id) g;
 
   UPDATE public.suppliers s SET org_id = p.org_id
-    FROM release_tmp._sup_plan p
+    FROM _sup_plan p
    WHERE p.supplier_id = s.id AND p.rnk = 1 AND s.org_id IS NULL;
 
   -- 4. Nothing traces it: the catalogue default, listed.
@@ -401,7 +413,7 @@ BEGIN
 
   FOR rec IN
     SELECT p.supplier_id, p.org_id
-      FROM release_tmp._sup_plan p
+      FROM _sup_plan p
      WHERE p.rnk > 1
        AND NOT EXISTS (SELECT 1 FROM public.org_backfill_supplier_copies m
                         WHERE m.original_id = p.supplier_id AND m.org_id = p.org_id)
@@ -432,11 +444,12 @@ BEGIN
     END IF;
   END LOOP;
 
-  PERFORM release_tmp.set_trigger('suppliers', 'set_updated_at', true);
-  PERFORM release_tmp.set_trigger('suppliers', 'update_suppliers_timestamp', true);
+  PERFORM pg_temp.set_trigger('suppliers', 'set_updated_at', true);
+  PERFORM pg_temp.set_trigger('suppliers', 'update_suppliers_timestamp', true);
 END
-$$;
-
+$$
+$s0012$;
+  EXECUTE $s0013$
 -- ---------------------------------------------------------------------------
 -- Each company's rows point at its own copy (runs on every replay: it only
 -- moves rows still pointing at another company's original).
@@ -458,7 +471,7 @@ BEGIN
     ARRAY['itinerary_resources', 'set_updated_at'], ARRAY['booking_supplier_status', 'set_updated_at'],
     ARRAY['itinerary_services', 'trg_recalc_on_service_update']
   ] LOOP
-    PERFORM release_tmp.set_trigger(spec[1], spec[2], false);
+    PERFORM pg_temp.set_trigger(spec[1], spec[2], false);
   END LOOP;
 
   FOREACH spec SLICE 1 IN ARRAY ARRAY[
@@ -475,7 +488,7 @@ BEGIN
   ] LOOP
     tbl := spec[1];
     col := spec[2];
-    IF NOT release_tmp.has_col(tbl, col) OR NOT release_tmp.has_col(tbl, 'org_id') THEN CONTINUE; END IF;
+    IF NOT pg_temp.has_col(tbl, col) OR NOT pg_temp.has_col(tbl, 'org_id') THEN CONTINUE; END IF;
     EXECUTE format($f$
       UPDATE public.%1$I r SET %2$I = m.copy_id
         FROM public.org_backfill_supplier_copies m
@@ -483,9 +496,9 @@ BEGIN
     $f$, tbl, col);
   END LOOP;
 
-  IF release_tmp.has_col('itinerary_services', 'itinerary_day_id') AND to_regclass('public.itinerary_days') IS NOT NULL THEN
+  IF pg_temp.has_col('itinerary_services', 'itinerary_day_id') AND to_regclass('public.itinerary_days') IS NOT NULL THEN
     FOREACH col IN ARRAY ARRAY['supplier_id', 'sold_by_supplier_id'] LOOP
-      IF NOT release_tmp.has_col('itinerary_services', col) THEN CONTINUE; END IF;
+      IF NOT pg_temp.has_col('itinerary_services', col) THEN CONTINUE; END IF;
       EXECUTE format($f$
         UPDATE public.itinerary_services r SET %1$I = m.copy_id
           FROM public.itinerary_days d, public.itineraries i, public.org_backfill_supplier_copies m
@@ -495,13 +508,13 @@ BEGIN
     END LOOP;
   END IF;
 
-  IF release_tmp.has_col('itinerary_resources', 'resource_id') THEN
+  IF pg_temp.has_col('itinerary_resources', 'resource_id') THEN
     UPDATE public.itinerary_resources r SET resource_id = m.copy_id
       FROM public.itineraries i, public.org_backfill_supplier_copies m
      WHERE i.id = r.itinerary_id AND r.resource_id = m.original_id AND m.org_id = i.org_id;
   END IF;
 
-  IF release_tmp.has_col('booking_supplier_status', 'supplier_id') THEN
+  IF pg_temp.has_col('booking_supplier_status', 'supplier_id') THEN
     UPDATE public.booking_supplier_status r SET supplier_id = m.copy_id
       FROM public.bookings b, public.org_backfill_supplier_copies m
      WHERE b.id = r.booking_id AND r.supplier_id = m.original_id AND m.org_id = b.org_id;
@@ -515,11 +528,12 @@ BEGIN
     ARRAY['itinerary_resources', 'set_updated_at'], ARRAY['booking_supplier_status', 'set_updated_at'],
     ARRAY['itinerary_services', 'trg_recalc_on_service_update']
   ] LOOP
-    PERFORM release_tmp.set_trigger(spec[1], spec[2], true);
+    PERFORM pg_temp.set_trigger(spec[1], spec[2], true);
   END LOOP;
 END
-$$;
-
+$$
+$s0013$;
+  EXECUTE $s0014$
 -- ---------------------------------------------------------------------------
 -- NOT NULL, indexes, the per-company code, the property's company
 -- ---------------------------------------------------------------------------
@@ -538,12 +552,18 @@ BEGIN
     END IF;
   END LOOP;
 END
-$$;
-
-CREATE UNIQUE INDEX IF NOT EXISTS suppliers_org_code_key ON public.suppliers (org_id, supplier_code);
-CREATE INDEX IF NOT EXISTS idx_suppliers_org_name ON public.suppliers (org_id, name);
-CREATE INDEX IF NOT EXISTS idx_suppliers_org_types ON public.suppliers USING gin (types) WHERE org_id IS NOT NULL;
-
+$$
+$s0014$;
+  EXECUTE $s0015$
+CREATE UNIQUE INDEX IF NOT EXISTS suppliers_org_code_key ON public.suppliers (org_id, supplier_code)
+$s0015$;
+  EXECUTE $s0016$
+CREATE INDEX IF NOT EXISTS idx_suppliers_org_name ON public.suppliers (org_id, name)
+$s0016$;
+  EXECUTE $s0017$
+CREATE INDEX IF NOT EXISTS idx_suppliers_org_types ON public.suppliers USING gin (types) WHERE org_id IS NOT NULL
+$s0017$;
+  EXECUTE $s0018$
 -- A property is always in its supplier's company: set from the supplier on
 -- every insert and every change of supplier, whatever the caller sent. As
 -- the invoking role (not definer): through PostgREST a user who cannot see
@@ -557,8 +577,9 @@ BEGIN
   NEW.org_id := (SELECT s.org_id FROM public.suppliers s WHERE s.id = NEW.supplier_id);
   RETURN NEW;
 END
-$$;
-
+$$
+$s0018$;
+  EXECUTE $s0019$
 DO $$
 BEGIN
   IF to_regclass('public.supplier_properties') IS NOT NULL THEN
@@ -569,8 +590,9 @@ BEGIN
       FOR EACH ROW EXECUTE FUNCTION public.supplier_properties_org_from_supplier();
   END IF;
 END
-$$;
-
+$$
+$s0019$;
+  EXECUTE $s0020$
 -- ---------------------------------------------------------------------------
 -- The staff views: org_id exposed, stamped on insert, kept on update
 -- ---------------------------------------------------------------------------
@@ -593,8 +615,9 @@ CREATE OR REPLACE VIEW public.airport_staff WITH (security_invoker='on') AS
     is_preferred,
     org_id
    FROM public.suppliers
-  WHERE ('airport_assistant'::text = ANY (types));
-
+  WHERE ('airport_assistant'::text = ANY (types))
+$s0020$;
+  EXECUTE $s0021$
 CREATE OR REPLACE VIEW public.guides WITH (security_invoker='on') AS
  SELECT id,
     name,
@@ -621,8 +644,9 @@ CREATE OR REPLACE VIEW public.guides WITH (security_invoker='on') AS
     whatsapp,
     org_id
    FROM public.suppliers
-  WHERE ('guide'::text = ANY (types));
-
+  WHERE ('guide'::text = ANY (types))
+$s0021$;
+  EXECUTE $s0022$
 CREATE OR REPLACE VIEW public.hotel_staff WITH (security_invoker='on') AS
  SELECT id,
     name,
@@ -641,8 +665,9 @@ CREATE OR REPLACE VIEW public.hotel_staff WITH (security_invoker='on') AS
     is_preferred,
     org_id
    FROM public.suppliers
-  WHERE ('hotel_assistant'::text = ANY (types));
-
+  WHERE ('hotel_assistant'::text = ANY (types))
+$s0022$;
+  EXECUTE $s0023$
 CREATE OR REPLACE FUNCTION public.airport_staff_view_insert() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -662,8 +687,9 @@ BEGIN
   )
   RETURNING id INTO NEW.id;
   RETURN NEW;
-END $$;
-
+END $$
+$s0023$;
+  EXECUTE $s0024$
 -- The company is never changed through the view: an update addresses the
 -- row it was given, in the company it is in.
 CREATE OR REPLACE FUNCTION public.airport_staff_view_update() RETURNS trigger
@@ -688,8 +714,9 @@ BEGIN
   WHERE id = OLD.id AND org_id = OLD.org_id AND 'airport_assistant' = ANY(types);
   NEW.org_id := OLD.org_id;
   RETURN NEW;
-END $$;
-
+END $$
+$s0024$;
+  EXECUTE $s0025$
 CREATE OR REPLACE FUNCTION public.airport_staff_view_delete() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -708,8 +735,9 @@ BEGIN
       updated_at = now()
   WHERE id = OLD.id AND org_id = OLD.org_id AND 'airport_assistant' = ANY(types);
   RETURN OLD;
-END $$;
-
+END $$
+$s0025$;
+  EXECUTE $s0026$
 CREATE OR REPLACE FUNCTION public.guides_view_insert() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -732,8 +760,9 @@ BEGIN
   )
   RETURNING id INTO NEW.id;
   RETURN NEW;
-END $$;
-
+END $$
+$s0026$;
+  EXECUTE $s0027$
 CREATE OR REPLACE FUNCTION public.guides_view_update() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -763,16 +792,18 @@ BEGIN
   WHERE id = OLD.id AND org_id = OLD.org_id AND type = 'guide';
   NEW.org_id := OLD.org_id;
   RETURN NEW;
-END $$;
-
+END $$
+$s0027$;
+  EXECUTE $s0028$
 CREATE OR REPLACE FUNCTION public.guides_view_delete() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
 BEGIN
   DELETE FROM public.suppliers WHERE id = OLD.id AND org_id = OLD.org_id AND type = 'guide';
   RETURN OLD;
-END $$;
-
+END $$
+$s0028$;
+  EXECUTE $s0029$
 -- hotel_staff: the airport_staff triggers, for hotel assistants.
 CREATE OR REPLACE FUNCTION public.hotel_staff_view_insert() RETURNS trigger
     LANGUAGE plpgsql
@@ -793,8 +824,9 @@ BEGIN
   )
   RETURNING id INTO NEW.id;
   RETURN NEW;
-END $$;
-
+END $$
+$s0029$;
+  EXECUTE $s0030$
 CREATE OR REPLACE FUNCTION public.hotel_staff_view_update() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -816,8 +848,9 @@ BEGIN
   WHERE id = OLD.id AND org_id = OLD.org_id AND 'hotel_assistant' = ANY(types);
   NEW.org_id := OLD.org_id;
   RETURN NEW;
-END $$;
-
+END $$
+$s0030$;
+  EXECUTE $s0031$
 CREATE OR REPLACE FUNCTION public.hotel_staff_view_delete() RETURNS trigger
     LANGUAGE plpgsql
     AS $$
@@ -836,33 +869,62 @@ BEGIN
       updated_at = now()
   WHERE id = OLD.id AND org_id = OLD.org_id AND 'hotel_assistant' = ANY(types);
   RETURN OLD;
-END $$;
-
-DROP TRIGGER IF EXISTS hotel_staff_view_insert_trg ON public.hotel_staff;
-CREATE TRIGGER hotel_staff_view_insert_trg INSTEAD OF INSERT ON public.hotel_staff FOR EACH ROW EXECUTE FUNCTION public.hotel_staff_view_insert();
-DROP TRIGGER IF EXISTS hotel_staff_view_update_trg ON public.hotel_staff;
-CREATE TRIGGER hotel_staff_view_update_trg INSTEAD OF UPDATE ON public.hotel_staff FOR EACH ROW EXECUTE FUNCTION public.hotel_staff_view_update();
-DROP TRIGGER IF EXISTS hotel_staff_view_delete_trg ON public.hotel_staff;
-CREATE TRIGGER hotel_staff_view_delete_trg INSTEAD OF DELETE ON public.hotel_staff FOR EACH ROW EXECUTE FUNCTION public.hotel_staff_view_delete();
-
+END $$
+$s0031$;
+  EXECUTE $s0032$
+DROP TRIGGER IF EXISTS hotel_staff_view_insert_trg ON public.hotel_staff
+$s0032$;
+  EXECUTE $s0033$
+CREATE TRIGGER hotel_staff_view_insert_trg INSTEAD OF INSERT ON public.hotel_staff FOR EACH ROW EXECUTE FUNCTION public.hotel_staff_view_insert()
+$s0033$;
+  EXECUTE $s0034$
+DROP TRIGGER IF EXISTS hotel_staff_view_update_trg ON public.hotel_staff
+$s0034$;
+  EXECUTE $s0035$
+CREATE TRIGGER hotel_staff_view_update_trg INSTEAD OF UPDATE ON public.hotel_staff FOR EACH ROW EXECUTE FUNCTION public.hotel_staff_view_update()
+$s0035$;
+  EXECUTE $s0036$
+DROP TRIGGER IF EXISTS hotel_staff_view_delete_trg ON public.hotel_staff
+$s0036$;
+  EXECUTE $s0037$
+CREATE TRIGGER hotel_staff_view_delete_trg INSTEAD OF DELETE ON public.hotel_staff FOR EACH ROW EXECUTE FUNCTION public.hotel_staff_view_delete()
+$s0037$;
+  EXECUTE $s0038$
 -- ---------------------------------------------------------------------------
 -- RLS
 -- ---------------------------------------------------------------------------
-DROP POLICY IF EXISTS suppliers_authenticated_all ON public.suppliers;
-DROP POLICY IF EXISTS suppliers_org_select ON public.suppliers;
-DROP POLICY IF EXISTS suppliers_org_insert ON public.suppliers;
-DROP POLICY IF EXISTS suppliers_org_update ON public.suppliers;
-DROP POLICY IF EXISTS suppliers_org_delete ON public.suppliers;
+DROP POLICY IF EXISTS suppliers_authenticated_all ON public.suppliers
+$s0038$;
+  EXECUTE $s0039$
+DROP POLICY IF EXISTS suppliers_org_select ON public.suppliers
+$s0039$;
+  EXECUTE $s0040$
+DROP POLICY IF EXISTS suppliers_org_insert ON public.suppliers
+$s0040$;
+  EXECUTE $s0041$
+DROP POLICY IF EXISTS suppliers_org_update ON public.suppliers
+$s0041$;
+  EXECUTE $s0042$
+DROP POLICY IF EXISTS suppliers_org_delete ON public.suppliers
+$s0042$;
+  EXECUTE $s0043$
 CREATE POLICY suppliers_org_select ON public.suppliers FOR SELECT TO authenticated
-  USING (public.user_is_in_org(org_id));
+  USING (public.user_is_in_org(org_id))
+$s0043$;
+  EXECUTE $s0044$
 CREATE POLICY suppliers_org_insert ON public.suppliers FOR INSERT TO authenticated
-  WITH CHECK (public.user_is_in_org(org_id) AND public.is_manager_or_above());
+  WITH CHECK (public.user_is_in_org(org_id) AND public.is_manager_or_above())
+$s0044$;
+  EXECUTE $s0045$
 CREATE POLICY suppliers_org_update ON public.suppliers FOR UPDATE TO authenticated
   USING (public.user_is_in_org(org_id) AND public.is_manager_or_above())
-  WITH CHECK (public.user_is_in_org(org_id) AND public.is_manager_or_above());
+  WITH CHECK (public.user_is_in_org(org_id) AND public.is_manager_or_above())
+$s0045$;
+  EXECUTE $s0046$
 CREATE POLICY suppliers_org_delete ON public.suppliers FOR DELETE TO authenticated
-  USING (public.user_is_in_org(org_id) AND public.is_manager_or_above());
-
+  USING (public.user_is_in_org(org_id) AND public.is_manager_or_above())
+$s0046$;
+  EXECUTE $s0047$
 DO $$
 BEGIN
   IF to_regclass('public.supplier_properties') IS NULL THEN RETURN; END IF;
@@ -881,12 +943,12 @@ BEGIN
   CREATE POLICY supplier_properties_org_delete ON public.supplier_properties FOR DELETE TO authenticated
     USING (public.user_is_in_org(org_id) AND public.is_manager_or_above());
 END
-$$;
-
-COMMIT;
-
-INSERT INTO public.schema_migrations (name) VALUES ('20261205_suppliers_org_id') ON CONFLICT DO NOTHING;
-
+$$
+$s0047$;
+  EXECUTE $s0048$
+INSERT INTO public.schema_migrations (name) VALUES ('20261205_suppliers_org_id') ON CONFLICT DO NOTHING
+$s0048$;
+  EXECUTE $s0049$
 -- ==================================================================
 -- 20261206_rates_org_id
 -- ==================================================================
@@ -1064,7 +1126,6 @@ INSERT INTO public.schema_migrations (name) VALUES ('20261205_suppliers_org_id')
 -- NULLs, a copy is made only where none is recorded, review rows ON CONFLICT
 -- DO NOTHING, policies dropped before created, tables guarded (to_regclass).
 -- On a bare replay (no organisations) nothing is written.
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.org_backfill_rate_copies (
   table_name text NOT NULL,
@@ -1073,10 +1134,15 @@ CREATE TABLE IF NOT EXISTS public.org_backfill_rate_copies (
   org_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (table_name, original_id, org_id)
-);
-ALTER TABLE public.org_backfill_rate_copies ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.org_backfill_rate_copies FROM PUBLIC, anon, authenticated;
-
+)
+$s0049$;
+  EXECUTE $s0050$
+ALTER TABLE public.org_backfill_rate_copies ENABLE ROW LEVEL SECURITY
+$s0050$;
+  EXECUTE $s0051$
+REVOKE ALL ON public.org_backfill_rate_copies FROM PUBLIC, anon, authenticated
+$s0051$;
+  EXECUTE $s0052$
 -- ---------------------------------------------------------------------------
 -- Columns; triggers off for the backfill (it must neither stamp every row as
 -- just edited nor write an audit row per assignment); global uniques dropped
@@ -1109,24 +1175,45 @@ BEGIN
     ALTER TABLE public.entrance_fee_versions DISABLE TRIGGER set_updated_at;
   END IF;
 END
-$$;
-DROP INDEX IF EXISTS public.idx_flight_rates_service_code;
-DROP INDEX IF EXISTS public.uq_guide_rates_natural_key;
-ALTER TABLE IF EXISTS public.nile_cruises DROP CONSTRAINT IF EXISTS nile_cruises_cruise_code_key;
-ALTER TABLE IF EXISTS public.fixed_daily_costs DROP CONSTRAINT IF EXISTS fixed_daily_costs_cost_type_key;
-ALTER TABLE IF EXISTS public.vehicles DROP CONSTRAINT IF EXISTS vehicles_license_plate_key;
-ALTER TABLE IF EXISTS public.attraction_aliases DROP CONSTRAINT IF EXISTS attraction_aliases_alias_key;
-ALTER TABLE IF EXISTS public.destinations DROP CONSTRAINT IF EXISTS destinations_country_code_key;
-ALTER TABLE IF EXISTS public.b2b_transport_packages DROP CONSTRAINT IF EXISTS b2b_transport_packages_package_code_key;
+$$
+$s0052$;
+  EXECUTE $s0053$
+DROP INDEX IF EXISTS public.idx_flight_rates_service_code
+$s0053$;
+  EXECUTE $s0054$
+DROP INDEX IF EXISTS public.uq_guide_rates_natural_key
+$s0054$;
+  EXECUTE $s0055$
+ALTER TABLE IF EXISTS public.nile_cruises DROP CONSTRAINT IF EXISTS nile_cruises_cruise_code_key
+$s0055$;
+  EXECUTE $s0056$
+ALTER TABLE IF EXISTS public.fixed_daily_costs DROP CONSTRAINT IF EXISTS fixed_daily_costs_cost_type_key
+$s0056$;
+  EXECUTE $s0057$
+ALTER TABLE IF EXISTS public.vehicles DROP CONSTRAINT IF EXISTS vehicles_license_plate_key
+$s0057$;
+  EXECUTE $s0058$
+ALTER TABLE IF EXISTS public.attraction_aliases DROP CONSTRAINT IF EXISTS attraction_aliases_alias_key
+$s0058$;
+  EXECUTE $s0059$
+ALTER TABLE IF EXISTS public.destinations DROP CONSTRAINT IF EXISTS destinations_country_code_key
+$s0059$;
+  EXECUTE $s0060$
+ALTER TABLE IF EXISTS public.b2b_transport_packages DROP CONSTRAINT IF EXISTS b2b_transport_packages_package_code_key
+$s0060$;
+  EXECUTE $s0061$
 -- A database whose b2b_transport_packages and b2b_partners predate org_id
 -- (the E2E project's: see 20261018) gets the column here, so the per-company
 -- key and the policies below have it. Production and a fresh install have it
 -- already (b2b_partners.org_id is NOT NULL there): a no-op.
 ALTER TABLE IF EXISTS public.b2b_transport_packages
-  ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES public.organizations(id) ON DELETE CASCADE;
+  ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES public.organizations(id) ON DELETE CASCADE
+$s0061$;
+  EXECUTE $s0062$
 ALTER TABLE IF EXISTS public.b2b_partners
-  ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES public.organizations(id) ON DELETE CASCADE;
-
+  ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES public.organizations(id) ON DELETE CASCADE
+$s0062$;
+  EXECUTE $s0063$
 -- ---------------------------------------------------------------------------
 -- Migration-only helpers (dropped at the end).
 -- ---------------------------------------------------------------------------
@@ -1158,8 +1245,9 @@ BEGIN
   ON CONFLICT (table_name, row_id, reason) DO NOTHING;
   RETURN new_id;
 END
-$fn$;
-
+$fn$
+$s0063$;
+  EXECUTE $s0064$
 -- Place one rate-like table's rows (rules 1-5 above), then copy each row into
 -- every other company whose trips use it.
 CREATE OR REPLACE FUNCTION public.org_backfill_place_catalogue(p_table text)
@@ -1176,11 +1264,11 @@ BEGIN
   has_code := EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = p_table AND column_name = 'service_code');
 
   -- This table's uses, by company.
-  DELETE FROM release_tmp._org_t_use;
-  EXECUTE format('INSERT INTO release_tmp._org_t_use SELECT DISTINCT u.rid, u.org FROM release_tmp._org_rate_use u JOIN public.%I r ON r.id = u.rid', p_table);
+  DELETE FROM _org_t_use;
+  EXECUTE format('INSERT INTO _org_t_use SELECT DISTINCT u.rid, u.org FROM _org_rate_use u JOIN public.%I r ON r.id = u.rid', p_table);
   IF has_code AND to_regclass('public.itinerary_services') IS NOT NULL THEN
     EXECUTE format($q$
-      INSERT INTO release_tmp._org_t_use
+      INSERT INTO _org_t_use
       SELECT DISTINCT r.id, i.org_id
         FROM public.%I r
         JOIN public.itinerary_services s ON s.service_code = r.service_code
@@ -1211,7 +1299,7 @@ BEGIN
   -- 3. The one company whose trips use it.
   EXECUTE format($q$
     UPDATE public.%I r SET org_id = u.o
-      FROM (SELECT rid, min(org::text)::uuid AS o FROM release_tmp._org_t_use GROUP BY rid HAVING count(DISTINCT org) = 1) u
+      FROM (SELECT rid, min(org::text)::uuid AS o FROM _org_t_use GROUP BY rid HAVING count(DISTINCT org) = 1) u
      WHERE r.org_id IS NULL AND u.rid = r.id
   $q$, p_table);
 
@@ -1219,10 +1307,10 @@ BEGIN
   EXECUTE format($q$
     WITH filled AS (
       UPDATE public.%1$I r SET org_id = coalesce(
-          (SELECT x.org FROM release_tmp._org_t_use x WHERE x.rid = r.id AND x.org = %2$L::uuid LIMIT 1),
-          (SELECT x.org FROM release_tmp._org_t_use x JOIN public.organizations o ON o.id = x.org
+          (SELECT x.org FROM _org_t_use x WHERE x.rid = r.id AND x.org = %2$L::uuid LIMIT 1),
+          (SELECT x.org FROM _org_t_use x JOIN public.organizations o ON o.id = x.org
             WHERE x.rid = r.id ORDER BY o.created_at, o.id LIMIT 1))
-       WHERE r.org_id IS NULL AND r.id IN (SELECT rid FROM release_tmp._org_t_use)
+       WHERE r.org_id IS NULL AND r.id IN (SELECT rid FROM _org_t_use)
       RETURNING r.id, r.org_id
     )
     INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
@@ -1243,7 +1331,7 @@ BEGIN
   -- A row another company's trips use: a copy for that company.
   FOR rec IN EXECUTE format($q$
     SELECT DISTINCT u.rid, u.org, r.org_id AS home
-      FROM release_tmp._org_t_use u JOIN public.%I r ON r.id = u.rid
+      FROM _org_t_use u JOIN public.%I r ON r.id = u.rid
      WHERE u.org <> r.org_id
        AND NOT EXISTS (SELECT 1 FROM public.org_backfill_rate_copies c
                         WHERE c.table_name = %L AND c.original_id = u.rid AND c.org_id = u.org)
@@ -1256,8 +1344,9 @@ BEGIN
     ON CONFLICT (table_name, row_id, reason) DO NOTHING;
   END LOOP;
 END
-$fn$;
-
+$fn$
+$s0064$;
+  EXECUTE $s0065$
 -- One copy per other company of every row (fixed costs, destinations,
 -- aliases: nothing traces them to a company, and each needs its own).
 CREATE OR REPLACE FUNCTION public.org_backfill_copy_for_each(p_table text)
@@ -1278,23 +1367,25 @@ BEGIN
     PERFORM public.org_backfill_copy_catalogue_row(p_table, rec.id, rec.org, 'copied for each company');
   END LOOP;
 END
-$fn$;
-
+$fn$
+$s0065$;
+  EXECUTE $s0066$
 -- ---------------------------------------------------------------------------
 -- What trips use: (row id, company). Ids are uuids, unique across tables, so
 -- one list serves every table.
 -- ---------------------------------------------------------------------------
-DROP TABLE IF EXISTS release_tmp._org_rate_use;
-CREATE TABLE release_tmp._org_rate_use (rid uuid, org uuid);
-DROP TABLE IF EXISTS release_tmp._org_t_use;
-CREATE TABLE release_tmp._org_t_use (rid uuid, org uuid);
-
+CREATE TEMP TABLE IF NOT EXISTS _org_rate_use (rid uuid, org uuid) ON COMMIT DROP
+$s0066$;
+  EXECUTE $s0067$
+CREATE TEMP TABLE IF NOT EXISTS _org_t_use (rid uuid, org uuid) ON COMMIT DROP
+$s0067$;
+  EXECUTE $s0068$
 DO $$
 DECLARE
   spec text[];
 BEGIN
   IF to_regclass('public.itinerary_services') IS NOT NULL THEN
-    INSERT INTO release_tmp._org_rate_use
+    INSERT INTO _org_rate_use
     SELECT m[1]::uuid, i.org_id
       FROM public.itinerary_services s
       JOIN public.itinerary_days d ON d.id = s.itinerary_day_id
@@ -1303,12 +1394,12 @@ BEGIN
      WHERE s.notes LIKE '%rate_id:%' AND i.org_id IS NOT NULL;
   END IF;
   IF to_regclass('public.itinerary_resources') IS NOT NULL THEN
-    INSERT INTO release_tmp._org_rate_use
+    INSERT INTO _org_rate_use
     SELECT r.resource_id, i.org_id FROM public.itinerary_resources r JOIN public.itineraries i ON i.id = r.itinerary_id
      WHERE i.org_id IS NOT NULL;
   END IF;
   IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'b2b_pricing_rules' AND column_name = 'org_id') THEN
-    INSERT INTO release_tmp._org_rate_use SELECT rate_id, org_id FROM public.b2b_pricing_rules WHERE rate_id IS NOT NULL AND org_id IS NOT NULL;
+    INSERT INTO _org_rate_use SELECT rate_id, org_id FROM public.b2b_pricing_rules WHERE rate_id IS NOT NULL AND org_id IS NOT NULL;
   END IF;
   FOREACH spec SLICE 1 IN ARRAY ARRAY[
     ARRAY['itineraries', 'assigned_vehicle_id'],
@@ -1320,12 +1411,13 @@ BEGIN
   ] LOOP
     IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = spec[1] AND column_name = spec[2])
        AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = spec[1] AND column_name = 'org_id') THEN
-      EXECUTE format('INSERT INTO release_tmp._org_rate_use SELECT %2$I, org_id FROM public.%1$I WHERE %2$I IS NOT NULL AND org_id IS NOT NULL', spec[1], spec[2]);
+      EXECUTE format('INSERT INTO _org_rate_use SELECT %2$I, org_id FROM public.%1$I WHERE %2$I IS NOT NULL AND org_id IS NOT NULL', spec[1], spec[2]);
     END IF;
   END LOOP;
 END
-$$;
-
+$$
+$s0068$;
+  EXECUTE $s0069$
 -- ---------------------------------------------------------------------------
 -- Place every table.
 -- ---------------------------------------------------------------------------
@@ -1373,8 +1465,9 @@ BEGIN
      WHERE c.table_name = 'destinations' AND c.original_id = a.destination_id AND c.org_id = a.org_id;
   END IF;
 END
-$$;
-
+$$
+$s0069$;
+  EXECUTE $s0070$
 -- ---------------------------------------------------------------------------
 -- Each company's references point at its own copy.
 -- ---------------------------------------------------------------------------
@@ -1388,15 +1481,14 @@ BEGIN
   -- These are fix-ups, not edits: no recalculation, no "updated" stamp, no
   -- client-status side effects. Only triggers that are on are turned off,
   -- and only those are turned back on.
-  DROP TABLE IF EXISTS release_tmp._org_trg_off;
-  CREATE TABLE release_tmp._org_trg_off (tbl text, tg text);
+  CREATE TEMP TABLE IF NOT EXISTS _org_trg_off (tbl text, tg text) ON COMMIT DROP;
   FOR trg IN
     SELECT c.relname AS tbl, t.tgname AS tg FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
      WHERE NOT t.tgisinternal AND t.tgenabled = 'O' AND c.relnamespace = 'public'::regnamespace
        AND c.relname IN ('itinerary_services', 'itinerary_resources', 'b2b_pricing_rules', 'itineraries', 'bookings', 'tour_departures')
   LOOP
     EXECUTE format('ALTER TABLE public.%I DISABLE TRIGGER %I', trg.tbl, trg.tg);
-    INSERT INTO release_tmp._org_trg_off VALUES (trg.tbl, trg.tg);
+    INSERT INTO _org_trg_off VALUES (trg.tbl, trg.tg);
   END LOOP;
 
   IF to_regclass('public.itinerary_services') IS NOT NULL THEN
@@ -1431,13 +1523,14 @@ BEGIN
     END IF;
   END LOOP;
 
-  FOR trg IN SELECT * FROM release_tmp._org_trg_off LOOP
+  FOR trg IN SELECT * FROM _org_trg_off LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE TRIGGER %I', trg.tbl, trg.tg);
   END LOOP;
-  DELETE FROM release_tmp._org_trg_off;
+  DELETE FROM _org_trg_off;
 END
-$$;
-
+$$
+$s0070$;
+  EXECUTE $s0071$
 -- ---------------------------------------------------------------------------
 -- A rate's supplier / property is its own company's (20261205's copies).
 -- ---------------------------------------------------------------------------
@@ -1485,8 +1578,9 @@ BEGIN
     END IF;
   END LOOP;
 END
-$$;
-
+$$
+$s0071$;
+  EXECUTE $s0072$
 -- ---------------------------------------------------------------------------
 -- rate_audit_log: its rate's company.
 -- ---------------------------------------------------------------------------
@@ -1516,8 +1610,9 @@ BEGIN
   SELECT 'rate_audit_log', id::text, cat, 'rate no longer exists — catalogue default' FROM filled
   ON CONFLICT (table_name, row_id, reason) DO NOTHING;
 END
-$$;
-
+$$
+$s0072$;
+  EXECUTE $s0073$
 -- The audit row carries its rate's company.
 CREATE OR REPLACE FUNCTION public.fn_rate_audit_trigger() RETURNS trigger
     LANGUAGE plpgsql SECURITY DEFINER
@@ -1589,9 +1684,12 @@ BEGIN
     RETURN NEW;
   END IF;
 END;
-$$;
-REVOKE EXECUTE ON FUNCTION public.fn_rate_audit_trigger() FROM PUBLIC, anon, authenticated;
-
+$$
+$s0073$;
+  EXECUTE $s0074$
+REVOKE EXECUTE ON FUNCTION public.fn_rate_audit_trigger() FROM PUBLIC, anon, authenticated
+$s0074$;
+  EXECUTE $s0075$
 -- ---------------------------------------------------------------------------
 -- NOT NULL, indexes, per-company uniques, triggers back on
 -- ---------------------------------------------------------------------------
@@ -1697,8 +1795,9 @@ BEGIN
     ALTER TABLE public.b2b_transport_packages ADD CONSTRAINT b2b_transport_packages_org_id_package_code_key UNIQUE (org_id, package_code);
   END IF;
 END
-$$;
-
+$$
+$s0075$;
+  EXECUTE $s0076$
 -- ---------------------------------------------------------------------------
 -- RLS
 -- ---------------------------------------------------------------------------
@@ -1805,31 +1904,57 @@ BEGIN
       WITH CHECK (public.is_manager_or_above() AND EXISTS (SELECT 1 FROM public.b2b_partners p WHERE p.id = partner_id AND public.user_is_in_org(p.org_id)));
   END IF;
 END
-$$;
-
+$$
+$s0076$;
+  EXECUTE $s0077$
 -- ---------------------------------------------------------------------------
 -- Dead objects; migration-only helpers
 -- ---------------------------------------------------------------------------
-DROP VIEW IF EXISTS public.tour_overview;
-ALTER TABLE IF EXISTS public.tour_templates DROP CONSTRAINT IF EXISTS tour_templates_primary_destination_id_fkey;
-DROP TABLE IF EXISTS public.destinations_legacy_2025;
-DROP TABLE IF EXISTS public.meal_costs;
-DROP TABLE IF EXISTS public.outside_cairo_fees;
-DROP TABLE IF EXISTS public.seasonal_adjustments;
-DROP TABLE IF EXISTS public.transportation_contacts;
-DROP TABLE IF EXISTS public.profit_margins;
-DROP TABLE IF EXISTS public.discount_rules;
-DROP TABLE IF EXISTS public.booking_rules;
-DROP TABLE IF EXISTS public.package_type_definitions;
-
-DROP FUNCTION IF EXISTS public.org_backfill_place_catalogue(text);
-DROP FUNCTION IF EXISTS public.org_backfill_copy_for_each(text);
-DROP FUNCTION IF EXISTS public.org_backfill_copy_catalogue_row(text, uuid, uuid, text);
-
-COMMIT;
-
-INSERT INTO public.schema_migrations (name) VALUES ('20261206_rates_org_id') ON CONFLICT DO NOTHING;
-
+DROP VIEW IF EXISTS public.tour_overview
+$s0077$;
+  EXECUTE $s0078$
+ALTER TABLE IF EXISTS public.tour_templates DROP CONSTRAINT IF EXISTS tour_templates_primary_destination_id_fkey
+$s0078$;
+  EXECUTE $s0079$
+DROP TABLE IF EXISTS public.destinations_legacy_2025
+$s0079$;
+  EXECUTE $s0080$
+DROP TABLE IF EXISTS public.meal_costs
+$s0080$;
+  EXECUTE $s0081$
+DROP TABLE IF EXISTS public.outside_cairo_fees
+$s0081$;
+  EXECUTE $s0082$
+DROP TABLE IF EXISTS public.seasonal_adjustments
+$s0082$;
+  EXECUTE $s0083$
+DROP TABLE IF EXISTS public.transportation_contacts
+$s0083$;
+  EXECUTE $s0084$
+DROP TABLE IF EXISTS public.profit_margins
+$s0084$;
+  EXECUTE $s0085$
+DROP TABLE IF EXISTS public.discount_rules
+$s0085$;
+  EXECUTE $s0086$
+DROP TABLE IF EXISTS public.booking_rules
+$s0086$;
+  EXECUTE $s0087$
+DROP TABLE IF EXISTS public.package_type_definitions
+$s0087$;
+  EXECUTE $s0088$
+DROP FUNCTION IF EXISTS public.org_backfill_place_catalogue(text)
+$s0088$;
+  EXECUTE $s0089$
+DROP FUNCTION IF EXISTS public.org_backfill_copy_for_each(text)
+$s0089$;
+  EXECUTE $s0090$
+DROP FUNCTION IF EXISTS public.org_backfill_copy_catalogue_row(text, uuid, uuid, text)
+$s0090$;
+  EXECUTE $s0091$
+INSERT INTO public.schema_migrations (name) VALUES ('20261206_rates_org_id') ON CONFLICT DO NOTHING
+$s0091$;
+  EXECUTE $s0092$
 -- ==================================================================
 -- 20261207_tours_org_id
 -- ==================================================================
@@ -2000,7 +2125,6 @@ INSERT INTO public.schema_migrations (name) VALUES ('20261206_rates_org_id') ON 
 -- NULLs, a copy is made only where none is recorded, review rows ON CONFLICT
 -- DO NOTHING, policies dropped before created, tables guarded (to_regclass).
 -- On a bare replay (no organisations) nothing is written.
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.org_backfill_tour_copies (
   table_name text NOT NULL,
@@ -2009,20 +2133,30 @@ CREATE TABLE IF NOT EXISTS public.org_backfill_tour_copies (
   org_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (table_name, original_id, org_id)
-);
-ALTER TABLE public.org_backfill_tour_copies ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.org_backfill_tour_copies FROM PUBLIC, anon, authenticated;
-
+)
+$s0092$;
+  EXECUTE $s0093$
+ALTER TABLE public.org_backfill_tour_copies ENABLE ROW LEVEL SECURITY
+$s0093$;
+  EXECUTE $s0094$
+REVOKE ALL ON public.org_backfill_tour_copies FROM PUBLIC, anon, authenticated
+$s0094$;
+  EXECUTE $s0095$
 CREATE TABLE IF NOT EXISTS public.org_backfill_tour_orphans (
   table_name text NOT NULL,
   row_id uuid NOT NULL,
   row_data jsonb NOT NULL,
   deleted_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (table_name, row_id)
-);
-ALTER TABLE public.org_backfill_tour_orphans ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.org_backfill_tour_orphans FROM PUBLIC, anon, authenticated;
-
+)
+$s0095$;
+  EXECUTE $s0096$
+ALTER TABLE public.org_backfill_tour_orphans ENABLE ROW LEVEL SECURITY
+$s0096$;
+  EXECUTE $s0097$
+REVOKE ALL ON public.org_backfill_tour_orphans FROM PUBLIC, anon, authenticated
+$s0097$;
+  EXECUTE $s0098$
 -- ---------------------------------------------------------------------------
 -- Columns; the "updated" stamp off for the backfill (an assignment is not an
 -- edit); global uniques dropped (a copy keeps its original's code).
@@ -2042,11 +2176,18 @@ BEGIN
     END IF;
   END LOOP;
 END
-$$;
-ALTER TABLE IF EXISTS public.tour_templates DROP CONSTRAINT IF EXISTS tour_templates_template_code_key;
-ALTER TABLE IF EXISTS public.tour_variations DROP CONSTRAINT IF EXISTS tour_variations_variation_code_key;
-ALTER TABLE IF EXISTS public.tours DROP CONSTRAINT IF EXISTS tours_tour_code_key;
-
+$$
+$s0098$;
+  EXECUTE $s0099$
+ALTER TABLE IF EXISTS public.tour_templates DROP CONSTRAINT IF EXISTS tour_templates_template_code_key
+$s0099$;
+  EXECUTE $s0100$
+ALTER TABLE IF EXISTS public.tour_variations DROP CONSTRAINT IF EXISTS tour_variations_variation_code_key
+$s0100$;
+  EXECUTE $s0101$
+ALTER TABLE IF EXISTS public.tours DROP CONSTRAINT IF EXISTS tours_tour_code_key
+$s0101$;
+  EXECUTE $s0102$
 -- ---------------------------------------------------------------------------
 -- Migration-only helpers (dropped at the end).
 -- ---------------------------------------------------------------------------
@@ -2062,8 +2203,9 @@ BEGIN
        FROM public.%1$I r WHERE r.%2$I = $2',
     p_table, p_fk) USING p_to, p_from;
 END
-$fn$;
-
+$fn$
+$s0102$;
+  EXECUTE $s0103$
 -- Copy one variation into a company (under p_template, which may be NULL),
 -- with everything hanging off it.
 CREATE OR REPLACE FUNCTION public.org_backfill_copy_variation(p_id uuid, p_org uuid, p_template uuid)
@@ -2084,8 +2226,9 @@ BEGIN
   VALUES ('tour_variations', p_id, new_id, p_org);
   RETURN new_id;
 END
-$fn$;
-
+$fn$
+$s0103$;
+  EXECUTE $s0104$
 -- Copy one template into a company, with its versions, day activities and
 -- every variation.
 CREATE OR REPLACE FUNCTION public.org_backfill_copy_template(p_id uuid, p_org uuid)
@@ -2107,8 +2250,9 @@ BEGIN
   VALUES ('tour_templates', p_id, new_id, p_org);
   RETURN new_id;
 END
-$fn$;
-
+$fn$
+$s0104$;
+  EXECUTE $s0105$
 -- ---------------------------------------------------------------------------
 -- Orphans: children with no parent. Saved whole, listed, deleted.
 -- ---------------------------------------------------------------------------
@@ -2138,52 +2282,55 @@ BEGIN
     EXECUTE format('ALTER TABLE public.%I ALTER COLUMN %I SET NOT NULL', spec[1], spec[2]);
   END LOOP;
 END
-$$;
-
+$$
+$s0105$;
+  EXECUTE $s0106$
 -- ---------------------------------------------------------------------------
 -- Who uses what: (template id, company), (variation id, company).
 -- ---------------------------------------------------------------------------
-DROP TABLE IF EXISTS release_tmp._tour_t_use;
-CREATE TABLE release_tmp._tour_t_use (tid uuid, org uuid);
-DROP TABLE IF EXISTS release_tmp._tour_v_use;
-CREATE TABLE release_tmp._tour_v_use (vid uuid, org uuid);
-
+CREATE TEMP TABLE IF NOT EXISTS _tour_t_use (tid uuid, org uuid) ON COMMIT DROP
+$s0106$;
+  EXECUTE $s0107$
+CREATE TEMP TABLE IF NOT EXISTS _tour_v_use (vid uuid, org uuid) ON COMMIT DROP
+$s0107$;
+  EXECUTE $s0108$
 DO $$
 BEGIN
   IF to_regclass('public.tour_templates') IS NULL THEN RETURN; END IF;
-  DELETE FROM release_tmp._tour_t_use;
-  DELETE FROM release_tmp._tour_v_use;
+  DELETE FROM _tour_t_use;
+  DELETE FROM _tour_v_use;
 
   IF to_regclass('public.itineraries') IS NOT NULL THEN
-    INSERT INTO release_tmp._tour_t_use SELECT template_id, org_id FROM public.itineraries
+    INSERT INTO _tour_t_use SELECT template_id, org_id FROM public.itineraries
      WHERE template_id IS NOT NULL AND org_id IS NOT NULL;
   END IF;
   IF to_regclass('public.tour_departures') IS NOT NULL THEN
-    INSERT INTO release_tmp._tour_t_use SELECT template_id, org_id FROM public.tour_departures
+    INSERT INTO _tour_t_use SELECT template_id, org_id FROM public.tour_departures
      WHERE template_id IS NOT NULL AND org_id IS NOT NULL;
-    INSERT INTO release_tmp._tour_v_use SELECT variation_id, org_id FROM public.tour_departures
+    INSERT INTO _tour_v_use SELECT variation_id, org_id FROM public.tour_departures
      WHERE variation_id IS NOT NULL AND org_id IS NOT NULL;
   END IF;
   IF to_regclass('public.tour_quotes') IS NOT NULL THEN
-    INSERT INTO release_tmp._tour_v_use SELECT variation_id, org_id FROM public.tour_quotes
+    INSERT INTO _tour_v_use SELECT variation_id, org_id FROM public.tour_quotes
      WHERE variation_id IS NOT NULL AND org_id IS NOT NULL;
   END IF;
   IF to_regclass('public.b2b_partner_pricing') IS NOT NULL AND to_regclass('public.b2b_partners') IS NOT NULL THEN
-    INSERT INTO release_tmp._tour_v_use SELECT pp.variation_id, p.org_id
+    INSERT INTO _tour_v_use SELECT pp.variation_id, p.org_id
       FROM public.b2b_partner_pricing pp JOIN public.b2b_partners p ON p.id = pp.partner_id
      WHERE pp.variation_id IS NOT NULL AND p.org_id IS NOT NULL;
   END IF;
   -- A variation's use is its template's use.
-  INSERT INTO release_tmp._tour_t_use SELECT v.template_id, u.org FROM release_tmp._tour_v_use u
+  INSERT INTO _tour_t_use SELECT v.template_id, u.org FROM _tour_v_use u
     JOIN public.tour_variations v ON v.id = u.vid WHERE v.template_id IS NOT NULL;
   IF to_regclass('public.web_order_intakes') IS NOT NULL THEN
-    INSERT INTO release_tmp._tour_t_use SELECT t.id, w.org_id FROM public.web_order_intakes w
+    INSERT INTO _tour_t_use SELECT t.id, w.org_id FROM public.web_order_intakes w
       JOIN public.tour_templates t ON lower(trim(t.template_code)) = lower(trim(w.tour_code))
      WHERE coalesce(trim(w.tour_code), '') <> '' AND w.org_id IS NOT NULL;
   END IF;
 END
-$$;
-
+$$
+$s0108$;
+  EXECUTE $s0109$
 -- ---------------------------------------------------------------------------
 -- Place templates, variations and tours; copy what another company uses.
 -- ---------------------------------------------------------------------------
@@ -2206,17 +2353,17 @@ BEGIN
 
   -- 1. Used by exactly one company.
   UPDATE public.tour_templates t SET org_id = u.o
-    FROM (SELECT tid, min(org::text)::uuid AS o FROM release_tmp._tour_t_use GROUP BY tid HAVING count(DISTINCT org) = 1) u
+    FROM (SELECT tid, min(org::text)::uuid AS o FROM _tour_t_use GROUP BY tid HAVING count(DISTINCT org) = 1) u
    WHERE t.org_id IS NULL AND u.tid = t.id;
 
   -- 2. Used by both: the catalogue default when it is one of them, else the
   --    older company.
   WITH filled AS (
     UPDATE public.tour_templates t SET org_id = coalesce(
-        (SELECT x.org FROM release_tmp._tour_t_use x WHERE x.tid = t.id AND x.org = cat LIMIT 1),
-        (SELECT x.org FROM release_tmp._tour_t_use x JOIN public.organizations o ON o.id = x.org
+        (SELECT x.org FROM _tour_t_use x WHERE x.tid = t.id AND x.org = cat LIMIT 1),
+        (SELECT x.org FROM _tour_t_use x JOIN public.organizations o ON o.id = x.org
           WHERE x.tid = t.id ORDER BY o.created_at, o.id LIMIT 1))
-     WHERE t.org_id IS NULL AND t.id IN (SELECT tid FROM release_tmp._tour_t_use)
+     WHERE t.org_id IS NULL AND t.id IN (SELECT tid FROM _tour_t_use)
     RETURNING t.id, t.org_id
   )
   INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
@@ -2246,14 +2393,14 @@ BEGIN
    WHERE v.org_id IS NULL AND t.id = v.template_id;
   -- No template: the company of what uses it.
   UPDATE public.tour_variations v SET org_id = u.o
-    FROM (SELECT vid, min(org::text)::uuid AS o FROM release_tmp._tour_v_use GROUP BY vid HAVING count(DISTINCT org) = 1) u
+    FROM (SELECT vid, min(org::text)::uuid AS o FROM _tour_v_use GROUP BY vid HAVING count(DISTINCT org) = 1) u
    WHERE v.org_id IS NULL AND u.vid = v.id;
   WITH filled AS (
     UPDATE public.tour_variations v SET org_id = coalesce(
-        (SELECT x.org FROM release_tmp._tour_v_use x WHERE x.vid = v.id AND x.org = cat LIMIT 1),
-        (SELECT x.org FROM release_tmp._tour_v_use x JOIN public.organizations o ON o.id = x.org
+        (SELECT x.org FROM _tour_v_use x WHERE x.vid = v.id AND x.org = cat LIMIT 1),
+        (SELECT x.org FROM _tour_v_use x JOIN public.organizations o ON o.id = x.org
           WHERE x.vid = v.id ORDER BY o.created_at, o.id LIMIT 1))
-     WHERE v.org_id IS NULL AND v.id IN (SELECT vid FROM release_tmp._tour_v_use)
+     WHERE v.org_id IS NULL AND v.id IN (SELECT vid FROM _tour_v_use)
     RETURNING v.id, v.org_id
   )
   INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
@@ -2279,7 +2426,7 @@ BEGIN
   -- A template another company uses: a copy for that company.
   FOR rec IN
     SELECT DISTINCT u.tid, u.org, t.org_id AS home
-      FROM release_tmp._tour_t_use u JOIN public.tour_templates t ON t.id = u.tid
+      FROM _tour_t_use u JOIN public.tour_templates t ON t.id = u.tid
      WHERE u.org <> t.org_id
        AND NOT EXISTS (SELECT 1 FROM public.org_backfill_tour_copies c
                         WHERE c.table_name = 'tour_templates' AND c.original_id = u.tid AND c.org_id = u.org)
@@ -2296,7 +2443,7 @@ BEGIN
   -- A template-less variation another company uses: likewise.
   FOR rec IN
     SELECT DISTINCT u.vid, u.org, v.org_id AS home
-      FROM release_tmp._tour_v_use u JOIN public.tour_variations v ON v.id = u.vid
+      FROM _tour_v_use u JOIN public.tour_variations v ON v.id = u.vid
      WHERE v.template_id IS NULL AND u.org <> v.org_id
        AND NOT EXISTS (SELECT 1 FROM public.org_backfill_tour_copies c
                         WHERE c.table_name = 'tour_variations' AND c.original_id = u.vid AND c.org_id = u.org)
@@ -2310,8 +2457,9 @@ BEGIN
     ON CONFLICT (table_name, row_id, reason) DO NOTHING;
   END LOOP;
 END
-$$;
-
+$$
+$s0109$;
+  EXECUTE $s0110$
 -- ---------------------------------------------------------------------------
 -- Each company's references point at its own copy.
 -- ---------------------------------------------------------------------------
@@ -2323,15 +2471,14 @@ BEGIN
 
   -- Fix-ups, not edits: no recalculation, no "updated" stamp, no revision
   -- rows. Only triggers that are on are turned off, and only those back on.
-  DROP TABLE IF EXISTS release_tmp._tour_trg_off;
-  CREATE TABLE release_tmp._tour_trg_off (tbl text, tg text);
+  CREATE TEMP TABLE IF NOT EXISTS _tour_trg_off (tbl text, tg text) ON COMMIT DROP;
   FOR trg IN
     SELECT c.relname AS tbl, t.tgname AS tg FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
      WHERE NOT t.tgisinternal AND t.tgenabled = 'O' AND c.relnamespace = 'public'::regnamespace
        AND c.relname IN ('itineraries', 'tour_departures', 'tour_quotes', 'b2b_partner_pricing', 'quote_revisions', 'content_usage_log')
   LOOP
     EXECUTE format('ALTER TABLE public.%I DISABLE TRIGGER %I', trg.tbl, trg.tg);
-    INSERT INTO release_tmp._tour_trg_off VALUES (trg.tbl, trg.tg);
+    INSERT INTO _tour_trg_off VALUES (trg.tbl, trg.tg);
   END LOOP;
 
   IF to_regclass('public.itineraries') IS NOT NULL THEN
@@ -2369,13 +2516,14 @@ BEGIN
        AND c.original_id = l.variation_id AND c.org_id = i.org_id;
   END IF;
 
-  FOR trg IN SELECT * FROM release_tmp._tour_trg_off LOOP
+  FOR trg IN SELECT * FROM _tour_trg_off LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE TRIGGER %I', trg.tbl, trg.tg);
   END LOOP;
-  DELETE FROM release_tmp._tour_trg_off;
+  DELETE FROM _tour_trg_off;
 END
-$$;
-
+$$
+$s0110$;
+  EXECUTE $s0111$
 -- ---------------------------------------------------------------------------
 -- A tour's rates are its own company's (20261206's copies).
 -- ---------------------------------------------------------------------------
@@ -2387,9 +2535,8 @@ BEGIN
   IF to_regclass('public.org_backfill_rate_copies') IS NULL THEN RETURN; END IF;
 
   -- Every rate's company. Ids are uuids, unique across the rate tables.
-  DROP TABLE IF EXISTS release_tmp._tour_rate_home;
-  CREATE TABLE release_tmp._tour_rate_home (id uuid PRIMARY KEY, org uuid);
-  DELETE FROM release_tmp._tour_rate_home;
+  CREATE TEMP TABLE IF NOT EXISTS _tour_rate_home (id uuid PRIMARY KEY, org uuid) ON COMMIT DROP;
+  DELETE FROM _tour_rate_home;
   FOREACH t IN ARRAY ARRAY[
     'accommodation_rates', 'activity_rates', 'airport_staff_rates', 'hotel_staff_rates', 'guide_rates',
     'meal_rates', 'nile_cruises', 'flight_rates', 'train_rates', 'sleeping_train_rates',
@@ -2400,18 +2547,17 @@ BEGIN
        OR NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = t AND column_name = 'org_id') THEN
       CONTINUE;
     END IF;
-    EXECUTE format('INSERT INTO release_tmp._tour_rate_home SELECT id, org_id FROM public.%I ON CONFLICT (id) DO NOTHING', t);
+    EXECUTE format('INSERT INTO _tour_rate_home SELECT id, org_id FROM public.%I ON CONFLICT (id) DO NOTHING', t);
   END LOOP;
 
   -- The same rate in a given company: the copy made for it, or the original
   -- a copy was made from.
-  DROP TABLE IF EXISTS release_tmp._tour_rate_twin;
-  CREATE TABLE release_tmp._tour_rate_twin (rid uuid, org uuid, twin uuid);
-  DELETE FROM release_tmp._tour_rate_twin;
-  INSERT INTO release_tmp._tour_rate_twin SELECT original_id, org_id, copy_id FROM public.org_backfill_rate_copies;
-  INSERT INTO release_tmp._tour_rate_twin SELECT c.copy_id, h.org, c.original_id
-    FROM public.org_backfill_rate_copies c JOIN release_tmp._tour_rate_home h ON h.id = c.original_id;
-  INSERT INTO release_tmp._tour_rate_twin SELECT c1.copy_id, c2.org_id, c2.copy_id
+  CREATE TEMP TABLE IF NOT EXISTS _tour_rate_twin (rid uuid, org uuid, twin uuid) ON COMMIT DROP;
+  DELETE FROM _tour_rate_twin;
+  INSERT INTO _tour_rate_twin SELECT original_id, org_id, copy_id FROM public.org_backfill_rate_copies;
+  INSERT INTO _tour_rate_twin SELECT c.copy_id, h.org, c.original_id
+    FROM public.org_backfill_rate_copies c JOIN _tour_rate_home h ON h.id = c.original_id;
+  INSERT INTO _tour_rate_twin SELECT c1.copy_id, c2.org_id, c2.copy_id
     FROM public.org_backfill_rate_copies c1 JOIN public.org_backfill_rate_copies c2
       ON c2.original_id = c1.original_id AND c2.org_id <> c1.org_id;
 
@@ -2422,7 +2568,7 @@ BEGIN
     ] LOOP
       EXECUTE format($q$
         UPDATE public.tour_days d SET %1$I = w.twin
-          FROM public.tours tr, release_tmp._tour_rate_home h, release_tmp._tour_rate_twin w
+          FROM public.tours tr, _tour_rate_home h, _tour_rate_twin w
          WHERE tr.id = d.tour_id AND h.id = d.%1$I AND h.org <> tr.org_id
            AND w.rid = d.%1$I AND w.org = tr.org_id
       $q$, spec[1]);
@@ -2430,7 +2576,7 @@ BEGIN
         INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
         SELECT 'tour_days', d.id::text, tr.org_id, 'rate belongs to another company'
           FROM public.tour_days d JOIN public.tours tr ON tr.id = d.tour_id
-          JOIN release_tmp._tour_rate_home h ON h.id = d.%1$I
+          JOIN _tour_rate_home h ON h.id = d.%1$I
          WHERE h.org <> tr.org_id
         ON CONFLICT (table_name, row_id, reason) DO NOTHING
       $q$, spec[1]);
@@ -2439,19 +2585,20 @@ BEGIN
 
   IF to_regclass('public.tour_variation_services') IS NOT NULL THEN
     UPDATE public.tour_variation_services s SET rate_id = w.twin
-      FROM public.tour_variations v, release_tmp._tour_rate_home h, release_tmp._tour_rate_twin w
+      FROM public.tour_variations v, _tour_rate_home h, _tour_rate_twin w
      WHERE v.id = s.variation_id AND h.id = s.rate_id AND h.org <> v.org_id
        AND w.rid = s.rate_id AND w.org = v.org_id;
     INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
     SELECT 'tour_variation_services', s.id::text, v.org_id, 'rate belongs to another company'
       FROM public.tour_variation_services s JOIN public.tour_variations v ON v.id = s.variation_id
-      JOIN release_tmp._tour_rate_home h ON h.id = s.rate_id
+      JOIN _tour_rate_home h ON h.id = s.rate_id
      WHERE h.org <> v.org_id
     ON CONFLICT (table_name, row_id, reason) DO NOTHING;
   END IF;
 END
-$$;
-
+$$
+$s0111$;
+  EXECUTE $s0112$
 -- ---------------------------------------------------------------------------
 -- NOT NULL, per-company uniques, triggers back on
 -- ---------------------------------------------------------------------------
@@ -2486,8 +2633,9 @@ BEGIN
     ALTER TABLE public.tours ADD CONSTRAINT tours_org_id_tour_code_key UNIQUE (org_id, tour_code);
   END IF;
 END
-$$;
-
+$$
+$s0112$;
+  EXECUTE $s0113$
 -- ---------------------------------------------------------------------------
 -- Themes: a fixed default list, never another company's categories; then
 -- tour_categories goes.
@@ -2512,16 +2660,30 @@ BEGIN
   GET DIAGNOSTICS n = ROW_COUNT;
   RETURN n;
 END;
-$$;
-REVOKE EXECUTE ON FUNCTION public.seed_tour_themes(uuid) FROM PUBLIC, anon, authenticated;
-GRANT  EXECUTE ON FUNCTION public.seed_tour_themes(uuid) TO service_role;
-
-ALTER TABLE IF EXISTS public.tour_templates DROP CONSTRAINT IF EXISTS tour_templates_category_id_fkey;
-DROP INDEX IF EXISTS public.idx_tour_templates_category;
-DROP VIEW IF EXISTS public.tour_templates_with_languages;
-ALTER TABLE IF EXISTS public.tour_templates DROP COLUMN IF EXISTS category_id;
-DROP TABLE IF EXISTS public.tour_categories;
-
+$$
+$s0113$;
+  EXECUTE $s0114$
+REVOKE EXECUTE ON FUNCTION public.seed_tour_themes(uuid) FROM PUBLIC, anon, authenticated
+$s0114$;
+  EXECUTE $s0115$
+GRANT  EXECUTE ON FUNCTION public.seed_tour_themes(uuid) TO service_role
+$s0115$;
+  EXECUTE $s0116$
+ALTER TABLE IF EXISTS public.tour_templates DROP CONSTRAINT IF EXISTS tour_templates_category_id_fkey
+$s0116$;
+  EXECUTE $s0117$
+DROP INDEX IF EXISTS public.idx_tour_templates_category
+$s0117$;
+  EXECUTE $s0118$
+DROP VIEW IF EXISTS public.tour_templates_with_languages
+$s0118$;
+  EXECUTE $s0119$
+ALTER TABLE IF EXISTS public.tour_templates DROP COLUMN IF EXISTS category_id
+$s0119$;
+  EXECUTE $s0120$
+DROP TABLE IF EXISTS public.tour_categories
+$s0120$;
+  EXECUTE $s0121$
 -- ---------------------------------------------------------------------------
 -- RLS
 -- ---------------------------------------------------------------------------
@@ -2607,24 +2769,36 @@ BEGIN
       t || '_org_write', t, split_part(p, '|', 1), split_part(p, '|', 2));
   END LOOP;
 END
-$$;
-REVOKE ALL ON public.tour_variations FROM anon;
-
+$$
+$s0121$;
+  EXECUTE $s0122$
+REVOKE ALL ON public.tour_variations FROM anon
+$s0122$;
+  EXECUTE $s0123$
 -- ---------------------------------------------------------------------------
 -- Dead objects; migration-only helpers
 -- ---------------------------------------------------------------------------
-DROP TABLE IF EXISTS public.tour_template_defaults;
-DROP TABLE IF EXISTS public.tour_availability;
-DROP TABLE IF EXISTS public.tour_reviews;
-
-DROP FUNCTION IF EXISTS public.org_backfill_copy_template(uuid, uuid);
-DROP FUNCTION IF EXISTS public.org_backfill_copy_variation(uuid, uuid, uuid);
-DROP FUNCTION IF EXISTS public.org_backfill_copy_tour_children(text, text, uuid, uuid);
-
-COMMIT;
-
-INSERT INTO public.schema_migrations (name) VALUES ('20261207_tours_org_id') ON CONFLICT DO NOTHING;
-
+DROP TABLE IF EXISTS public.tour_template_defaults
+$s0123$;
+  EXECUTE $s0124$
+DROP TABLE IF EXISTS public.tour_availability
+$s0124$;
+  EXECUTE $s0125$
+DROP TABLE IF EXISTS public.tour_reviews
+$s0125$;
+  EXECUTE $s0126$
+DROP FUNCTION IF EXISTS public.org_backfill_copy_template(uuid, uuid)
+$s0126$;
+  EXECUTE $s0127$
+DROP FUNCTION IF EXISTS public.org_backfill_copy_variation(uuid, uuid, uuid)
+$s0127$;
+  EXECUTE $s0128$
+DROP FUNCTION IF EXISTS public.org_backfill_copy_tour_children(text, text, uuid, uuid)
+$s0128$;
+  EXECUTE $s0129$
+INSERT INTO public.schema_migrations (name) VALUES ('20261207_tours_org_id') ON CONFLICT DO NOTHING
+$s0129$;
+  EXECUTE $s0130$
 -- ==================================================================
 -- 20261208_content_org_id
 -- ==================================================================
@@ -2736,7 +2910,6 @@ INSERT INTO public.schema_migrations (name) VALUES ('20261207_tours_org_id') ON 
 -- where none is recorded), review rows ON CONFLICT DO NOTHING, policies
 -- dropped before created, tables guarded (to_regclass). On a bare replay (no
 -- organisations) nothing is written.
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.org_backfill_content_copies (
   table_name text NOT NULL,
@@ -2745,10 +2918,15 @@ CREATE TABLE IF NOT EXISTS public.org_backfill_content_copies (
   org_id uuid NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   created_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (table_name, original_id, org_id)
-);
-ALTER TABLE public.org_backfill_content_copies ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.org_backfill_content_copies FROM PUBLIC, anon, authenticated;
-
+)
+$s0130$;
+  EXECUTE $s0131$
+ALTER TABLE public.org_backfill_content_copies ENABLE ROW LEVEL SECURITY
+$s0131$;
+  EXECUTE $s0132$
+REVOKE ALL ON public.org_backfill_content_copies FROM PUBLIC, anon, authenticated
+$s0132$;
+  EXECUTE $s0133$
 -- ---------------------------------------------------------------------------
 -- Columns; set_updated_at off for the backfill (an assignment is not an
 -- edit); global uniques dropped (a copy keeps its original's slug).
@@ -2767,11 +2945,18 @@ BEGIN
     END IF;
   END LOOP;
 END
-$$;
-ALTER TABLE IF EXISTS public.content_categories DROP CONSTRAINT IF EXISTS content_categories_slug_key;
-ALTER TABLE IF EXISTS public.content_library DROP CONSTRAINT IF EXISTS content_library_slug_key;
-ALTER TABLE IF EXISTS public.content_library DROP CONSTRAINT IF EXISTS content_library_category_id_slug_key;
-
+$$
+$s0133$;
+  EXECUTE $s0134$
+ALTER TABLE IF EXISTS public.content_categories DROP CONSTRAINT IF EXISTS content_categories_slug_key
+$s0134$;
+  EXECUTE $s0135$
+ALTER TABLE IF EXISTS public.content_library DROP CONSTRAINT IF EXISTS content_library_slug_key
+$s0135$;
+  EXECUTE $s0136$
+ALTER TABLE IF EXISTS public.content_library DROP CONSTRAINT IF EXISTS content_library_category_id_slug_key
+$s0136$;
+  EXECUTE $s0137$
 -- ---------------------------------------------------------------------------
 -- Migration-only helpers (dropped at the end).
 -- ---------------------------------------------------------------------------
@@ -2806,16 +2991,18 @@ BEGIN
   ON CONFLICT (table_name, row_id, reason) DO NOTHING;
   RETURN new_id;
 END
-$fn$;
-
+$fn$
+$s0137$;
+  EXECUTE $s0138$
 -- Rows placed in THIS run, by table: only these are copied for each company
 -- (a re-run must not copy what a company created after the first one).
-DROP TABLE IF EXISTS release_tmp._org_content_placed;
-CREATE TABLE release_tmp._org_content_placed (tbl text, id uuid);
+CREATE TEMP TABLE IF NOT EXISTS _org_content_placed (tbl text, id uuid) ON COMMIT DROP
+$s0138$;
+  EXECUTE $s0139$
 -- What uses a content item: (content id, company).
-DROP TABLE IF EXISTS release_tmp._org_content_use;
-CREATE TABLE release_tmp._org_content_use (cid uuid, org uuid);
-
+CREATE TEMP TABLE IF NOT EXISTS _org_content_use (cid uuid, org uuid) ON COMMIT DROP
+$s0139$;
+  EXECUTE $s0140$
 -- One copy per other company of every row placed in this run.
 CREATE OR REPLACE FUNCTION public.org_backfill_copy_content_for_each(p_table text)
 RETURNS void LANGUAGE plpgsql AS $fn$
@@ -2826,7 +3013,7 @@ BEGIN
   FOR rec IN EXECUTE format($q$
     SELECT r.id, o.id AS org
       FROM public.%I r
-      JOIN release_tmp._org_content_placed p ON p.tbl = %L AND p.id = r.id
+      JOIN _org_content_placed p ON p.tbl = %L AND p.id = r.id
       CROSS JOIN public.organizations o
      WHERE o.id <> r.org_id
        AND NOT EXISTS (SELECT 1 FROM public.org_backfill_content_copies c WHERE c.table_name = %L AND c.copy_id = r.id)
@@ -2837,8 +3024,9 @@ BEGIN
     PERFORM public.org_backfill_copy_content_row(p_table, rec.id, rec.org, 'copied for each company');
   END LOOP;
 END
-$fn$;
-
+$fn$
+$s0140$;
+  EXECUTE $s0141$
 -- ---------------------------------------------------------------------------
 -- Categories, writing rules, prompt templates.
 -- ---------------------------------------------------------------------------
@@ -2861,7 +3049,7 @@ BEGIN
     WITH filled AS (
       UPDATE public.content_categories SET org_id = cat WHERE org_id IS NULL RETURNING id
     )
-    INSERT INTO release_tmp._org_content_placed SELECT 'content_categories', id FROM filled;
+    INSERT INTO _org_content_placed SELECT 'content_categories', id FROM filled;
     PERFORM public.org_backfill_copy_content_for_each('content_categories');
   END IF;
 
@@ -2875,13 +3063,13 @@ BEGIN
            AND public.org_backfill_user_org(r.created_by) IS NOT NULL
         RETURNING r.id
       )
-      INSERT INTO release_tmp._org_content_placed SELECT %L, id FROM filled
+      INSERT INTO _org_content_placed SELECT %L, id FROM filled
     $q$, t, t);
     EXECUTE format($q$
       WITH filled AS (
         UPDATE public.%1$I SET org_id = %2$L::uuid WHERE org_id IS NULL RETURNING id
       ), placed AS (
-        INSERT INTO release_tmp._org_content_placed SELECT %1$L, id FROM filled RETURNING id
+        INSERT INTO _org_content_placed SELECT %1$L, id FROM filled RETURNING id
       )
       INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
       SELECT %1$L, id::text, %2$L::uuid, 'no single-company author — catalogue default' FROM placed
@@ -2890,8 +3078,9 @@ BEGIN
     PERFORM public.org_backfill_copy_content_for_each(t);
   END LOOP;
 END
-$$;
-
+$$
+$s0141$;
+  EXECUTE $s0142$
 -- ---------------------------------------------------------------------------
 -- The content library.
 -- ---------------------------------------------------------------------------
@@ -2906,37 +3095,37 @@ BEGIN
   IF cat IS NULL THEN RETURN; END IF;
 
   -- What uses it, by company.
-  DELETE FROM release_tmp._org_content_use;
+  DELETE FROM _org_content_use;
   IF to_regclass('public.tour_day_activities') IS NOT NULL
      AND EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'tour_templates' AND column_name = 'org_id') THEN
     EXECUTE $q$
-      INSERT INTO release_tmp._org_content_use
+      INSERT INTO _org_content_use
       SELECT DISTINCT a.content_id, t.org_id
         FROM public.tour_day_activities a JOIN public.tour_templates t ON t.id = a.template_id
        WHERE a.content_id IS NOT NULL AND t.org_id IS NOT NULL
     $q$;
   END IF;
   IF to_regclass('public.content_usage_log') IS NOT NULL THEN
-    INSERT INTO release_tmp._org_content_use
+    INSERT INTO _org_content_use
     SELECT DISTINCT l.content_id, i.org_id
       FROM public.content_usage_log l JOIN public.itineraries i ON i.id = l.itinerary_id
      WHERE l.content_id IS NOT NULL AND i.org_id IS NOT NULL;
   END IF;
   -- Only items that exist (tour_day_activities.content_id has no FK).
-  DELETE FROM release_tmp._org_content_use u WHERE NOT EXISTS (SELECT 1 FROM public.content_library c WHERE c.id = u.cid);
+  DELETE FROM _org_content_use u WHERE NOT EXISTS (SELECT 1 FROM public.content_library c WHERE c.id = u.cid);
 
   -- 1. The one company that uses it.
   UPDATE public.content_library c SET org_id = u.o
-    FROM (SELECT cid, min(org::text)::uuid AS o FROM release_tmp._org_content_use GROUP BY cid HAVING count(DISTINCT org) = 1) u
+    FROM (SELECT cid, min(org::text)::uuid AS o FROM _org_content_use GROUP BY cid HAVING count(DISTINCT org) = 1) u
    WHERE c.org_id IS NULL AND u.cid = c.id;
 
   -- 2. Both: the catalogue default when it is one of them, else the older.
   WITH filled AS (
     UPDATE public.content_library c SET org_id = coalesce(
-        (SELECT x.org FROM release_tmp._org_content_use x WHERE x.cid = c.id AND x.org = cat LIMIT 1),
-        (SELECT x.org FROM release_tmp._org_content_use x JOIN public.organizations o ON o.id = x.org
+        (SELECT x.org FROM _org_content_use x WHERE x.cid = c.id AND x.org = cat LIMIT 1),
+        (SELECT x.org FROM _org_content_use x JOIN public.organizations o ON o.id = x.org
           WHERE x.cid = c.id ORDER BY o.created_at, o.id LIMIT 1))
-     WHERE c.org_id IS NULL AND c.id IN (SELECT cid FROM release_tmp._org_content_use)
+     WHERE c.org_id IS NULL AND c.id IN (SELECT cid FROM _org_content_use)
     RETURNING c.id, c.org_id
   )
   INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
@@ -2970,7 +3159,7 @@ BEGIN
   -- An item another company uses: a copy for that company.
   FOR rec IN
     SELECT DISTINCT u.cid, u.org, c.org_id AS home
-      FROM release_tmp._org_content_use u JOIN public.content_library c ON c.id = u.cid
+      FROM _org_content_use u JOIN public.content_library c ON c.id = u.cid
      WHERE u.org <> c.org_id
        AND NOT EXISTS (SELECT 1 FROM public.org_backfill_content_copies m
                         WHERE m.table_name = 'content_library' AND m.original_id = u.cid AND m.org_id = u.org)
@@ -2983,8 +3172,9 @@ BEGIN
     ON CONFLICT (table_name, row_id, reason) DO NOTHING;
   END LOOP;
 END
-$$;
-
+$$
+$s0142$;
+  EXECUTE $s0143$
 -- ---------------------------------------------------------------------------
 -- Each company's references point at its own copy.
 -- ---------------------------------------------------------------------------
@@ -2996,15 +3186,14 @@ DECLARE
 BEGIN
   -- Fix-ups, not edits: only triggers that are on are turned off, and only
   -- those are turned back on.
-  DROP TABLE IF EXISTS release_tmp._org_content_trg_off;
-  CREATE TABLE release_tmp._org_content_trg_off (tbl text, tg text);
+  CREATE TEMP TABLE IF NOT EXISTS _org_content_trg_off (tbl text, tg text) ON COMMIT DROP;
   FOR trg IN
     SELECT c.relname AS tbl, t.tgname AS tg FROM pg_trigger t JOIN pg_class c ON c.oid = t.tgrelid
      WHERE NOT t.tgisinternal AND t.tgenabled = 'O' AND c.relnamespace = 'public'::regnamespace
        AND c.relname IN ('tour_day_activities', 'content_usage_log')
   LOOP
     EXECUTE format('ALTER TABLE public.%I DISABLE TRIGGER %I', trg.tbl, trg.tg);
-    INSERT INTO release_tmp._org_content_trg_off VALUES (trg.tbl, trg.tg);
+    INSERT INTO _org_content_trg_off VALUES (trg.tbl, trg.tg);
   END LOOP;
 
   -- Tour day activities: their template's company's copy.
@@ -3058,13 +3247,14 @@ BEGIN
     END LOOP;
   END IF;
 
-  FOR trg IN SELECT * FROM release_tmp._org_content_trg_off LOOP
+  FOR trg IN SELECT * FROM _org_content_trg_off LOOP
     EXECUTE format('ALTER TABLE public.%I ENABLE TRIGGER %I', trg.tbl, trg.tg);
   END LOOP;
-  DELETE FROM release_tmp._org_content_trg_off;
+  DELETE FROM _org_content_trg_off;
 END
-$$;
-
+$$
+$s0143$;
+  EXECUTE $s0144$
 -- ---------------------------------------------------------------------------
 -- Usage log: its itinerary's company, else its content item's.
 -- ---------------------------------------------------------------------------
@@ -3087,8 +3277,9 @@ BEGIN
   SELECT 'content_usage_log', id::text, def, 'no itinerary or content — default' FROM filled
   ON CONFLICT (table_name, row_id, reason) DO NOTHING;
 END
-$$;
-
+$$
+$s0144$;
+  EXECUTE $s0145$
 -- ---------------------------------------------------------------------------
 -- A variation belongs to a content item; one with none is unreachable.
 -- ---------------------------------------------------------------------------
@@ -3103,8 +3294,9 @@ BEGIN
   ON CONFLICT (table_name, row_id, reason) DO NOTHING;
   ALTER TABLE public.content_variations ALTER COLUMN content_id SET NOT NULL;
 END
-$$;
-
+$$
+$s0145$;
+  EXECUTE $s0146$
 -- ---------------------------------------------------------------------------
 -- One default prompt per purpose per company.
 -- ---------------------------------------------------------------------------
@@ -3126,8 +3318,9 @@ BEGIN
   SELECT 'prompt_templates', id::text, org_id, 'another default for this purpose — no longer default' FROM demoted
   ON CONFLICT (table_name, row_id, reason) DO NOTHING;
 END
-$$;
-
+$$
+$s0146$;
+  EXECUTE $s0147$
 -- ---------------------------------------------------------------------------
 -- NOT NULL, indexes, per-company uniques, triggers back on
 -- ---------------------------------------------------------------------------
@@ -3175,8 +3368,9 @@ BEGIN
       ON public.prompt_templates (org_id, purpose) WHERE is_default;
   END IF;
 END
-$$;
-
+$$
+$s0147$;
+  EXECUTE $s0148$
 -- ---------------------------------------------------------------------------
 -- RLS
 -- ---------------------------------------------------------------------------
@@ -3214,15 +3408,18 @@ BEGIN
       WITH CHECK (public.is_manager_or_above() AND EXISTS (SELECT 1 FROM public.content_library c WHERE c.id = content_id AND public.user_is_in_org(c.org_id)));
   END IF;
 END
-$$;
-
-DROP FUNCTION IF EXISTS public.org_backfill_copy_content_for_each(text);
-DROP FUNCTION IF EXISTS public.org_backfill_copy_content_row(text, uuid, uuid, text);
-
-COMMIT;
-
-INSERT INTO public.schema_migrations (name) VALUES ('20261208_content_org_id') ON CONFLICT DO NOTHING;
-
+$$
+$s0148$;
+  EXECUTE $s0149$
+DROP FUNCTION IF EXISTS public.org_backfill_copy_content_for_each(text)
+$s0149$;
+  EXECUTE $s0150$
+DROP FUNCTION IF EXISTS public.org_backfill_copy_content_row(text, uuid, uuid, text)
+$s0150$;
+  EXECUTE $s0151$
+INSERT INTO public.schema_migrations (name) VALUES ('20261208_content_org_id') ON CONFLICT DO NOTHING
+$s0151$;
+  EXECUTE $s0152$
 -- ==================================================================
 -- 20261209_tenancy_followups
 -- ==================================================================
@@ -3352,7 +3549,6 @@ INSERT INTO public.schema_migrations (name) VALUES ('20261208_content_org_id') O
 -- CONFLICT DO NOTHING, constraints and policies dropped before created,
 -- tables guarded (to_regclass). On a bare replay (no organisations) nothing
 -- is written.
-BEGIN;
 
 CREATE TABLE IF NOT EXISTS public.org_backfill_dropped_rows (
   table_name text NOT NULL,
@@ -3360,10 +3556,15 @@ CREATE TABLE IF NOT EXISTS public.org_backfill_dropped_rows (
   row_data jsonb NOT NULL,
   saved_at timestamptz NOT NULL DEFAULT now(),
   PRIMARY KEY (table_name, row_id)
-);
-ALTER TABLE public.org_backfill_dropped_rows ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.org_backfill_dropped_rows FROM PUBLIC, anon, authenticated;
-
+)
+$s0152$;
+  EXECUTE $s0153$
+ALTER TABLE public.org_backfill_dropped_rows ENABLE ROW LEVEL SECURITY
+$s0153$;
+  EXECUTE $s0154$
+REVOKE ALL ON public.org_backfill_dropped_rows FROM PUBLIC, anon, authenticated
+$s0154$;
+  EXECUTE $s0155$
 -- ---------------------------------------------------------------------------
 -- 1. Concierge briefs: one per conversation PER COMPANY.
 -- ---------------------------------------------------------------------------
@@ -3393,8 +3594,9 @@ BEGIN
     END IF;
   END IF;
 END
-$$;
-
+$$
+$s0155$;
+  EXECUTE $s0156$
 -- ---------------------------------------------------------------------------
 -- 2. The WhatsApp activity log and notes name team members.
 -- ---------------------------------------------------------------------------
@@ -3476,12 +3678,17 @@ BEGIN
     $q$, t || '_org_all', t);
   END LOOP;
 END
-$$;
-
+$$
+$s0156$;
+  EXECUTE $s0157$
 -- sales_agents: nothing reads or writes it now. Saved whole, then dropped
 -- with the two functions that only served it.
-DROP FUNCTION IF EXISTS public.assign_conversation(uuid, uuid, uuid, character varying);
-DROP FUNCTION IF EXISTS public.get_next_available_agent();
+DROP FUNCTION IF EXISTS public.assign_conversation(uuid, uuid, uuid, character varying)
+$s0157$;
+  EXECUTE $s0158$
+DROP FUNCTION IF EXISTS public.get_next_available_agent()
+$s0158$;
+  EXECUTE $s0159$
 DO $$
 BEGIN
   IF to_regclass('public.sales_agents') IS NULL THEN RETURN; END IF;
@@ -3490,16 +3697,20 @@ BEGIN
   ON CONFLICT (table_name, row_id) DO NOTHING;
   DROP TABLE public.sales_agents;
 END
-$$;
-
+$$
+$s0159$;
+  EXECUTE $s0160$
 -- ---------------------------------------------------------------------------
 -- 3. User preferences: one row per (person, company).
 -- ---------------------------------------------------------------------------
 ALTER TABLE IF EXISTS public.user_preferences
-  ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES public.organizations(id) ON DELETE CASCADE;
+  ADD COLUMN IF NOT EXISTS org_id uuid REFERENCES public.organizations(id) ON DELETE CASCADE
+$s0160$;
+  EXECUTE $s0161$
 -- Before any copy: a person in both companies gets a second row.
-ALTER TABLE IF EXISTS public.user_preferences DROP CONSTRAINT IF EXISTS user_preferences_user_id_key;
-
+ALTER TABLE IF EXISTS public.user_preferences DROP CONSTRAINT IF EXISTS user_preferences_user_id_key
+$s0161$;
+  EXECUTE $s0162$
 DO $$
 DECLARE
   def uuid;
@@ -3526,9 +3737,8 @@ BEGIN
 
   -- 2. A person in both: the default company (else their oldest), and a copy
   --    for each other company they belong to.
-  DROP TABLE IF EXISTS release_tmp._prefs_both;
-  CREATE TABLE release_tmp._prefs_both (id uuid);
-  DELETE FROM release_tmp._prefs_both;
+  CREATE TEMP TABLE IF NOT EXISTS _prefs_both (id uuid) ON COMMIT DROP;
+  DELETE FROM _prefs_both;
   WITH filled AS (
     UPDATE public.user_preferences p SET org_id = coalesce(
         (SELECT m.org_id FROM public.organization_members m WHERE m.user_id = p.user_id AND m.org_id = def LIMIT 1),
@@ -3538,11 +3748,11 @@ BEGIN
        AND EXISTS (SELECT 1 FROM public.organization_members m WHERE m.user_id = p.user_id)
     RETURNING p.id
   )
-  INSERT INTO release_tmp._prefs_both SELECT id FROM filled;
+  INSERT INTO _prefs_both SELECT id FROM filled;
 
   FOR rec IN
     SELECT DISTINCT p.id, p.user_id, p.org_id AS home, m.org_id AS other
-      FROM release_tmp._prefs_both b
+      FROM _prefs_both b
       JOIN public.user_preferences p ON p.id = b.id
       JOIN public.organization_members m ON m.user_id = p.user_id AND m.org_id <> p.org_id
      WHERE NOT EXISTS (SELECT 1 FROM public.user_preferences q WHERE q.user_id = p.user_id AND q.org_id = m.org_id)
@@ -3559,7 +3769,7 @@ BEGIN
   END LOOP;
   INSERT INTO public.org_backfill_review (table_name, row_id, assigned_org, reason)
   SELECT 'user_preferences', p.id::text, p.org_id, 'person in both companies — one row per company'
-    FROM release_tmp._prefs_both b JOIN public.user_preferences p ON p.id = b.id
+    FROM _prefs_both b JOIN public.user_preferences p ON p.id = b.id
   ON CONFLICT (table_name, row_id, reason) DO NOTHING;
 
   -- 3. No company at all.
@@ -3572,8 +3782,9 @@ BEGIN
 
   IF trg_on THEN ALTER TABLE public.user_preferences ENABLE TRIGGER set_updated_at; END IF;
 END
-$$;
-
+$$
+$s0162$;
+  EXECUTE $s0163$
 DO $$
 BEGIN
   IF to_regclass('public.user_preferences') IS NULL THEN RETURN; END IF;
@@ -3606,11 +3817,11 @@ BEGIN
   CREATE POLICY user_preferences_own_org_delete ON public.user_preferences FOR DELETE TO authenticated
     USING (auth.uid() = user_id AND public.user_is_in_org(org_id));
 END
-$$;
-
-COMMIT;
-
-INSERT INTO public.schema_migrations (name) VALUES ('20261209_tenancy_followups') ON CONFLICT DO NOTHING;
-
--- Remove the scratch schema.
-DROP SCHEMA IF EXISTS release_tmp CASCADE;
+$$
+$s0163$;
+  EXECUTE $s0164$
+INSERT INTO public.schema_migrations (name) VALUES ('20261209_tenancy_followups') ON CONFLICT DO NOTHING
+$s0164$;
+  RAISE NOTICE 'release step 1 resumed: 20261205–20261209 applied';
+END
+$release$;
