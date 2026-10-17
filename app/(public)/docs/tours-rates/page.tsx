@@ -484,6 +484,20 @@ export default function ToursRatesPage() {
           <li>A flight guide fare stored as 0 by a period save was turned back into blank (the customer fare). If a guide really flies free on a fare, enter 0 again.</li>
         </ul>
       </section>
+
+      <section id="rates-check" className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Rates Check</h2>
+        <p className="text-gray-600 mb-3">
+          Suppliers &amp; Rates &rsaquo; Rates Check lists rates that look saved under the wrong category. The pricing
+          grid and the itinerary parser go by a hotel&apos;s tier and a transport rate&apos;s type, so these give the
+          wrong hotel or the wrong transport until they are fixed. Nothing is changed for you: each line links to its
+          rates page, filtered to it.
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li><strong>Hotels whose tier doesn&apos;t fit their stars:</strong> a 5&#9733; hotel saved as Budget or Standard, a 4&#9733; as Budget or Luxury, a 3&#9733; or lower as Deluxe or Luxury. Hotels with no star rating cannot be checked: new hotels default to Standard, so give each its stars and tier.</li>
+          <li><strong>Transport whose type contradicts its route:</strong> an airport route not saved as an airport transfer, or a route named &ldquo;Full day&rdquo; / &ldquo;Half day&rdquo; saved as another type. A layover tour (airport &rarr; tour &rarr; airport) is not listed: an airport transfer or a day-tour type is right for it.</li>
+        </ul>
+      </section>
     </div>
   )
 }

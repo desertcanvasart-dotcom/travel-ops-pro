@@ -1,6 +1,7 @@
 'use client'
 
 import { TRIP_SHAPES, isRoadTransferType, rateTripShape, sanitizeTripShape, tripShapeFromName } from '@/lib/pricing/road-trips'
+import { useSearchParams } from 'next/navigation'
 import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import CityOptions from '@/app/components/CityOptions'
@@ -214,7 +215,9 @@ export default function TransportationContent() {
   // primary type only.
   const suppliers = allSuppliers.filter(s => isTransportSupplier(s, hasBehaviour))
   const [loading, setLoading] = useState(true)
-  const [searchTerm, setSearchTerm] = useState('')
+  // ?q= opens the list filtered (the Rates check page links each finding here).
+  const searchParams = useSearchParams()
+  const [searchTerm, setSearchTerm] = useState(() => searchParams.get('q') ?? '')
   const [cityFilter, setCityFilter] = useState('')
   const [serviceTypeFilter, setServiceTypeFilter] = useState('')
   const [supplierFilter, setSupplierFilter] = useState('')

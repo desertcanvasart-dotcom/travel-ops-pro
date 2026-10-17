@@ -16,6 +16,13 @@ import { dropLegacyFixedCostPicks } from './lib/fixed-cost-lines'
 import { displayFx, shownSymbol } from './lib/display-fx'
 import type { ExchangeRates } from '@/lib/currency-service'
 import { alignGuideLanguage, guideLanguages, majorityGuideLanguage } from './lib/guide-language'
+import { hotelForTier, optionItems } from './lib/option-item'
+import { applyPackageToDays, describeRemoved } from './lib/package-apply'
+import { transportTypeWarnings } from './lib/transport-warnings'
+import { readbackDays, readbackText } from './lib/readback'
+import { isStructuredItinerary, parseStructuredItinerary, readStructuredHeader, itineraryTemplate, namesList } from './lib/structured-itinerary'
+import { PACKAGE_TYPE_CONFIGS, type PackageType } from '@/lib/package-types'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 import GridHeader from './components/GridHeader'
 import ClientInfoBar from './components/ClientInfoBar'
 import InputPanel from './components/InputPanel'
@@ -129,6 +136,13 @@ function PricingGridContent() {
   const [isParsing, setIsParsing] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [saveMessage, setSaveMessage] = useState<string | null>(null)
+  const dialog = useConfirmDialog()
+  // What the parse could not settle on its own (a named hotel on another
+  // tier, a layover tour with no plain transfer, a name matching no rate…).
+  const [parseNotes, setParseNotes] = useState<string[]>([])
+  // After a parse: the grid read back as lines, to check the reading at a glance.
+  const [showReadback, setShowReadback] = useState(false)
+  const readback = useMemo(() => (showReadback ? readbackDays(days) : []), [showReadback, days])
   const [savedQuoteId, setSavedQuoteId] = useState<string | null>(null)
   const [savedQuoteNumber, setSavedQuoteNumber] = useState<string | null>(null)
 
@@ -269,22 +283,12 @@ function PricingGridContent() {
     setDays(prevDays => prevDays.map(day => ({
       ...day,
       slots: day.slots.map(slot => {
-        // Swap accommodation: match by city
+        // Swap accommodation: the same hotel in the new tier when it has it
+        // (option-item.ts), with its supplement, as a pick in the row makes it.
         if (slot.slotId === 'accommodation' && slot.selectedItems.length > 0) {
-          const dayCity = day.city?.toLowerCase()?.trim()
-          const newHotel = (rates as AllRates).accommodation.find(
-            (r: any) => r.city?.toLowerCase()?.trim() === dayCity
-          )
+          const newHotel = hotelForTier(slot.selectedItems[0], day.city, (rates as AllRates).accommodation)
           if (newHotel) {
-            return {
-              ...slot,
-              selectedItems: [{
-                rateId: newHotel.id,
-                name: newHotel.name,
-                rateEur: newHotel.rateEur,
-                rateNonEur: newHotel.rateNonEur,
-              }],
-            }
+            return { ...slot, selectedItems: optionItems('accommodation', newHotel) }
           }
           // No hotel in new tier for this city — clear selection
           return { ...slot, selectedItems: [] }
@@ -514,6 +518,61 @@ function PricingGridContent() {
     setSaveMessage(null)
   }
 
+  // A package change applies to the days already built: what the new
+  // package does not sell is removed, after a confirm that names it.
+  const changePackageType = async (p: PackageType) => {
+    const pkg = PACKAGE_TYPE_CONFIGS.find(c => c.slug === p)
+    if (pkg && days.length > 0) {
+      const typeOf = (id: string) => rates?.route.find(o => o.id === id)?.service_type
+      const result = applyPackageToDays(days, pkg, typeOf)
+      const what = describeRemoved(result.removed)
+      if (what) {
+        const ok = await dialog.confirm({
+          title: `Switch to ${pkg.name}?`,
+          message: `${pkg.name} does not include them, so ${what} will be removed from this trip.`,
+          confirmText: 'Switch and remove',
+          cancelText: 'Keep the current package',
+          variant: 'warning',
+        })
+        if (!ok) return
+        setDays(result.days)
+      }
+    }
+    setConfig(prev => ({ ...prev, packageType: p }))
+  }
+
+  // The format's text names this tier's rates: when it asks for another
+  // tier, that tier's list is fetched first, and the tier switch is not
+  // treated as a change (its hotels are already the ones written).
+  const readStructuredText = async (text: string) => {
+    const header = readStructuredHeader(text)
+    let list = rates as AllRates
+    const tier = header.tier && header.tier !== config.tier ? header.tier : null
+    if (tier) {
+      const data = await fetch(`/api/pricing-grid/rates?${new URLSearchParams({ tier })}`).then(r => r.json()).catch(() => null)
+      if (!data?.success) { alert(`Could not load your ${tier} rates`); return }
+      list = data.data
+      prevTierRef.current = tier
+    }
+    const { days: read, unmatched } = parseStructuredItinerary(text, list, header.pax ?? config.pax, () => crypto.randomUUID())
+    setDays(read)
+    setShowReadback(read.length > 0)
+    setParseNotes([...unmatched, ...transportTypeWarnings(read, list.route)])
+    setConfig(prev => ({
+      ...prev,
+      ...(header.packageType && { packageType: header.packageType }),
+      ...(tier && { tier: tier as GridConfig['tier'] }),
+      ...(header.pax && { pax: header.pax }),
+      ...(header.startDate && { startDate: header.startDate }),
+    }))
+    setSaveMessage(`Read from your itinerary format — ${read.length} day${read.length === 1 ? '' : 's'}, matched by name, no AI used`)
+  }
+
+  const formatTemplate = () => {
+    const pkg = PACKAGE_TYPE_CONFIGS.find(c => c.slug === config.packageType)
+    return itineraryTemplate(rates, { packageName: pkg?.name, tier: config.tier, pax: config.pax, startDate: config.startDate })
+  }
+
   // --- Parse Text via AI ---
   const handleParseDays = async (text: string) => {
     try {
@@ -522,7 +581,15 @@ function PricingGridContent() {
       // Clear old data immediately so the loading indicator shows
       // and the user knows a fresh parse is starting
       setDays([])
+      setParseNotes([])
+      setShowReadback(false)
       setConfig(prev => ({ ...prev, itineraryId: null, itineraryCode: null }))
+      // Written in the agency's format: read here, by name, without the AI
+      // (structured-itinerary.ts) — exact, instant, and free.
+      if (rates && isStructuredItinerary(text)) {
+        await readStructuredText(text)
+        return
+      }
       const res = await fetch('/api/pricing-grid/parse', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -565,6 +632,11 @@ function PricingGridContent() {
           if (!config.guideLanguage) setConfig(prev => ({ ...prev, guideLanguage }))
         }
         setDays(ready)
+        setShowReadback(ready.length > 0)
+        setParseNotes([
+          ...(Array.isArray(data.notes) ? data.notes.map(String) : []),
+          ...(rates ? transportTypeWarnings(ready, rates.route) : []),
+        ])
         // Show indicator if itinerary was AI-generated (not parsed from detailed text)
         if (data.generationMode === 'generated') {
           setSaveMessage('✨ AI-suggested itinerary based on inquiry — review and adjust as needed')
@@ -884,8 +956,50 @@ function PricingGridContent() {
         isParsing={isParsing}
         hasDays={days.length > 0}
         packageType={config.packageType ?? 'full-package'}
-        onPackageTypeChange={(p) => setConfig(prev => ({ ...prev, packageType: p }))}
+        onPackageTypeChange={changePackageType}
+        formatTemplate={rates ? formatTemplate : undefined}
+        namesList={rates ? () => namesList(rates) : undefined}
       />
+
+      {parseNotes.length > 0 && (
+        <div role="status" className="mb-2 px-3 py-2 text-xs bg-amber-50 border border-amber-200 rounded-lg text-amber-900">
+          <p className="font-medium mb-1">Check before pricing</p>
+          <ul className="space-y-0.5 list-disc pl-4">
+            {parseNotes.map((n, i) => <li key={i}>{n}</li>)}
+          </ul>
+        </div>
+      )}
+      {showReadback && readback.length > 0 && (
+        <details open className="mb-2 px-3 py-2 text-xs bg-white border border-gray-200 rounded-lg text-gray-800">
+          <summary className="cursor-pointer font-medium select-none">
+            What I understood — check each day before pricing
+          </summary>
+          <div className="mt-2 grid gap-2 sm:grid-cols-2">
+            {readback.map(d => (
+              <div key={d.title}>
+                <p className="font-semibold text-gray-900">{d.title}</p>
+                <ul className="text-gray-700">
+                  {d.lines.map((l, i) => <li key={i}>{l}</li>)}
+                </ul>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex gap-3">
+            <button
+              type="button"
+              className="font-medium text-green-700 hover:underline"
+              onClick={() => {
+                const pkg = PACKAGE_TYPE_CONFIGS.find(c => c.slug === config.packageType)
+                void navigator.clipboard?.writeText(readbackText(days, { packageName: pkg?.name, tier: config.tier, pax: config.pax, startDate: config.startDate }))
+                  .then(() => setSaveMessage('Copied the itinerary as text'), () => alert('Could not copy'))
+              }}
+            >
+              Copy as text
+            </button>
+            <button type="button" onClick={() => setShowReadback(false)} className="text-gray-500 hover:underline">Hide</button>
+          </div>
+        </details>
+      )}
 
       {/* Days Grid */}
       {days.length === 0 ? (
