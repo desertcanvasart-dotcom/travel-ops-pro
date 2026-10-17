@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { Building2, Users, Mail, Loader2, Save, Trash2, Send, XCircle, CheckCircle, ShieldCheck } from 'lucide-react'
 import { useConfirm } from '@/components/ConfirmDialog'
+import { useRole } from '@/hooks/useRole'
 
 interface OrgInfo {
   id: string
@@ -64,9 +65,20 @@ export default function OrganizationSettingsPage() {
   // Set when the invitation was created but its email could not be sent.
   const [inviteLink, setInviteLink] = useState<string | null>(null)
 
-  // Is the current user an owner?
-  const currentMember = members.find(m => m.user_id === user?.id)
-  const isOwner = currentMember?.role === 'owner'
+  // What the SERVER lets this person do, from their role in this company
+  // (useRole — the active membership). The page used to show every action to
+  // the owner alone, while the server lets any admin invite and cancel
+  // invitations, and offered "Leave" to everyone though only an admin's
+  // DELETE gets past middleware.
+  //   rename                 owner   (PUT /api/organization; Company Profile
+  //                                   applies the same rule)
+  //   invite, cancel invite  admin, owner included (/api/invitations)
+  //   remove someone else    owner   (/api/organization/members)
+  //   leave                  admin, owner included — but never the last owner
+  const { role, isAdmin } = useRole()
+  const isOwner = role === 'owner'
+  const ownerCount = members.filter(m => m.role === 'owner').length
+  const canLeave = isAdmin && !(isOwner && ownerCount <= 1)
 
   useEffect(() => {
     void loadAll()
@@ -212,6 +224,12 @@ export default function OrganizationSettingsPage() {
         </div>
       </header>
 
+      {!isAdmin && (
+        <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+          You can see the members and invitations but not change them. Only the agency owner or an admin
+          can invite people; only the owner can rename the organization or remove a member.
+        </div>
+      )}
       {error && (
         <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-red-800 text-sm flex items-start gap-2">
           <XCircle className="w-5 h-5 flex-shrink-0" /> {error}
@@ -301,7 +319,7 @@ export default function OrganizationSettingsPage() {
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-gray-900">Members</h2>
-          {isOwner && (
+          {isAdmin && (
             <button
               onClick={() => setShowInvite(s => !s)}
               className="px-3 py-1.5 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#4a5c35] flex items-center gap-1"
@@ -311,7 +329,7 @@ export default function OrganizationSettingsPage() {
           )}
         </div>
 
-        {showInvite && isOwner && (
+        {showInvite && isAdmin && (
           <div className="mb-4 p-4 bg-gray-50 rounded-lg border border-gray-200">
             <div className="flex flex-col sm:flex-row gap-2">
               <input
@@ -370,7 +388,7 @@ export default function OrganizationSettingsPage() {
                     {new Date(m.created_at).toLocaleDateString()}
                   </td>
                   <td className="py-3 text-right">
-                    {(isOwner || m.user_id === user?.id) && (
+                    {(m.user_id === user?.id ? canLeave : isOwner) && (
                       <button
                         onClick={() => removeMember(m.user_id)}
                         className="text-red-600 hover:text-red-700 p-1"
@@ -413,7 +431,7 @@ export default function OrganizationSettingsPage() {
                     <td className="py-3 text-gray-500">{new Date(inv.created_at).toLocaleDateString()}</td>
                     <td className="py-3 text-gray-500">{new Date(inv.expires_at).toLocaleDateString()}</td>
                     <td className="py-3 text-right">
-                      {isOwner && (
+                      {isAdmin && (
                         <button
                           onClick={() => cancelInvite(inv.id)}
                           className="text-red-600 hover:text-red-700 p-1"

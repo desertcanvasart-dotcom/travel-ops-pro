@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 /**
  * GET /api/rates/audit-log
@@ -13,6 +14,8 @@ import { createServerClient } from '@/lib/supabase-server'
  */
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
 
@@ -46,6 +49,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('rate_audit_log')
       .select('*', { count: 'exact' })
+      .eq('org_id', orgId)
       .eq('table_name', tableName)
       .order('changed_at', { ascending: false })
       .range(offset, offset + limit - 1)

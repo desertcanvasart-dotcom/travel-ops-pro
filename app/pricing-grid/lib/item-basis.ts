@@ -15,8 +15,10 @@
 
 import { priceByBasis, type PricingBasis } from '@/lib/pricing/pricing-basis'
 
-/** Rows whose items carry their own basis. */
-export const BASIS_SLOTS: ReadonlySet<string> = new Set(['airport_services', 'hotel_services', 'boat_rides', 'experiences'])
+/** Rows whose items carry their own basis. Tipping too: a tip's Rate Unit
+ *  says per person or per group (lib/tipping-utils tipGridOption) — a
+ *  per-person tip used to be charged once for the whole group. */
+export const BASIS_SLOTS: ReadonlySet<string> = new Set(['airport_services', 'hotel_services', 'boat_rides', 'experiences', 'tipping'])
 
 /** The row's own rule, for an item that states no basis. */
 export function rowBasis(slotId: string): PricingBasis {

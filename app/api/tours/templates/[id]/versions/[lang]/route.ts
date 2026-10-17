@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { templateInOrg } from '@/lib/tours/org-scope'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -13,6 +15,11 @@ export async function GET(
 ) {
   try {
     const { id, lang } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await templateInOrg(supabaseAdmin, orgId, id))) {
+      return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 })
+    }
 
     if (!['en', 'ja'].includes(lang)) {
       return NextResponse.json(
@@ -61,6 +68,11 @@ export async function PUT(
 ) {
   try {
     const { id, lang } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await templateInOrg(supabaseAdmin, orgId, id))) {
+      return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 })
+    }
     const body = await request.json()
 
     if (!['en', 'ja'].includes(lang)) {
@@ -126,6 +138,11 @@ export async function DELETE(
 ) {
   try {
     const { id, lang } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await templateInOrg(supabaseAdmin, orgId, id))) {
+      return NextResponse.json({ success: false, error: 'Template not found' }, { status: 404 })
+    }
 
     if (!['en', 'ja'].includes(lang)) {
       return NextResponse.json(

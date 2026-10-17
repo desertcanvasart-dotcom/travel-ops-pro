@@ -79,7 +79,7 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Revision not found' }, { status: 404 })
     }
     const snapshot = (revision.quote_data ?? {}) as Record<string, unknown>
-    if (!(await quoteRefsInOrg(supabaseAdmin, orgId, { itinerary_id: snapshot.itinerary_id, partner_id: snapshot.partner_id }))) {
+    if (!(await quoteRefsInOrg(supabaseAdmin, orgId, { itinerary_id: snapshot.itinerary_id, partner_id: snapshot.partner_id, variation_id: snapshot.variation_id }))) {
       return quoteRefNotFound()
     }
 

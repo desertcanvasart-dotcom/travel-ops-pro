@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react'
 import type { GridConfig, GridTotals, Tier, ClientType, PassportType } from '../types'
 import { convertAmount } from '../lib/calculator'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
-import { currencySymbol } from '@/lib/currency-totals'
+import { shownDecimals, shownSymbol } from '../lib/display-fx'
 import { useTierOptions } from '@/hooks/useTierOptions'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 
@@ -14,6 +14,9 @@ interface GridHeaderProps {
   totals?: GridTotals
   /** The languages the agency has guides in, for the trip's guide language. */
   guideLanguages?: string[]
+  /** The margin a reset goes back to: the user's default, else the
+   *  company's (organizations.default_margin_percent). */
+  defaultMargin?: number
 }
 
 interface B2BPartner {
@@ -31,18 +34,14 @@ const presetTierLabel = (key: string) => key.charAt(0).toUpperCase() + key.slice
 // be a four-entry copy that silently lacked JPY (operator, 2026-09-04).
 const CURRENCIES = RATE_CURRENCIES
 
-const DEFAULT_MARGINS: Record<ClientType, number> = {
-  b2b: 10,
-  b2c: 25,
-}
-
-export default function GridHeader({ config, onChange, totals, guideLanguages = [] }: GridHeaderProps) {
+export default function GridHeader({ config, onChange, totals, guideLanguages = [], defaultMargin = 25 }: GridHeaderProps) {
   const guideModeLabel = useVocabLabel('guide_mode')
   const tierOptions = useTierOptions(presetTierLabel)
   const [partners, setPartners] = useState<B2BPartner[]>([])
   const update = (partial: Partial<GridConfig>) => onChange({ ...config, ...partial })
-  const sym = currencySymbol(config.currency)
-  const fmt = (n: number) => n.toLocaleString('en', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+  const sym = shownSymbol(config)
+  const decimals = shownDecimals(config)
+  const fmt = (n: number) => n.toLocaleString('en', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
   const cv = (n: number) => convertAmount(n, config.exchangeRate)
 
   // Fetch B2B partners when switching to B2B
@@ -58,11 +57,13 @@ export default function GridHeader({ config, onChange, totals, guideLanguages = 
     }
   }, [config.clientType, partners.length])
 
+  // Switching B2C/B2B starts again from the default margin — the company's,
+  // not a hard-coded 25 / 10; picking a partner then takes the partner's.
   const toggleClientType = () => {
     const newType: ClientType = config.clientType === 'b2b' ? 'b2c' : 'b2b'
     update({
       clientType: newType,
-      marginPercent: DEFAULT_MARGINS[newType],
+      marginPercent: defaultMargin,
       partnerId: null,
       partnerName: '',
     })
@@ -82,7 +83,7 @@ export default function GridHeader({ config, onChange, totals, guideLanguages = 
       update({
         partnerId: partner.id,
         partnerName: partner.company_name,
-        marginPercent: Math.min(partner.default_margin_percent || DEFAULT_MARGINS.b2b, 100),
+        marginPercent: Math.min(partner.default_margin_percent ?? defaultMargin, 100),
       })
     } else {
       update({ partnerId: null, partnerName: '' })

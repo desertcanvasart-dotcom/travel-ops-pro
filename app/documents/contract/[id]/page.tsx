@@ -9,7 +9,7 @@ import { useParams } from 'next/navigation'
 import WhatsAppButton from '@/app/components/whatsapp/whatsapp-button'
 import Link from 'next/link'
 import { Download, Eye, Edit2, Plus, X, Loader2, Copy, Check, Languages, ChevronDown } from 'lucide-react'
-import { generateContractPDF } from '@/lib/contract-pdf-generator'
+import { contractVatLine, generateContractPDF } from '@/lib/contract-pdf-generator'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
@@ -36,6 +36,10 @@ interface Itinerary {
   total_days?: number | null
   total_cost: number | null
   currency?: string | null
+  /** VAT carried from the trip's quote (lib/vat.ts). */
+  vat_applied?: boolean
+  vat_rate?: number | null
+  vat_excluded?: number
   trip_name?: string | null
   destinations?: string | string[] | null
   deposit_amount?: number | null
@@ -283,6 +287,9 @@ export default function ContractPage() {
   // The trip's own currency: every contract said USD, whatever it was priced in.
   const currency = itinerary?.currency || 'USD'
   const perPerson = contractPricePerPerson(contractData.totalCost, contractData.numTravelers)
+  // The trip's VAT choice and recorded rate (lib/vat.ts), stated with the price.
+  // Its extras lines are not taxed (vat_excluded, from GET /api/itineraries/[id]).
+  const tripVat = { vat_applied: itinerary?.vat_applied === true, vat_rate: itinerary?.vat_rate ?? null, vat_excluded: itinerary?.vat_excluded ?? 0 }
 
   // The terms and conditions in the page's language, naming the operator's
   // own governing law (Company profile) — they named Egyptian law and Cairo
@@ -373,6 +380,7 @@ export default function ContractPage() {
     destinations: contractData.destinations,
     totalCost: contractData.totalCost,
     currency,
+    vat: tripVat,
     document: contractDocument,
   })
 
@@ -432,7 +440,8 @@ Destinations: ${contractData.destinations}
 FINANCIAL TERMS
 
 Total Package Price: ${contractPrice(contractData.totalCost, currency)}${perPerson !== null ? `
-(${formatMoney(perPerson, currency)} per person × ${contractData.numTravelers} travelers)` : ''}
+(${formatMoney(perPerson, currency)} per person × ${contractData.numTravelers} travelers)` : ''}${contractData.totalCost !== null ? `
+${contractVatLine(tripVat, contractData.totalCost, currency)}` : ''}
 
 Payment Terms:
 ${contractData.paymentTerms}
@@ -943,6 +952,11 @@ ${governingNote}
                   <p className="text-lg font-bold text-gray-900">
                     {t('totalPackagePrice')}: <span className="text-primary-600">{contractPrice(contractData.totalCost, currency)}</span>
                   </p>
+                  {contractData.totalCost !== null && (
+                    <p className="text-sm text-gray-700 mt-1" data-vat={tripVat.vat_applied ? 'applied' : 'not-applied'}>
+                      {contractVatLine(tripVat, contractData.totalCost, currency)}
+                    </p>
+                  )}
                   {perPerson !== null && (
                     <p className="text-gray-600 text-xs mt-1">
                       ({contractAmount(perPerson, currency)} {t('perPerson')} × {contractData.numTravelers} {contractData.numTravelers === 1 ? t('traveler') : t('travelers')})

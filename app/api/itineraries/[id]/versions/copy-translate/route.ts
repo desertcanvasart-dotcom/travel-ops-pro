@@ -5,7 +5,7 @@ import { translateMissingServiceVersions } from '@/lib/itineraries/translate-ser
 import type { Language } from '@/types/multilingual'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
-import { dayTextHash, detectContentLanguage, mergeDayText } from '@/lib/itineraries/content-language'
+import { dayTextHash, detectContentLanguage, mergeDayText, replaceableDayVersionIds } from '@/lib/itineraries/content-language'
 
 const supabase = createServerClient()
 
@@ -122,6 +122,48 @@ async function withVersionRollback<T>(versionId: string, work: () => Promise<T>)
   }
 }
 
+/**
+ * Clear a language's translation so a forced re-translate can write it again:
+ * the version row, the service names, and the day text a machine wrote
+ * (replaceableDayVersionIds — reviewed days stay, and are then skipped).
+ */
+async function clearReplaceableTranslation(itineraryId: string, language: Language) {
+  await supabase
+    .from('itinerary_versions')
+    .delete()
+    .eq('itinerary_id', itineraryId)
+    .eq('language', language)
+
+  const { data: dayIds } = await supabase
+    .from('itinerary_days')
+    .select('id')
+    .eq('itinerary_id', itineraryId)
+  if (!dayIds || dayIds.length === 0) return
+  const ids = dayIds.map((d: { id: string }) => d.id)
+
+  const { data: dayVersions } = await supabase
+    .from('itinerary_day_versions')
+    .select('id, status')
+    .in('itinerary_day_id', ids)
+    .eq('language', language)
+  const replaceable = replaceableDayVersionIds(dayVersions ?? [])
+  if (replaceable.length > 0) {
+    await supabase.from('itinerary_day_versions').delete().in('id', replaceable)
+  }
+
+  const { data: serviceIds } = await supabase
+    .from('itinerary_services')
+    .select('id')
+    .in('itinerary_day_id', ids)
+  if (serviceIds && serviceIds.length > 0) {
+    await supabase
+      .from('itinerary_service_versions')
+      .delete()
+      .in('itinerary_service_id', serviceIds.map((sv: { id: string }) => sv.id))
+      .eq('language', language)
+  }
+}
+
 // POST - Copy existing version and translate to target language
 export async function POST(
   request: NextRequest,
@@ -172,47 +214,14 @@ export async function POST(
       )
     }
 
-    // If force retranslate, delete existing versions first
-    if (existing && forceRetranslate) {
-      console.log('[copy-translate] Force retranslate: deleting existing versions for', targetLanguage)
-
-      // Delete itinerary version
-      await supabase
-        .from('itinerary_versions')
-        .delete()
-        .eq('itinerary_id', id)
-        .eq('language', targetLanguage)
-
-      // Delete day versions
-      const { data: dayIds } = await supabase
-        .from('itinerary_days')
-        .select('id')
-        .eq('itinerary_id', id)
-
-      if (dayIds && dayIds.length > 0) {
-        await supabase
-          .from('itinerary_day_versions')
-          .delete()
-          .in('itinerary_day_id', dayIds.map((d: any) => d.id))
-          .eq('language', targetLanguage)
-
-        // Delete service versions
-        const { data: serviceIds } = await supabase
-          .from('itinerary_services')
-          .select('id')
-          .in('itinerary_day_id', dayIds.map((d: any) => d.id))
-
-        if (serviceIds && serviceIds.length > 0) {
-          await supabase
-            .from('itinerary_service_versions')
-            .delete()
-            .in('itinerary_service_id', serviceIds.map((s: any) => s.id))
-            .eq('language', targetLanguage)
-        }
-      }
-
-      console.log('[copy-translate] Deleted existing versions, proceeding with fresh translation')
-    }
+    // Force retranslate replaces the old translation only once the new text
+    // is in hand (called just before the new version row is written): it used
+    // to delete first, so a failed translation — or a 400 because the target
+    // is the source language — left the trip with no version at all. And it
+    // replaces only machine-made day text: a day a person reviewed is kept.
+    const clearOldTranslation = existing && forceRetranslate
+      ? () => clearReplaceableTranslation(id, targetLanguage as Language)
+      : async () => {}
 
     // Find source version (the other language)
     const sourceLanguage: Language = targetLanguage === 'en' ? 'ja' : 'en'
@@ -281,6 +290,7 @@ export async function POST(
         exclusions: translatedContent.exclusions
       })
 
+      await clearOldTranslation()
       const { data: newVersion, error: createError } = await supabase
         .from('itinerary_versions')
         .insert({
@@ -364,6 +374,7 @@ export async function POST(
     })
 
     // Create the new version with translated content
+    await clearOldTranslation()
     const { data: newVersion, error: createError } = await supabase
       .from('itinerary_versions')
       .insert({

@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { priceB2cQuote } from '@/lib/b2c/quote-price'
+import { pickB2cQuoteUpdates } from '@/lib/b2c/quote-updates'
 
 const src = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
 
@@ -32,7 +33,11 @@ describe('B2C quotes', () => {
   })
   it('create and edit check the trip and client', () => {
     expect(src('app/api/b2c/quotes/route.ts')).toContain('recordsInOrg(supabaseAdmin, orgId, { client_id })')
-    expect(src('app/api/b2c/quotes/[id]/route.ts')).toContain('recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updates.itinerary_id, client_id: updates.client_id })')
+    // Edit no longer takes a trip or client at all (2026-10-13 allowlist,
+    // lib/b2c/quote-updates.ts); the re-price reads the offer's own trip
+    // within the org.
+    expect(pickB2cQuoteUpdates({ itinerary_id: 'other', client_id: 'other' }, { lock: null })).toEqual({ ok: true, updates: {} })
+    expect(src('app/api/b2c/quotes/[id]/route.ts')).toMatch(/\.eq\('id', current\.itinerary_id\)\s*\.eq\('org_id', orgId\)/)
   })
   it('one price computation: premium kept on re-price, amounts in the currency’s units', () => {
     const yen = priceB2cQuote({ totalCost: 98765, marginPercent: 25, travelers: 3, seasonUpliftPercent: 15, currency: 'JPY' })
@@ -42,7 +47,9 @@ describe('B2C quotes', () => {
     expect(Number.isInteger(yen.price_per_person)).toBe(true)
     const eur = priceB2cQuote({ totalCost: 1000, marginPercent: 20, travelers: 2, seasonUpliftPercent: 0, currency: 'EUR' })
     expect(eur).toEqual({ margin_amount: 200, season_uplift_amount: 0, selling_price: 1200, price_per_person: 600 })
-    expect(src('app/api/b2c/quotes/[id]/route.ts')).toContain('seasonUpliftPercent: Number(updates.season_uplift_percent ?? existing?.season_uplift_percent ?? 0)')
+    // The premium % is the offer's own (set on create from the departure);
+    // the body can no longer change it (2026-10-13).
+    expect(src('app/api/b2c/quotes/[id]/route.ts')).toContain('seasonUpliftPercent: Number(current.season_uplift_percent ?? 0)')
   })
 })
 

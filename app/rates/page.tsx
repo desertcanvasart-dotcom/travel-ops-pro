@@ -11,6 +11,7 @@ import { hotelPpDouble } from '@/lib/rates/hotel-display-rate'
 import { vehicleBands, vehicleKeyLabel, PRESET_VEHICLE_KEYS } from '@/lib/rates/vehicle-bands'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { hubViewCsv, tabForHash, HUB_ANCHOR_TABS } from '@/lib/rates/hub-view'
 
 // ============================================
 // INTERFACES
@@ -207,6 +208,13 @@ interface RatesData {
 
 type TabType = 'transportation' | 'guides' | 'entrances' | 'accommodation' | 'meals' | 'cruises' | 'sleepingTrains' | 'trains' | 'airportStaff' | 'hotelStaff' | 'tipping'
 
+/** Each tab's label key under rates.overview.tabs. */
+const TAB_LABEL_KEY: Record<TabType, string> = {
+  transportation: 'transport', guides: 'guides', entrances: 'entrances', accommodation: 'hotels',
+  meals: 'meals', cruises: 'cruises', sleepingTrains: 'sleepTrain', trains: 'trains',
+  airportStaff: 'airport', hotelStaff: 'hotelSvc', tipping: 'tips',
+}
+
 export default function RatesPage() {
   const t = useTranslations('rates.overview')
   const { formatWithConversion, rateCurrency } = useCurrency()
@@ -219,6 +227,8 @@ export default function RatesPage() {
   const [rates, setRates] = useState<RatesData | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  // Tabs whose rates could not be loaded — shown as such, never as "0".
+  const [failedTabs, setFailedTabs] = useState<TabType[]>([])
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCity, setSelectedCity] = useState('all')
   const [selectedCategory, setSelectedCategory] = useState('all')
@@ -244,14 +254,19 @@ export default function RatesPage() {
         // non-JSON response) degrades just that category to [] instead of dropping
         // the whole page into the error state (was: one rejected fetch/.json()
         // nuked all 11 categories even when 10 loaded fine).
-        const loadType = async (type: string) => {
+        // A failed load is remembered per tab, so the page can say which
+        // categories it could not read instead of showing them as empty.
+        const failed: TabType[] = []
+        const loadType = async (type: string, tab: TabType) => {
           try {
             const res = await fetch(`/api/rates?type=${type}`)
             const json = await res.json()
-            return json?.success ? json.data : []
+            if (res.ok && json?.success) return json.data ?? []
           } catch {
-            return []
+            // falls through to the failure below
           }
+          failed.push(tab)
+          return []
         }
 
         const [
@@ -267,17 +282,17 @@ export default function RatesPage() {
           trainsData,
           tippingData
         ] = await Promise.all([
-          loadType('transportation'),
-          loadType('guide'),
-          loadType('entrance'),
-          loadType('accommodation'),
-          loadType('meal'),
-          loadType('airport_staff'),
-          loadType('hotel_staff'),
-          loadType('cruises'),
-          loadType('sleeping_trains'),
-          loadType('trains'),
-          loadType('tipping')
+          loadType('transportation', 'transportation'),
+          loadType('guide', 'guides'),
+          loadType('entrance', 'entrances'),
+          loadType('accommodation', 'accommodation'),
+          loadType('meal', 'meals'),
+          loadType('airport_staff', 'airportStaff'),
+          loadType('hotel_staff', 'hotelStaff'),
+          loadType('cruises', 'cruises'),
+          loadType('sleeping_trains', 'sleepingTrains'),
+          loadType('trains', 'trains'),
+          loadType('tipping', 'tipping')
         ])
 
         const combinedData: RatesData = {
@@ -295,6 +310,7 @@ export default function RatesPage() {
         }
 
         setRates(combinedData)
+        setFailedTabs(failed)
 
         // Open on a tab that HAS something — see lib/rates/first-tab-with-data
         // (audit AUT-M01: the hub opened on an empty Transportation tab while
@@ -304,7 +320,11 @@ export default function RatesPage() {
             RATES_TAB_ORDER.map(tab => [tab, combinedData[tab].length])
           ) as Record<RatesTab, number>
         )
-        if (firstWithData) setActiveTab(firstWithData)
+        // A menu anchor (/rates#transport …) names the tab to open; without
+        // one, the first tab with something in it.
+        const anchored = tabForHash(typeof window !== 'undefined' ? window.location.hash : null)
+        if (anchored) setActiveTab(anchored)
+        else if (firstWithData) setActiveTab(firstWithData)
 
         setLoading(false)
       } catch (err) {
@@ -315,6 +335,18 @@ export default function RatesPage() {
     }
 
     fetchAllRates()
+  }, [])
+
+  // The menu's group links land here as /rates#accommodation, #transport,
+  // #services, #costs — opening the matching tab, also when the hash changes
+  // on a page that is already open.
+  useEffect(() => {
+    const onHash = () => {
+      const tab = tabForHash(window.location.hash)
+      if (tab) setActiveTab(tab)
+    }
+    window.addEventListener('hashchange', onHash)
+    return () => window.removeEventListener('hashchange', onHash)
   }, [])
 
   const getUniqueCategoriesFromEntrances = () => {
@@ -467,16 +499,13 @@ export default function RatesPage() {
     return pages
   }
 
+  // "Export view": the current tab's rows as filtered on screen (0 kept as 0,
+  // lists written out — lib/rates/hub-view). Not the import sheet: each rate
+  // page's own Export is the file that re-imports.
   const exportToCSV = () => {
     const currentRates = filteredRates[activeTab] as any[]
     if (!currentRates.length) return
-    
-    const headers = Object.keys(currentRates[0]).join(',')
-    const rows = currentRates.map(rate => 
-      Object.values(rate).map(v => `"${String(v || '').replace(/"/g, '""')}"`).join(',')
-    ).join('\n')
-    
-    const csvContent = `${headers}\n${rows}`
+    const csvContent = hubViewCsv(currentRates)
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
     const link = document.createElement('a')
     const url = URL.createObjectURL(blob)
@@ -719,7 +748,18 @@ export default function RatesPage() {
         </div>
       </div>
 
-      {/* Navigation Tabs */}
+      {failedTabs.length > 0 && (
+        <div className="container mx-auto px-4 lg:px-6 print:hidden">
+          <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">
+            {t('loadFailed', { tabs: failedTabs.map(tab => t(`tabs.${TAB_LABEL_KEY[tab]}`)).join(', ') })}
+          </div>
+        </div>
+      )}
+
+      {/* Navigation Tabs — the menu's /rates#… group links land here */}
+      {(Object.keys(HUB_ANCHOR_TABS) as (keyof typeof HUB_ANCHOR_TABS)[]).map(anchor => (
+        <span key={anchor} id={anchor} className="block scroll-mt-4" aria-hidden="true" />
+      ))}
       <div className="container mx-auto px-4 lg:px-6 print:hidden">
         <div className="bg-white rounded-t-lg shadow-md border border-gray-200">
           <div className="flex overflow-x-auto border-b border-gray-200">

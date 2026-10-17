@@ -11,7 +11,7 @@ vi.mock('@supabase/supabase-js', async () => {
 // Imported after the mock is registered.
 import { calculateDayBasedPricing, calculateAutoPricing } from '@/lib/auto-pricing-service'
 
-const BASE_PARAMS = {
+const BASE_PARAMS = { orgId: 'org-1',
   templateId: TEMPLATE_ID,
   tier: 'standard' as const,
   isEurPassport: true,
@@ -101,7 +101,7 @@ describe('calculateDayBasedPricing — invariants (full rates)', () => {
 })
 
 describe('calculateAutoPricing — propagates complete/holes (consolidation Phase D)', () => {
-  const AUTO_PARAMS = {
+  const AUTO_PARAMS = { orgId: 'org-1',
     templateId: TEMPLATE_ID,
     tier: 'standard' as const,
     numPax: 2,

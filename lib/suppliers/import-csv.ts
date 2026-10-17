@@ -6,9 +6,18 @@
 // is the sheet: one row per supplier, roles as a semicolon list of the
 // vocabulary in lib/supplier-types.ts. Pure — the route parses and writes.
 //
-// Rule, same as the rates create routes since #341: an import never
-// rewrites a supplier that exists. A row whose name is already on file is
-// reported and skipped; edit that supplier on its page.
+// Matching (planSupplierImport): a row is the supplier of this company whose
+// supplier_code it gives, else — no code in the row — the one whose name it
+// gives (case-insensitive). A matched supplier is UPDATED with the columns
+// the file carries; anything else is added. It used to match by name only
+// and never update, so a renamed supplier's row was previewed "ready", then
+// failed at commit on UNIQUE(org_id, supplier_code) as a bare "Could not
+// insert". Every clash is now found in the preview:
+//   - the same code, or the same name, twice in the file;
+//   - a code new to this company on a row whose name an existing supplier
+//     already has (that supplier has another code — which one is meant?);
+//   - a renamed row whose new name another supplier already has;
+//   - a name several suppliers share, with no code to pick one.
 //
 // SUPPLIER_CSV_COLUMNS below is the ONE definition of that sheet. The export
 // route, the template, the importer and the guard test all derive from it.
@@ -19,9 +28,11 @@
 // The supplier_code loss was the worst of it, because a re-imported supplier
 // is auto-assigned a NEW SUP-#### by the DB trigger — which silently breaks
 // the supplier_code link in every rate CSV that had been exported alongside.
+// The commission (Rates › Commissions) and a guide's languages (Guide Rates)
+// are on the supplier row too, so they travel with it.
 
 import { SUPPLIER_TYPE_VALUES } from '@/lib/supplier-types'
-import { SUPPLIER_STATUSES } from '@/lib/suppliers/fields'
+import { COMMISSION_DIRECTIONS, SUPPLIER_STATUSES, commissionFieldError } from '@/lib/suppliers/fields'
 import { buildSupplierInsert } from '@/lib/suppliers/create-payload'
 
 export interface SupplierCsvColumn {
@@ -52,6 +63,9 @@ export const SUPPLIER_CSV_COLUMNS: readonly SupplierCsvColumn[] = [
   { name: 'country', label: 'Country', required: false, sample: 'Egypt' },
   { name: 'address', label: 'Address', required: false },
   { name: 'notes', label: 'Notes', required: false, sample: 'Contract renews every October' },
+  { name: 'default_commission_rate', label: 'Commission %', required: false, hint: '0–100; blank = no commission' },
+  { name: 'commission_type', label: 'Commission Direction', required: false, hint: `${COMMISSION_DIRECTIONS.join(' | ')} (payable = we pay them, receivable = they pay us)` },
+  { name: 'languages', label: 'Guide Languages', required: false, list: true, hint: 'a guide\'s languages, separated by ;' },
 ]
 
 export const EXAMPLE_SUPPLIER_NAME = 'EXAMPLE-DELETE-THIS-ROW'
@@ -95,8 +109,11 @@ export interface SupplierCsvRow { [column: string]: string | undefined }
 
 export interface PreparedSupplier {
   line: number
+  /** The insert payload (lib/suppliers/create-payload). */
   row: Record<string, unknown>
   name: string
+  /** The row's supplier_code, '' when blank. */
+  code: string
 }
 
 export interface SupplierImportPreview {
@@ -106,6 +123,7 @@ export interface SupplierImportPreview {
 }
 
 const norm = (v: unknown) => String(v ?? '').trim()
+const listOf = (v: unknown) => norm(v).split(/[;|,/]/).map(r => r.trim()).filter(Boolean)
 
 /** Turn parsed CSV rows into insert payloads, or say per row why not.
  *  `allowedRoles` is the agency's supplier types (lib/supplier-types
@@ -113,6 +131,7 @@ const norm = (v: unknown) => String(v ?? '').trim()
 export function prepareSupplierRows(rows: SupplierCsvRow[], allowedRoles: ReadonlySet<string> = new Set(SUPPLIER_TYPE_VALUES)): SupplierImportPreview {
   const out: SupplierImportPreview = { ready: [], errors: [], exampleRowsSkipped: 0 }
   const seen = new Set<string>()
+  const seenCodes = new Map<string, number>()
   rows.forEach((raw, i) => {
     const line = i + 2 // 1-based, after the header
     const name = norm(raw.name)
@@ -120,7 +139,7 @@ export function prepareSupplierRows(rows: SupplierCsvRow[], allowedRoles: Readon
     if (name.toUpperCase() === EXAMPLE_SUPPLIER_NAME) { out.exampleRowsSkipped++; return }
     if (!name) { out.errors.push({ line, name: '', message: 'Name is required' }); return }
 
-    const roles = norm(raw.roles ?? raw.types ?? raw.type).split(/[;|,/]/).map(r => r.trim().toLowerCase().replace(/\s+/g, '_')).filter(Boolean)
+    const roles = listOf(raw.roles ?? raw.types ?? raw.type).map(r => r.toLowerCase().replace(/\s+/g, '_'))
     if (roles.length === 0) { out.errors.push({ line, name, message: 'Roles is required' }); return }
     const unknown = roles.filter(r => !allowedRoles.has(r))
     if (unknown.length) { out.errors.push({ line, name, message: `Unknown role: ${unknown.join(', ')}` }); return }
@@ -128,15 +147,26 @@ export function prepareSupplierRows(rows: SupplierCsvRow[], allowedRoles: Readon
     const status = norm(raw.status).toLowerCase() || 'active'
     if (!(SUPPLIER_STATUSES as readonly string[]).includes(status)) { out.errors.push({ line, name, message: `Status must be one of ${SUPPLIER_STATUSES.join(', ')}` }); return }
 
+    const commission = {
+      default_commission_rate: norm(raw.default_commission_rate) === '' ? null : Number(norm(raw.default_commission_rate).replace(/%$/, '')),
+      commission_type: norm(raw.commission_type).toLowerCase() || null,
+    }
+    const commissionError = commissionFieldError(commission)
+    if (commissionError) { out.errors.push({ line, name, message: commissionError }); return }
+
     const key = name.toLowerCase()
     if (seen.has(key)) { out.errors.push({ line, name, message: 'Same name appears earlier in the file' }); return }
+    const code = norm(raw.supplier_code)
+    const codeKey = code.toUpperCase()
+    if (code && seenCodes.has(codeKey)) { out.errors.push({ line, name, message: `Supplier code ${code} is also on line ${seenCodes.get(codeKey)}` }); return }
     seen.add(key)
+    if (code) seenCodes.set(codeKey, line)
 
     const built = buildSupplierInsert({
       name, types: roles, status,
       // A code from the file is honoured; blank leaves the DB trigger to
       // auto-assign the next SUP-####.
-      supplier_code: norm(raw.supplier_code) || undefined,
+      supplier_code: code || undefined,
       contact_name: norm(raw.contact_name) || null,
       contact_email: norm(raw.contact_email) || null,
       contact_phone: norm(raw.contact_phone) || null,
@@ -146,9 +176,113 @@ export function prepareSupplierRows(rows: SupplierCsvRow[], allowedRoles: Readon
       country: norm(raw.country) || undefined,
       address: norm(raw.address) || null,
       notes: norm(raw.notes) || null,
+      // A rate with no direction is "we receive" — the generator's fallback.
+      default_commission_rate: commission.default_commission_rate,
+      commission_type: commission.default_commission_rate === null ? null : commission.commission_type ?? 'receivable',
+      languages: listOf(raw.languages).map(l => l.toLowerCase()),
     })
     if (!built.ok) { out.errors.push({ line, name, message: built.error }); return }
-    out.ready.push({ line, row: built.row, name })
+    out.ready.push({ line, row: built.row, name, code })
   })
   return out
+}
+
+// ---- Matching against the roster ----
+
+export interface ExistingSupplier {
+  id: string
+  name: string
+  supplier_code?: string | null
+  type?: string | null
+}
+
+export interface SupplierImportPlan {
+  toInsert: PreparedSupplier[]
+  toUpdate: { line: number; name: string; id: string; matchedBy: 'code' | 'name'; patch: Record<string, unknown> }[]
+  clashes: { line: number; name: string; message: string }[]
+}
+
+// Columns an update may write, by the CSV header that carries each. A column
+// the file does not have is left alone — a sheet from before the commission
+// columns existed must not clear every commission. name, roles and status
+// are written only when the cell says something; country and code too.
+const KEEP_WHEN_BLANK = new Set(['status', 'country', 'supplier_code'])
+
+/** The update for a matched supplier: every column the file carries. */
+export function supplierUpdatePatch(
+  prepared: PreparedSupplier,
+  presentHeaders: ReadonlySet<string>,
+  existing: ExistingSupplier,
+): Record<string, unknown> {
+  const patch: Record<string, unknown> = { name: prepared.row.name }
+  const types = prepared.row.types as string[]
+  patch.types = types
+  // The primary role stays the one the supplier has, if the sheet keeps it.
+  patch.type = existing.type && types.includes(existing.type) ? existing.type : types[0]
+  for (const c of SUPPLIER_CSV_COLUMNS) {
+    const column = c.column ?? c.name
+    if (column === 'name' || column === 'types' || !presentHeaders.has(c.name)) continue
+    const value = prepared.row[column]
+    const blank = value === undefined || value === null || value === '' || (Array.isArray(value) && value.length === 0)
+    if (blank && KEEP_WHEN_BLANK.has(column)) continue
+    patch[column] = blank ? (c.list ? [] : null) : value
+  }
+  if (presentHeaders.has('default_commission_rate') && !presentHeaders.has('commission_type')) {
+    patch.commission_type = prepared.row.commission_type
+  }
+  return patch
+}
+
+/** Which rows add a supplier, which update one, and which clash — decided in
+ *  the dry run, so the commit does exactly what the preview said. */
+export function planSupplierImport(
+  ready: PreparedSupplier[],
+  existing: ExistingSupplier[],
+  presentHeaders: ReadonlySet<string>,
+): SupplierImportPlan {
+  const plan: SupplierImportPlan = { toInsert: [], toUpdate: [], clashes: [] }
+  const byCode = new Map<string, ExistingSupplier>()
+  const byName = new Map<string, ExistingSupplier[]>()
+  for (const s of existing) {
+    if (s.supplier_code) byCode.set(String(s.supplier_code).trim().toUpperCase(), s)
+    const k = String(s.name ?? '').trim().toLowerCase()
+    byName.set(k, [...(byName.get(k) ?? []), s])
+  }
+  const claimed = new Map<string, number>() // existing id → the line that updates it
+  for (const r of ready) {
+    const named = byName.get(r.name.toLowerCase()) ?? []
+    let match: ExistingSupplier | null = null
+    let matchedBy: 'code' | 'name' = 'name'
+    if (r.code) {
+      match = byCode.get(r.code.toUpperCase()) ?? null
+      matchedBy = 'code'
+      if (match) {
+        const other = named.find(s => s.id !== match!.id)
+        if (other) {
+          plan.clashes.push({ line: r.line, name: r.name, message: `Code ${r.code} belongs to "${match.name}", but "${other.name}" (${other.supplier_code ?? 'no code'}) already has this name` })
+          continue
+        }
+      } else if (named.length > 0) {
+        const holder = named[0]
+        plan.clashes.push({ line: r.line, name: r.name, message: `"${holder.name}" is already on file as ${holder.supplier_code ?? 'a supplier with no code'}; the file gives ${r.code}. Use that code, or rename the row` })
+        continue
+      }
+    } else if (named.length > 1) {
+      plan.clashes.push({ line: r.line, name: r.name, message: `${named.length} suppliers are named "${r.name}" (${named.map(s => s.supplier_code ?? '?').join(', ')}); add the supplier_code to say which` })
+      continue
+    } else {
+      match = named[0] ?? null
+    }
+    if (!match) { plan.toInsert.push(r); continue }
+    if (claimed.has(match.id)) {
+      plan.clashes.push({ line: r.line, name: r.name, message: `Line ${claimed.get(match.id)} already updates "${match.name}"` })
+      continue
+    }
+    claimed.set(match.id, r.line)
+    const patch = supplierUpdatePatch(r, presentHeaders, match)
+    // Matched on it: the code is already the supplier's (whatever its case).
+    if (matchedBy === 'code') delete patch.supplier_code
+    plan.toUpdate.push({ line: r.line, name: r.name, id: match.id, matchedBy, patch })
+  }
+  return plan
 }

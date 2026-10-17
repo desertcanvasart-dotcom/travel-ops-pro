@@ -24,6 +24,7 @@ import {
   FileText
 } from 'lucide-react'
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
+import TaxTab from './TaxTab'
 
 interface TripPnL {
   itinerary_id: string
@@ -58,6 +59,9 @@ interface TripPnL {
   realized_profit: number
   realized_margin: number
   realized_basis: string
+  // Lines left out of this trip's figures because no exchange rate covers them.
+  fx_complete?: boolean
+  fx_holes?: Array<{ kind: string; reference: string; amount: number; fromCurrency: string; date: string | null }>
 }
 
 interface Summary {
@@ -81,6 +85,9 @@ interface Summary {
   average_realized_margin: number | null
   profitable_trips: number
   loss_trips: number
+  /** False when at least one cost or payment was left out for want of a rate. */
+  complete?: boolean
+  fx_holes?: Array<{ kind: string; reference: string; amount: number; fromCurrency: string; date: string | null }>
 }
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
@@ -125,6 +132,9 @@ export default function ProfitLossPage() {
   const [currentPage, setCurrentPage] = useState(1)
   const [sortField, setSortField] = useState<'profit_margin' | 'gross_profit' | 'start_date'>('start_date')
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc')
+  const [tab, setTab] = useState<'overview' | 'tax'>('overview')
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const [excludedStatuses, setExcludedStatuses] = useState<string[]>([])
 
   const fetchAbortRef = useRef<AbortController | null>(null)
 
@@ -142,21 +152,28 @@ export default function ProfitLossPage() {
       if (endDate) params.append('endDate', endDate)
 
       const response = await fetch(`/api/profit-loss?${params}`, { signal: controller.signal })
-      if (response.ok) {
-        const result = await response.json()
-        if (controller.signal.aborted) return
-        if (result.success) {
-          setData(result.data)
-          setSummary(result.summary)
-        }
+      const result = await response.json().catch(() => ({}))
+      if (controller.signal.aborted) return
+      if (response.ok && result.success) {
+        setData(result.data)
+        setSummary(result.summary)
+        setExcludedStatuses(result.excluded_statuses ?? [])
+        setLoadError(null)
+      } else {
+        // A failed report must not read as an empty one (or keep showing the
+        // previous filter's figures as if they were these).
+        setData([])
+        setSummary(null)
+        setLoadError(result.error || t('loadError'))
       }
     } catch (error: any) {
       if (error?.name === 'AbortError') return // superseded by a newer fetch / unmount
       console.error('Error fetching P&L data:', error)
+      setLoadError(t('loadError'))
     } finally {
       if (!controller.signal.aborted) setLoading(false)
     }
-  }, [statusFilter, startDate, endDate])
+  }, [statusFilter, startDate, endDate, t])
 
   useEffect(() => {
     fetchData()
@@ -234,10 +251,11 @@ export default function ProfitLossPage() {
     return formatMoney(flat ?? 0, summary.currency || 'EUR')
   }
 
-  const getCurrencySymbol = (currency: string) => {
-    const symbols: Record<string, string> = { EUR: '€', USD: '$', GBP: '£', EGP: 'E£', JPY: '¥' }
-    return symbols[currency] || currency
-  }
+  // One formatter for every figure in the table, in the trip's own currency and
+  // at that currency's precision (whole yen; revenue, expenses and profit used
+  // to mix unrounded and rounded values).
+  const money = (amount: number, currency: string) =>
+    amount < 0 ? `−${formatMoney(-amount, currency)}` : formatMoney(amount, currency)
 
   const getProfitColor = (profit: number | null) => {
     if (profit == null) return 'text-gray-600'
@@ -358,8 +376,56 @@ export default function ProfitLossPage() {
         </div>
       </div>
 
+      {/* Tabs: the trip figures, and the VAT the invoices recorded */}
+      <div className="flex gap-1 border-b border-gray-200" role="tablist">
+        {(['overview', 'tax'] as const).map(key => (
+          <button
+            key={key}
+            role="tab"
+            aria-selected={tab === key}
+            onClick={() => setTab(key)}
+            className={`px-4 py-2 text-sm font-medium -mb-px border-b-2 transition-colors ${
+              tab === key ? 'border-[#647C47] text-[#647C47]' : 'border-transparent text-gray-500 hover:text-gray-700'
+            }`}
+          >
+            {t(`tabs.${key}`)}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'tax' && <TaxTab />}
+
+      {tab === 'overview' && loadError && (
+        <div role="alert" className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {loadError}
+        </div>
+      )}
+
+      {/* An aggregate that left costs out must say so: the margin below is then
+          a ceiling, not a settled figure. */}
+      {tab === 'overview' && summary && summary.complete === false && (
+        <div role="alert" className="rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          <p className="font-medium">{t('fx.warningTitle')}</p>
+          <p className="mt-0.5">{t('fx.warningBody', { count: summary.fx_holes?.length ?? 0 })}</p>
+          {summary.fx_holes && summary.fx_holes.length > 0 && (
+            <ul className="mt-1 list-disc pl-5 text-xs">
+              {summary.fx_holes.slice(0, 5).map((h, i) => (
+                <li key={i}>{h.reference}: {formatMoney(Number(h.amount) || 0, h.fromCurrency)}{h.date ? ` (${h.date})` : ''}</li>
+              ))}
+              {summary.fx_holes.length > 5 && <li>{t('fx.more', { count: summary.fx_holes.length - 5 })}</li>}
+            </ul>
+          )}
+        </div>
+      )}
+
+      {tab === 'overview' && excludedStatuses.length > 0 && (
+        <p className="text-xs text-gray-500">
+          {t('scope.excluded', { statuses: excludedStatuses.map(st => t(`status.${st}` as any)).join(', ') })}
+        </p>
+      )}
+
       {/* Summary Cards */}
-      {summary && (
+      {tab === 'overview' && summary && (
         <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-3">
           <div className="bg-white border border-gray-200 rounded-lg p-3 min-w-0">
             <div className="flex items-center gap-2 mb-2">
@@ -377,6 +443,7 @@ export default function ProfitLossPage() {
             </div>
             <p className="text-xs text-gray-500 mb-1">{t('summary.totalRevenue')}</p>
             <p className="text-lg font-semibold text-blue-600 truncate" title={summaryMoney('revenue', summary.total_revenue)}>{summaryMoney('revenue', summary.total_revenue)}</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">{t('summary.netOfVat')}</p>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-3 min-w-0">
@@ -418,7 +485,7 @@ export default function ProfitLossPage() {
             <p className={`text-lg font-semibold truncate ${getProfitColor(summary.total_net_profit)}`} title={summaryMoney('net_profit', summary.total_net_profit)}>
               {summaryMoney('net_profit', summary.total_net_profit)}
             </p>
-            <p className="text-[11px] text-gray-500 mt-0.5">{summaryPercent(summary.average_net_margin)} margin</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">{summaryPercent(summary.average_net_margin)} {t('summary.marginBasis')}</p>
           </div>
 
           {/* Realized — cash that actually moved. Deliberately separate from the
@@ -446,6 +513,7 @@ export default function ProfitLossPage() {
             </div>
             <p className="text-xs text-gray-500 mb-1">{t('summary.avgMargin')}</p>
             <p className="text-xl font-semibold text-purple-600 truncate">{summaryPercent(summary.average_margin)}</p>
+            <p className="text-[11px] text-gray-500 mt-0.5">{t('summary.marginBasis')}</p>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-3 min-w-0">
@@ -468,6 +536,7 @@ export default function ProfitLossPage() {
         </div>
       )}
 
+      {tab === 'overview' && (<>
       {/* Filters */}
       <div className="flex flex-col md:flex-row md:items-center gap-3">
         <div className="relative flex-1 max-w-sm">
@@ -533,6 +602,7 @@ export default function ProfitLossPage() {
               >
                 <option value="">{t('filterLabels.allStatuses')}</option>
                 <option value="draft">{t('status.draft')}</option>
+                <option value="quoted">{t('status.quoted')}</option>
                 <option value="sent">{t('status.sent')}</option>
                 <option value="confirmed">{t('status.confirmed')}</option>
                 <option value="completed">{t('status.completed')}</option>
@@ -571,7 +641,7 @@ export default function ProfitLossPage() {
               <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">{t('table.revenue')}</th>
               <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">{t('table.expenses')}</th>
               <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">{t('table.profit')}</th>
-              <th className="text-center text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">{t('table.margin')}</th>
+              <th className="text-center text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3"><span title={t('summary.marginBasis')}>{t('table.margin')}</span></th>
               <th className="text-center text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">{t('table.status')}</th>
               <th className="text-right text-xs font-semibold text-gray-600 uppercase tracking-wide px-4 py-3">{t('table.actions')}</th>
             </tr>
@@ -611,7 +681,7 @@ export default function ProfitLossPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="text-sm font-medium text-gray-900">
-                        {getCurrencySymbol(trip.currency)}{revenue.toLocaleString()}
+                        {money(revenue, trip.currency)}
                       </div>
                       {trip.invoice_count > 0 && (
                         <div className="text-xs text-gray-500">
@@ -621,10 +691,15 @@ export default function ProfitLossPage() {
                       {trip.total_revenue === 0 && (
                         <div className="text-xs text-gray-400 italic">{t('quoted')}</div>
                       )}
+                      {trip.fx_complete === false && (
+                        <div className="text-xs text-amber-700" title={(trip.fx_holes ?? []).map(h => h.reference).join(', ')}>
+                          {t('fx.tripExcluded', { count: trip.fx_holes?.length ?? 0 })}
+                        </div>
+                      )}
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="text-sm font-medium text-gray-900">
-                        {getCurrencySymbol(trip.currency)}{trip.total_expenses.toLocaleString()}
+                        {money(trip.total_expenses, trip.currency)}
                       </div>
                       {trip.expense_count > 0 && (
                         <div className="text-xs text-gray-500">
@@ -634,18 +709,18 @@ export default function ProfitLossPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className={`text-sm font-semibold ${getProfitColor(trip.net_profit)}`}>
-                        {trip.net_profit >= 0 ? '+' : ''}{getCurrencySymbol(trip.currency)}{Math.round(trip.net_profit).toLocaleString()}
+                        {trip.net_profit >= 0 ? '+' : ''}{money(trip.net_profit, trip.currency)}
                       </div>
                       {/* Only shown when an agent actually takes a cut, so the
                           row stays quiet on directly-sold trips. */}
                       {trip.agent_commissions > 0 && (
                         <div className="text-xs text-amber-600" title="Agent commission deducted from gross profit">
-                          −{getCurrencySymbol(trip.currency)}{Math.round(trip.agent_commissions).toLocaleString()} commission
+                          −{money(trip.agent_commissions, trip.currency)} commission
                         </div>
                       )}
                       {trip.realized_revenue > 0 && (
                         <div className="text-xs text-gray-500" title={trip.realized_basis}>
-                          {getCurrencySymbol(trip.currency)}{Math.round(trip.realized_profit).toLocaleString()} realized
+                          {money(trip.realized_profit, trip.currency)} realized
                         </div>
                       )}
                     </td>
@@ -739,6 +814,7 @@ export default function ProfitLossPage() {
       <div className="text-center pt-4">
         <p className="text-xs text-gray-400">{t('footer')}</p>
       </div>
+      </>)}
     </div>
   )
 }

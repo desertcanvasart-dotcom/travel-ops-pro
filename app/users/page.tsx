@@ -21,7 +21,8 @@ import {
   Loader2,
   AlertCircle,
   X,
-  RefreshCw
+  RefreshCw,
+  UserMinus
 } from 'lucide-react'
 import { useConfirm } from '@/components/ConfirmDialog'
 
@@ -34,6 +35,9 @@ interface TeamMember {
   role: string
   /** null = no membership in this organisation yet (invitation not accepted). */
   membership_role?: string | null
+  /** Also a member of another company: one login for both, so Deactivate and
+   *  Delete would act in both; this page offers Remove from this company. */
+  other_companies?: boolean
   phone?: string
   is_active: boolean
   last_login_at?: string
@@ -241,7 +245,7 @@ export default function UserManagementPage() {
   }
 
   const deleteMember = async (memberId: string, memberName: string) => {
-    if (!(await confirmDialog(`Are you sure you want to permanently delete "${memberName}"? This action cannot be undone.`))) return
+    if (!(await confirmDialog(`Are you sure you want to permanently delete "${memberName}"? This action cannot be undone. A login that still owns trips or other records cannot be deleted; deactivate it instead.`))) return
 
     try {
       const response = await fetch(`/api/profiles/${memberId}`, {
@@ -257,6 +261,27 @@ export default function UserManagementPage() {
     } catch (error) {
       console.error('Error deleting member:', error)
       alert('Failed to delete user')
+    }
+  }
+
+  // Takes the person out of THIS company only: their login, profile and the
+  // other company's membership stay as they are.
+  const removeFromCompany = async (memberId: string, memberName: string) => {
+    if (!(await confirmDialog(`Remove "${memberName}" from this company? They keep their login and their place in the other company.`))) return
+
+    try {
+      const response = await fetch(`/api/organization/members?user_id=${encodeURIComponent(memberId)}`, {
+        method: 'DELETE'
+      })
+      if (response.ok) {
+        fetchMembers()
+      } else {
+        const data = await response.json().catch(() => ({}))
+        alert(data.error || 'Failed to remove from this company')
+      }
+    } catch (error) {
+      console.error('Error removing member:', error)
+      alert('Failed to remove from this company')
     }
   }
 
@@ -323,7 +348,8 @@ export default function UserManagementPage() {
         <div className="bg-white border border-gray-200 rounded-lg p-4">
           <p className="text-xs text-gray-500">Admins</p>
           <p className="text-2xl font-semibold text-purple-600">
-            {members.filter(m => m.role === 'admin').length}
+            {/* The owner administers too: an owner with no other admin is not "0". */}
+            {members.filter(m => m.role === 'admin' || m.role === 'owner').length}
           </p>
         </div>
       </div>
@@ -420,8 +446,21 @@ export default function UserManagementPage() {
                       </span>
                     )}
 
-                    {/* Actions */}
-                    {isAdmin && (
+                    {/* Actions. Someone who also works for another company
+                        has one login for both: deactivating or deleting it
+                        would act there too, so they are removed from this
+                        company instead. */}
+                    {isAdmin && member.other_companies && (
+                      <button
+                        type="button"
+                        onClick={() => removeFromCompany(member.id, member.full_name || member.email)}
+                        className="p-1.5 rounded transition-colors text-gray-400 hover:text-red-600 hover:bg-red-50"
+                        title="Remove from this company"
+                      >
+                        <UserMinus className="w-4 h-4" />
+                      </button>
+                    )}
+                    {isAdmin && !member.other_companies && (
                       <div className="flex items-center gap-1">
                         <button
                           onClick={() => toggleMemberStatus(member.id, member.is_active)}

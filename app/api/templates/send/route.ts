@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
-import { visibleToOrg } from '@/lib/templates/template-scope'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError, sendEmail as gmailSendEmail } from '@/lib/gmail'
 import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
+import { recordOutboundWhatsApp } from '@/lib/whatsapp-outbound'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -51,9 +51,21 @@ export async function POST(request: NextRequest) {
     let result
 
     if (channel === 'email') {
-      result = await sendEmail(recipient, subject, messageBody, sessionUserId!)
+      result = await sendEmail(recipient, subject, messageBody, sessionUserId!, orgId)
     } else if (channel === 'whatsapp') {
       result = await sendWhatsApp(recipient, messageBody, orgId)
+      // File it in this org's conversation with that number, as an inbox
+      // reply is — otherwise the thread never shows what was sent.
+      if (result.success) {
+        const filed = await recordOutboundWhatsApp(supabase, {
+          orgId,
+          phone: recipient,
+          body: messageBody,
+          messageSid: result.messageId,
+          clientId: recipientType === 'client' ? recipientId ?? null : clientId ?? null,
+        })
+        if (!filed) console.error('Template WhatsApp sent but not filed in a conversation')
+      }
     } else {
       return NextResponse.json({
         success: false,
@@ -87,27 +99,9 @@ export async function POST(request: NextRequest) {
     const { error: logError } = await supabase.from('template_send_log').insert(logEntry)
     if (logError) console.error('template_send_log insert failed:', logError.message)
 
-    // Update template usage count
-    if (templateId) {
-      // Fetch current template to get usage_count
-      // Only a template this org can see (its own or a shared default).
-      const { data: template } = await supabase
-        .from('message_templates')
-        .select('usage_count')
-        .eq('id', templateId)
-        .or(visibleToOrg(orgId))
-        .maybeSingle()
-
-      if (template) {
-        await supabase
-          .from('message_templates')
-          .update({
-            usage_count: (template.usage_count || 0) + 1,
-            last_used_at: new Date().toISOString()
-          })
-          .eq('id', templateId)
-      }
-    }
+    // Usage is counted from template_send_log (per org — /api/templates/analytics),
+    // not from usage_count on the template row: a shared default's row is every
+    // org's, so a counter there mixed their sends.
 
     if (!result.success) {
       return NextResponse.json({
@@ -138,13 +132,20 @@ async function sendEmail(
   to: string,
   subject: string,
   body: string,
-  userId: string
+  userId: string,
+  orgId: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
     // Sends from the SIGNED-IN user's own Gmail. The former "first connected
     // account" fallback is gone: it sent from whichever account happened to be
-    // first in the table, regardless of tenant.
-    const { accessToken, refreshToken } = await getAuthenticatedGmail(userId)
+    // first in the table, regardless of tenant. And only while that connection
+    // serves this workspace's company (gmail_tokens.org_id, 20261204): a
+    // person in both companies must not send one company's mail from the
+    // mailbox they connected to the other.
+    const { accessToken, refreshToken, orgId: mailboxOrg } = await getAuthenticatedGmail(userId)
+    if (mailboxOrg !== orgId) {
+      return { success: false, error: 'Your Gmail is connected to another company. Connect it from this workspace to send from it.' }
+    }
     await gmailSendEmail(accessToken, refreshToken, to, subject, body)
 
     return { success: true }
@@ -165,10 +166,10 @@ async function sendWhatsApp(
   to: string,
   body: string,
   orgId: string
-): Promise<{ success: boolean; error?: string }> {
+): Promise<{ success: boolean; error?: string; messageId?: string }> {
   try {
     const result = await sendWhatsAppMessage({ to, body, orgId })
-    return { success: result.success, error: result.error }
+    return { success: result.success, error: result.error, messageId: result.messageId }
   } catch (error: any) {
     console.error('WhatsApp send error:', error)
     return { success: false, error: clientMessage(error, 'Failed to send WhatsApp message') }

@@ -7,30 +7,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
 import { tierLadderForCurrentOrg } from '@/lib/vocabulary-server'
+import { isWrittenVariation, type VariationInput } from '@/lib/content-library/variations'
+import { categoryInOrg, contentSession, destinationInOrg, withoutOwnedColumns } from '@/lib/content-library/session'
 
-// Helper to create Supabase client
-async function createClient() {
-  const cookieStore = await cookies()
-  return createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
-      cookies: {
-        getAll() {
-          return cookieStore.getAll()
-        },
-        setAll(cookiesToSet) {
-          cookiesToSet.forEach(({ name, value, options }) => {
-            cookieStore.set(name, value, options)
-          })
-        },
-      },
-    }
-  )
-}
+// Every read is filtered by, and every insert stamped with, the caller's
+// ACTIVE company (lib/content-library/session.ts) — RLS alone would show a
+// person in both companies both companies' content.
 
 // Helper to generate slug
 function generateSlug(name: string): string {
@@ -43,9 +26,11 @@ function generateSlug(name: string): string {
 // GET - List content items with filters
 export async function GET(request: NextRequest) {
   try {
-    const supabase = await createClient()
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
     const { searchParams } = new URL(request.url)
-    
+
     // Parse filters
     const categoryId = searchParams.get('category_id')
     const search = sanitizeSearchTerm(searchParams.get('search'))
@@ -55,6 +40,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('content_library')
       .select('*')
+      .eq('org_id', orgId)
       .order('name', { ascending: true })
 
     if (activeOnly) {
@@ -88,16 +74,21 @@ export async function GET(request: NextRequest) {
     const { data: categories } = await supabase
       .from('content_categories')
       .select('id, name, slug, icon')
+      .eq('org_id', orgId)
       .in('id', categoryIds)
 
     const categoryMap = new Map(categories?.map(c => [c.id, c]) || [])
 
     // Fetch variations for all content items
     const contentIds = contentItems.map(c => c.id)
+    // Written tiers only: rows saved with a blank description (before saves
+    // dropped them) are not a variation, and counting them made the list say
+    // "All Tiers" for content written for one.
     const { data: variations } = await supabase
       .from('content_variations')
       .select('id, content_id, tier, is_active')
       .in('content_id', contentIds)
+      .neq('description', '')
 
     // Group variations by content_id
     const variationMap = new Map<string, { id: string; tier: string; is_active: boolean }[]>()
@@ -144,13 +135,9 @@ export async function GET(request: NextRequest) {
 // POST - Create new content item
 export async function POST(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId, userId } = session
 
     const body = await request.json()
     const {
@@ -162,6 +149,7 @@ export async function POST(request: NextRequest) {
       duration,
       tags,
       metadata,
+      destination_id,
       variations
     } = body
 
@@ -173,6 +161,14 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Only the company's own category / destination.
+    if (!(await categoryInOrg(supabase, orgId, category_id))) {
+      return NextResponse.json({ error: 'Category not found' }, { status: 404 })
+    }
+    if (destination_id && !(await destinationInOrg(supabase, orgId, destination_id))) {
+      return NextResponse.json({ error: 'Destination not found' }, { status: 404 })
+    }
+
     // Generate slug if not provided
     const finalSlug = slug || generateSlug(name)
 
@@ -180,6 +176,7 @@ export async function POST(request: NextRequest) {
     const { data: content, error: contentError } = await supabase
       .from('content_library')
       .insert({
+        org_id: orgId,
         category_id,
         name,
         slug: finalSlug,
@@ -188,8 +185,9 @@ export async function POST(request: NextRequest) {
         duration: duration || null,
         tags: tags || [],
         metadata: metadata || {},
-        created_by: user.id,
-        updated_by: user.id
+        destination_id: destination_id || null,
+        created_by: userId,
+        updated_by: userId
       })
       .select()
       .single()
@@ -197,7 +195,8 @@ export async function POST(request: NextRequest) {
     if (contentError) {
       if (contentError.code === '23505') {
         return NextResponse.json(
-          { error: 'Content with this slug already exists in this category' },
+          // Slugs are unique per company (20261208), across its categories.
+          { error: 'Your company already has content with this slug. Change the name or the slug.' },
           { status: 409 }
         )
       }
@@ -205,16 +204,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: clientMessage(contentError, 'Internal server error') }, { status: 500 })
     }
 
-    // Create variations if provided
-    if (variations && variations.length > 0 && content) {
-      const variationsToInsert = variations.map((v: {
-        tier: string
-        title?: string
-        description: string
-        highlights?: string[]
-        inclusions?: string[]
-        internal_notes?: string
-      }) => ({
+    // Create variations if provided — only the tiers actually written (the
+    // editor sends a blank slot for every tier on the ladder).
+    const written = Array.isArray(variations) ? (variations as VariationInput[]).filter(isWrittenVariation) : []
+    if (written.length > 0 && content) {
+      const variationsToInsert = written.map(v => ({
         content_id: content.id,
         tier: v.tier,
         title: v.title || null,
@@ -222,8 +216,8 @@ export async function POST(request: NextRequest) {
         highlights: v.highlights || [],
         inclusions: v.inclusions || [],
         internal_notes: v.internal_notes || null,
-        created_by: user.id,
-        updated_by: user.id
+        created_by: userId,
+        updated_by: userId
       }))
 
       const { data: createdVariations, error: variationsError } = await supabase
@@ -259,16 +253,13 @@ export async function POST(request: NextRequest) {
 // PATCH - Update content item
 export async function PATCH(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId, userId } = session
 
     const body = await request.json()
-    const { id, ...updates } = body
+    const id = body.id
+    const updates = withoutOwnedColumns(body)
 
     if (!id) {
       return NextResponse.json(
@@ -277,16 +268,27 @@ export async function PATCH(request: NextRequest) {
       )
     }
 
+    if (updates.category_id && !(await categoryInOrg(supabase, orgId, updates.category_id))) {
+      return NextResponse.json({ error: 'Category not found' }, { status: 404 })
+    }
+    if (updates.destination_id && !(await destinationInOrg(supabase, orgId, updates.destination_id))) {
+      return NextResponse.json({ error: 'Destination not found' }, { status: 404 })
+    }
+
     // Add updated_by
-    updates.updated_by = user.id
+    updates.updated_by = userId
 
     const { data, error } = await supabase
       .from('content_library')
       .update(updates)
       .eq('id', id)
+      .eq('org_id', orgId)
       .select()
-      .single()
+      .maybeSingle()
 
+    if (!error && !data) {
+      return NextResponse.json({ error: 'Content not found' }, { status: 404 })
+    }
     if (error) {
       console.error('Error updating content:', error)
       return NextResponse.json({ error: clientMessage(error, 'Internal server error') }, { status: 500 })
@@ -305,13 +307,9 @@ export async function PATCH(request: NextRequest) {
 // DELETE - Delete content item
 export async function DELETE(request: NextRequest) {
   try {
-    const supabase = await createClient()
-    
-    // Check authentication
-    const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError || !user) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
+    const session = await contentSession()
+    if (session instanceof NextResponse) return session
+    const { supabase, orgId } = session
 
     const { searchParams } = new URL(request.url)
     const id = searchParams.get('id')
@@ -328,6 +326,7 @@ export async function DELETE(request: NextRequest) {
       .from('content_library')
       .delete()
       .eq('id', id)
+      .eq('org_id', orgId)
 
     if (error) {
       console.error('Error deleting content:', error)

@@ -6,11 +6,12 @@ import {
   DollarSign,
   Percent,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  AlertTriangle
 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-import { getFallbackRates, convertCurrency } from '@/lib/currency-service'
 import { formatMoney } from '@/lib/currency-totals'
+import { marginOnPrice, recordedTripSupplierCost } from '@/lib/itinerary-pl'
 
 interface Service {
   id: string
@@ -41,9 +42,16 @@ interface ItineraryPLProps {
   /** The trip's own supplier cost, when the pricing engine has stored one. */
   supplierCost?: number | null
   currency: string
-  marginPercent?: number
   days: DayWithServices[]
   extraExpenses?: ExtraExpense[]
+}
+
+/** The trip's extra expenses in the trip's currency, from /api/itineraries/[id]/extras-fx. */
+interface ExtrasFx {
+  total: number
+  count: number
+  /** Expenses with no exchange rate: not in total. */
+  missing: { reference: string; amount: number; fromCurrency: string }[]
 }
 
 interface PLBreakdown {
@@ -51,6 +59,7 @@ interface PLBreakdown {
   supplier_cost: number
   client_price: number
   margin: number
+  /** Profit over client price, as on the Profit & Loss page. */
   margin_percent: number
   count: number
 }
@@ -73,23 +82,60 @@ export default function ItineraryPL({
   totalCost,
   supplierCost,
   currency,
-  marginPercent = 25,
   days,
   extraExpenses = []
 }: ItineraryPLProps) {
   const t = useTranslations('itineraryPL')
   const [expanded, setExpanded] = useState(false)
   const [breakdown, setBreakdown] = useState<PLBreakdown[]>([])
-  const [totals, setTotals] = useState({
+  // supplierCost is null when nothing records it: the card shows "not
+  // recorded" rather than a cost it made up.
+  const [totals, setTotals] = useState<{
+    supplierCost: number | null
+    clientPrice: number
+    margin: number | null
+    marginPercent: number | null
+  }>({
     supplierCost: 0,
     clientPrice: 0,
     margin: 0,
     marginPercent: 0
   })
 
+  // Extra expenses are converted on the server, with the P&L report's own FX
+  // (each at the rate on its date). null until it answers; failed when it could
+  // not, which the card says rather than showing a margin without them.
+  const [extrasFx, setExtrasFx] = useState<ExtrasFx | null>(null)
+  const [extrasFailed, setExtrasFailed] = useState(false)
+  const hasExtras = extraExpenses.some(exp => !exp.booking_supplier_status_id)
+  // The parent builds a new array every render; its content is what matters.
+  const extrasKey = JSON.stringify(extraExpenses)
+
+  useEffect(() => {
+    if (!hasExtras) {
+      setExtrasFx(null)
+      setExtrasFailed(false)
+      return
+    }
+    let live = true
+    fetch(`/api/itineraries/${itineraryId}/extras-fx`)
+      .then(res => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
+      .then(result => {
+        if (!live) return
+        setExtrasFx({ total: Number(result.total) || 0, count: Number(result.count) || 0, missing: result.missing || [] })
+        setExtrasFailed(false)
+      })
+      .catch(() => {
+        if (!live) return
+        setExtrasFx(null)
+        setExtrasFailed(true)
+      })
+    return () => { live = false }
+  }, [itineraryId, hasExtras, extrasKey])
+
   useEffect(() => {
     calculatePL()
-  }, [days, extraExpenses, totalCost, supplierCost])
+  }, [days, extrasFx, totalCost, supplierCost])
 
   // True when the numbers came from the trip rather than from priced services.
   const [fromTripTotals, setFromTripTotals] = useState(false)
@@ -98,13 +144,15 @@ export default function ItineraryPL({
     const byType: Record<string, PLBreakdown> = {}
     let totalSupplierCost = 0
     let totalClientPrice = 0
+    // Services with a cost but no client price of their own: their price is
+    // unknown, so the margin of the whole is unknown too.
+    let unpricedServices = 0
 
     days.forEach(day => {
       (day.services || []).forEach(service => {
         const supplierCost = Number(service.total_cost) || 0
-        const clientPrice = service.client_price 
-          ? Number(service.client_price) 
-          : supplierCost * (1 + marginPercent / 100)
+        const clientPrice = Number(service.client_price) || 0
+        if (supplierCost > 0 && clientPrice <= 0) unpricedServices += 1
 
         totalSupplierCost += supplierCost
         totalClientPrice += clientPrice
@@ -131,94 +179,75 @@ export default function ItineraryPL({
     // empty for every trip in this system. The panel used to report ¥0 / ¥0 /
     // 0% for those, ignoring the totalCost it was handed. Fall back to what the
     // trip itself says: its client price, and its supplier cost when the engine
-    // has stored one, or the price less the standard margin when it has not.
+    // has stored one. When it has not, the cost is NOT recorded: it used to be
+    // worked back from the price at a hardcoded 25% markup, a cost nobody paid.
     const hasPricedServices = totalSupplierCost > 0 || totalClientPrice > 0
+    let costRecorded = true
     if (!hasPricedServices && Number(totalCost) > 0) {
       totalClientPrice = Number(totalCost)
-      totalSupplierCost = Number(supplierCost) > 0
-        ? Number(supplierCost)
-        : Number(totalCost) / (1 + marginPercent / 100)
+      const recorded = recordedTripSupplierCost(supplierCost)
+      if (recorded !== null) totalSupplierCost = recorded
+      else costRecorded = false
     }
+    if (unpricedServices > 0) costRecorded = false
 
     // Add extra expenses (operational costs that reduce margin). Not a booking
     // supplier's confirmed cost: confirming a supplier records it as an expense
     // of this trip, but it is the same money already in the supplier cost.
-    const extras = extraExpenses.filter(exp => !exp.booking_supplier_status_id)
-    if (extras.length > 0) {
-      const fallbackRates = getFallbackRates(currency)
-      let extraTotal = 0
-      // Expenses whose currency could not be converted. They are LEFT OUT of
-      // the margin rather than added at face value (1,000 EGP is not €1,000),
-      // and counted so the panel can say the figure is short.
-      let unconvertedCount = 0
-
-      extras.forEach(exp => {
-        const converted = exp.currency === currency
-          ? Number(exp.amount)
-          : convertCurrency(Number(exp.amount), exp.currency, currency, fallbackRates)
-        if (converted === null) {
-          unconvertedCount += 1
-          return
-        }
-        extraTotal += converted
-      })
-
-      if (unconvertedCount > 0) {
-        console.warn(
-          `${unconvertedCount} expense(s) excluded from this P&L — no rate to ${currency}`
-        )
+    // Converted by the server as the P&L report does; one with no rate is left
+    // out and named in the "rate missing" note, never converted at a static rate.
+    if (extrasFx && extrasFx.total > 0) {
+      byType['extra_expenses'] = {
+        service_type: 'extra_expenses',
+        supplier_cost: extrasFx.total,
+        client_price: extrasFx.total, // pass-through, no markup
+        margin: 0,
+        margin_percent: 0,
+        count: extrasFx.count
       }
-
-      if (extraTotal > 0) {
-        byType['extra_expenses'] = {
-          service_type: 'extra_expenses',
-          supplier_cost: extraTotal,
-          client_price: extraTotal, // pass-through, no markup
-          margin: 0,
-          margin_percent: 0,
-          count: extras.length
-        }
-        totalSupplierCost += extraTotal
-        // Note: extra expenses do NOT increase client price — they reduce margin
-      }
+      totalSupplierCost += extrasFx.total
+      // Note: extra expenses do NOT increase client price — they reduce margin
     }
 
+    // Margin is profit over what the client pays, the same definition as the
+    // Profit & Loss page (it was markup on cost here: 25% markup read 25.0%
+    // on the trip and 20.0% on the report).
     Object.values(byType).forEach(item => {
       item.margin = item.client_price - item.supplier_cost
-      item.margin_percent = item.supplier_cost > 0
-        ? (item.margin / item.supplier_cost) * 100
-        : 0
+      item.margin_percent = marginOnPrice(item.margin, item.client_price)
     })
 
     const sortedBreakdown = Object.values(byType).sort((a, b) => b.margin - a.margin)
     const totalMargin = totalClientPrice - totalSupplierCost
-    const overallMarginPercent = totalSupplierCost > 0 
-      ? (totalMargin / totalSupplierCost) * 100 
-      : 0
+    const overallMarginPercent = marginOnPrice(totalMargin, totalClientPrice)
 
     setFromTripTotals(!hasPricedServices && Number(totalCost) > 0)
-    setBreakdown(sortedBreakdown)
+    setBreakdown(costRecorded ? sortedBreakdown : [])
     setTotals({
-      supplierCost: totalSupplierCost,
+      supplierCost: costRecorded ? totalSupplierCost : null,
       clientPrice: totalClientPrice,
-      margin: totalMargin,
-      marginPercent: overallMarginPercent
+      margin: costRecorded ? totalMargin : null,
+      marginPercent: costRecorded ? overallMarginPercent : null
     })
   }
 
   // One formatter for money everywhere, so ¥1,099,897 does not render with the
   // two decimal places the yen does not have.
-  const formatCurrency = (amount: number) => formatMoney(amount, currency)
+  const formatCurrency = (amount: number | null) => (amount === null ? t('notRecorded') : formatMoney(amount, currency))
+  const formatPercent = (percent: number | null) => (percent === null ? t('notRecorded') : `${percent.toFixed(1)}%`)
 
-  const getMarginColor = (percent: number) => {
-    if (percent >= 25) return 'text-green-600'
+  // Same bands as the Profit & Loss page, which reads the same margin.
+  const getMarginColor = (percent: number | null) => {
+    if (percent === null) return 'text-gray-500'
+    if (percent >= 30) return 'text-green-600'
     if (percent >= 15) return 'text-amber-600'
     if (percent >= 0) return 'text-orange-600'
     return 'text-red-600'
   }
 
-  const getMarginBg = (percent: number) => {
-    if (percent >= 25) return 'bg-green-50 border-green-200'
+  const getMarginBg = (percent: number | null) => {
+    if (percent === null) return 'bg-gray-50 border-gray-200'
+    if (percent >= 30) return 'bg-green-50 border-green-200'
     if (percent >= 15) return 'bg-amber-50 border-amber-200'
     if (percent >= 0) return 'bg-orange-50 border-orange-200'
     return 'bg-red-50 border-red-200'
@@ -256,13 +285,28 @@ export default function ItineraryPL({
             <div className={`px-3 py-1.5 rounded-lg border ${getMarginBg(totals.marginPercent)}`}>
               <p className="text-xs text-gray-500">{t('margin')}</p>
               <p className={`text-sm font-bold ${getMarginColor(totals.marginPercent)}`}>
-                {formatCurrency(totals.margin)} ({totals.marginPercent.toFixed(1)}%)
+                {totals.margin === null ? t('notRecorded') : `${formatCurrency(totals.margin)} (${formatPercent(totals.marginPercent)})`}
               </p>
             </div>
           </div>
           {expanded ? <ChevronUp className="h-5 w-5 text-gray-400" /> : <ChevronDown className="h-5 w-5 text-gray-400" />}
         </div>
       </button>
+
+      {(extrasFailed || (extrasFx && extrasFx.missing.length > 0)) && (
+        <div className="mx-5 mb-3 flex items-start gap-2 rounded-lg border border-amber-200 bg-amber-50 p-3" role="status">
+          <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+          <p className="text-xs text-amber-800">
+            {extrasFailed
+              ? t('extrasUnavailable')
+              : t('rateMissing', {
+                  count: extrasFx!.missing.length,
+                  list: extrasFx!.missing.map(m => `${m.reference} (${formatMoney(Number(m.amount), m.fromCurrency)})`).join(', '),
+                  currency
+                })}
+          </p>
+        </div>
+      )}
 
       <div className="md:hidden px-5 pb-4 grid grid-cols-3 gap-3">
         <div className="text-center p-2 bg-gray-50 rounded-lg">
@@ -275,7 +319,7 @@ export default function ItineraryPL({
         </div>
         <div className={`text-center p-2 rounded-lg ${getMarginBg(totals.marginPercent)}`}>
           <p className="text-xs text-gray-500">{t('margin')}</p>
-          <p className={`text-sm font-bold ${getMarginColor(totals.marginPercent)}`}>{totals.marginPercent.toFixed(1)}%</p>
+          <p className={`text-sm font-bold ${getMarginColor(totals.marginPercent)}`}>{formatPercent(totals.marginPercent)}</p>
         </div>
       </div>
 
@@ -311,8 +355,8 @@ export default function ItineraryPL({
                 <Percent className="h-4 w-4 text-purple-500" />
                 <span className="text-xs text-gray-500">{t('marginPercent')}</span>
               </div>
-              <p className={`text-xl font-semibold ${getMarginColor(totals.marginPercent)}`}>{totals.marginPercent.toFixed(1)}%</p>
-              <p className="text-xs text-gray-400 mt-1">{t('markupOnCost')}</p>
+              <p className={`text-xl font-semibold ${getMarginColor(totals.marginPercent)}`}>{formatPercent(totals.marginPercent)}</p>
+              <p className="text-xs text-gray-400 mt-1">{t('marginOnPrice')}</p>
             </div>
           </div>
 
@@ -336,20 +380,20 @@ export default function ItineraryPL({
                         <span className="text-gray-500">{formatCurrency(item.supplier_cost)}</span>
                         <span className="text-gray-400">→</span>
                         <span className="text-blue-600">{formatCurrency(item.client_price)}</span>
-                        <span className={`font-semibold ${getMarginColor(item.margin_percent)}`}>+{formatCurrency(item.margin)}</span>
+                        <span className={`font-semibold ${getMarginColor(item.margin_percent)}`}>{item.margin >= 0 ? '+' : ''}{formatCurrency(item.margin)}</span>
                       </div>
                     </div>
                     <div className="h-2 bg-gray-200 rounded-full overflow-hidden">
                       <div
                         className={`h-full rounded-full transition-all ${
-                          item.margin_percent >= 25 ? 'bg-green-500' :
+                          item.margin_percent >= 30 ? 'bg-green-500' :
                           item.margin_percent >= 15 ? 'bg-amber-500' :
                           item.margin_percent >= 0 ? 'bg-orange-500' : 'bg-red-500'
                         }`}
                         style={{ width: `${marginWidth}%` }}
                       />
                     </div>
-                    <p className="text-xs text-gray-400 mt-1 text-right">{item.margin_percent.toFixed(1)}% {t('margin').toLowerCase()}</p>
+                    <p className="text-xs text-gray-400 mt-1 text-right">{item.margin_percent.toFixed(1)}% {t('marginOnPrice').toLowerCase()}</p>
                   </div>
                 )
               })}
@@ -359,7 +403,7 @@ export default function ItineraryPL({
           <div className="px-5 pb-5">
             <div className="p-3 bg-blue-50 border border-blue-200 rounded-lg">
               <p className="text-xs text-blue-700">
-                <strong>{t('note')}</strong> {t('noteText', { marginPercent })}
+                <strong>{t('note')}</strong> {t('noteText')}
               </p>
             </div>
           </div>

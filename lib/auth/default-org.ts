@@ -6,17 +6,14 @@
 // paths (webhooks, scheduled jobs, the WhatsApp inbound webhook) have no
 // session, so they need a different resolver.
 //
-// THIS IS THE PHASE 2 PLACEHOLDER. For the solo case we resolve to a single
-// default org — either the value of process.env.DEFAULT_ORG_ID, or the first
-// organization row by created_at as a fallback.
-//
-// WHY A SEPARATE HELPER (not inlined in each intake site):
-//   When the G1 gate trips (see DEFERRED_GATES.md), the resolver becomes
-//   per-org-webhook-secret-aware: the Concierge webhook will read which
-//   secret matched and resolve the org from THAT. WhatsApp will resolve per
-//   inbound channel/number config. Both will swap THIS helper out for a
-//   signature/channel-aware resolver. The intake call sites don't need to
-//   change — only this function does.
+// It resolves to a single default org — either the value of
+// process.env.DEFAULT_ORG_ID, or the first organization row by created_at as
+// a fallback. Intake paths that CAN tell the company use their own signal
+// first and only fall back to this:
+//   - Concierge briefs: the per-company webhook secret that signed the brief
+//     (lib/concierge/brief-org.ts); only the legacy single
+//     CONCIERGE_WEBHOOK_SECRET lands here.
+//   - WhatsApp: the number written to (lib/whatsapp-org.ts).
 //
 // CACHE: the org id rarely changes; cache after first resolution within the
 // process. Multi-instance deployments will each resolve once.

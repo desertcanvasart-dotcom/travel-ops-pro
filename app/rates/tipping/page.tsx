@@ -17,6 +17,7 @@ import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
 import CityOptions from '@/app/components/CityOptions'
+import { tipServiceCode } from '@/lib/tipping-utils'
 
 // ============================================
 // CONSTANTS
@@ -254,9 +255,9 @@ export default function TippingPage() {
     setFormData(prev => ({ ...prev, [e.target.name]: e.target.checked }))
   }
 
-  const generateCode = () => {
-    return `TIP-${formData.role_type.toUpperCase()}-${formData.context?.toUpperCase() || 'GEN'}`
-  }
+  // Role, context AND city — the city is part of what makes a tip distinct
+  // (lib/tipping-utils tipServiceCode).
+  const generateCode = () => tipServiceCode(formData.role_type, formData.context, formData.city)
 
   const handleAddNew = () => {
     setEditingRate(null)

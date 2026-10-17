@@ -65,6 +65,13 @@ describe('API mutation gate — coverage', () => {
     '/api/resources/transportation/abc',
     '/api/resources/attractions',
     '/api/resources/restaurants/abc',
+    // Tour Manager's catalogue writes (menu + RLS: manager and above); agents
+    // only browse and price the ready-made tours.
+    '/api/tours/templates',
+    '/api/tours/templates/abc/days',
+    '/api/tours/variations/abc/services',
+    '/api/tours/days/abc',
+    '/api/tours/bulk/import',
   ])('%s is manager-and-above', path => {
     const roles = rolesFor(path)
     expect(roles, `${path} has no entry in API_MUTATION_PERMISSIONS`).not.toBeNull()
@@ -84,12 +91,28 @@ describe('API mutation gate — coverage', () => {
     '/api/b2b/quotes',
     '/api/b2b/quotes/abc-123',
     '/api/b2b/quotes/bulk-delete',
-    '/api/b2c/quotes',
+    // Sell (2026-10-13): agents price on the grid and take orders.
+    '/api/pricing-grid/save',
+    '/api/intake/order-form',
+    '/api/intake/web-orders',
+    // A viewer could PATCH a concierge brief's review status.
+    '/api/concierge-briefs',
+    '/api/concierge-briefs/abc-123',
   ])('%s is agent-and-above', path => {
     const roles = rolesFor(path)
     expect(roles, `${path} has no entry in API_MUTATION_PERMISSIONS`).not.toBeNull()
     expect(roles).toEqual(expect.arrayContaining(['admin', 'manager', 'agent']))
     expect(roles).not.toContain('viewer')
+  })
+
+  it.each([
+    // B2C Quotes and Rates › Extras are the managers' screens in the menu.
+    '/api/b2c/quotes',
+    '/api/b2c/quotes/abc-123',
+    '/api/extras-catalogue',
+    '/api/extras-catalogue/abc-123',
+  ])('%s is manager-and-above', path => {
+    expect(rolesFor(path)).toEqual(['admin', 'manager'])
   })
 
   it('leaves self-service routes ungated so a viewer can still edit their own profile', () => {
@@ -112,6 +135,8 @@ describe('API mutation gate — coverage', () => {
   const VIEWER_MAY_POST: Record<string, string> = {
     '/api/organizations/mine':
       'sets the active-workspace cookie for your own session; the resolver honours it only where the membership is real, so it grants nothing and changes no agency data',
+    '/api/settings/notifications':
+      'saves whether your own notifications also arrive by email; the route writes only the signed-in user\'s user_settings row, so it changes no agency data',
   }
 
   it('never grants a viewer a mutation', () => {
@@ -168,6 +193,14 @@ describe('page gate — a manager sees everything', () => {
     expect(roleAllows('viewer', roles)).toBe(false)
   })
 
+  // The menu shows these to agent and above; a viewer could open them by URL.
+  it.each(['/communications', '/copilot', '/copilot-knowledge', '/concierge-briefs'])('%s is agent-and-above', page => {
+    const roles = pagePermissions()[page]
+    expect(roles, `${page} has no page gate`).toBeTruthy()
+    expect(roleAllows('agent', roles)).toBe(true)
+    expect(roleAllows('viewer', roles)).toBe(false)
+  })
+
   it('no page gate excludes a manager', () => {
     for (const [page, roles] of Object.entries(pagePermissions())) {
       expect(roleAllows('manager', roles), `manager must open ${page}`).toBe(true)
@@ -182,8 +215,18 @@ describe('page gate — a manager sees everything', () => {
     }
   })
 
-  it('operating settings (email, notifications, WhatsApp-AI) are manager-and-above', () => {
+  it('operating settings (email, WhatsApp-AI) are manager-and-above', () => {
     expect(roleAllows('manager', rolesFor('/api/settings/email')!)).toBe(true)
+    expect(roleAllows('agent', rolesFor('/api/settings/email')!)).toBe(false)
+  })
+
+  // Your own notification email preferences are not operating configuration:
+  // every role gets notifications, so every role chooses whether they also
+  // come by email (the route writes only the caller's row).
+  it('every role may save their own notification email preferences', () => {
+    for (const role of ['owner', 'admin', 'manager', 'agent', 'viewer']) {
+      expect(roleAllows(role, rolesFor('/api/settings/notifications')!), role).toBe(true)
+    }
   })
 })
 
@@ -318,7 +361,7 @@ describe('routes that act on "me" resolve me from the session', () => {
 describe('staff-only API prefixes (reads included)', () => {
   const block = source.match(/const STAFF_ONLY_API_PREFIXES = \[([\s\S]*?)\n\]/)
   const prefixes = block ? [...block[1].matchAll(/'([^']+)'/g)].map(m => m[1]) : []
-  it.each(['/api/whatsapp/conversations', '/api/whatsapp/messages', '/api/unified/client/x', '/api/copilot/threads', '/api/copilot/inbox', '/api/ai/suggest-reply', '/api/translate'])(
+  it.each(['/api/whatsapp/conversations', '/api/whatsapp/messages', '/api/unified/client/x', '/api/copilot/threads', '/api/copilot/inbox', '/api/ai/suggest-reply', '/api/translate', '/api/concierge-briefs', '/api/concierge-briefs/abc-123'])(
     '%s is covered', path => {
       expect(prefixes.some(p => path.startsWith(p))).toBe(true)
     })
@@ -360,10 +403,55 @@ describe('rate reads', () => {
     expect(staffOnly(path)).toBe(true)
   })
 
-  it('the calendar’s guide and vehicle lists stay open to a viewer', () => {
-    for (const path of ['/api/guides', '/api/vehicles']) {
+  it.each([
+    '/api/itineraries', '/api/itineraries/abc', '/api/bookings', '/api/bookings/abc', '/api/itinerary-resources',
+    '/api/trip-events/today', '/api/b2b/quotes', '/api/b2b/quotes/abc/pdf', '/api/intake/web-orders',
+    '/api/extras-catalogue', '/api/pricing-grid/rates',
+  ])('%s (Sell) is staff-readable, never viewer', path => {
+    expect(staffOnly(path)).toBe(true)
+  })
+
+  it.each(['/api/tasks', '/api/followups', '/api/supplier-documents/abc', '/api/documents/nittei', '/api/payments/abc'])(
+    '%s (Operate) is staff-readable, never viewer', path => {
+      expect(staffOnly(path)).toBe(true)
+    })
+
+  it.each(['/api/departures', '/api/departures/abc/holds', '/api/capacity', '/api/surveys'])(
+    '%s (Operate, managers’ screens) is manager-and-above, reads included', path => {
+      expect(managerOnly(path)).toBe(true)
+      expect(rolesFor(path)).toEqual(['admin', 'manager'])
+    })
+
+  it.each(['/api/tours', '/api/tours/templates/bulk/export', '/api/tours/variations/abc/services', '/api/tours/NEK803'])(
+    '%s (Tours) is staff-readable, never viewer', path => {
+      expect(staffOnly(path)).toBe(true)
+    })
+
+  it('transport packages are manager-and-above, reads included', () => {
+    expect(managerOnly('/api/b2b/transport-packages')).toBe(true)
+    expect(managerOnly('/api/b2b/transport-packages/abc')).toBe(true)
+    expect(rolesFor('/api/b2b/transport-packages')).toEqual(['admin', 'manager'])
+  })
+
+  it.each(['/api/clients', '/api/clients/abc', '/api/team-members', '/api/team-members/abc', '/api/departments', '/api/departments/routing'])(
+    '%s (People) is staff-readable, never viewer', path => {
+      expect(staffOnly(path)).toBe(true)
+    })
+
+  it('partners: create is agent-and-above (the WhatsApp parser), edit and delete are manager-and-above', () => {
+    expect(rolesFor('/api/b2b/partners')).toEqual(expect.arrayContaining(['admin', 'manager', 'agent']))
+    expect(rolesFor('/api/b2b/partners/abc')).toEqual(['admin', 'manager'])
+  })
+
+  it('B2C offers are manager-and-above, reads included', () => {
+    expect(managerOnly('/api/b2c/quotes')).toBe(true)
+    expect(managerOnly('/api/b2c/quotes/abc')).toBe(true)
+  })
+
+  it('guide and vehicle lists are staff-only now that the calendar is agent-and-above', () => {
+    for (const path of ['/api/guides', '/api/guides/abc', '/api/vehicles']) {
       expect(managerOnly(path)).toBe(false)
-      expect(staffOnly(path)).toBe(false)
+      expect(staffOnly(path)).toBe(true)
     }
   })
 })

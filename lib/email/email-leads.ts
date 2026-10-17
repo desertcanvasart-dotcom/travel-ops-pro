@@ -30,6 +30,7 @@ import { loadOfficeRule } from '@/lib/email/office-addresses-server'
 import { looksLikeTourUpOrder } from '@/lib/intake/tour-up-order'
 import { emailOrderText } from '@/lib/intake/tup-mail'
 import { isAutomatedSender } from '@/lib/email/automated-senders'
+import { loadKnownContactEmails } from '@/lib/email-scoping'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from(table: string): any }
@@ -132,17 +133,23 @@ export async function processNewEmailLeads(
 ): Promise<Array<{ conversationId: string; outcome: Outcome; clientId?: string }>> {
   const extract = opts.extract ?? extractLead
   const { data: pending, error } = await db.from('email_conversations')
-    .select('id, user_id, client_id, client_email, subject')
+    .select('id, org_id, user_id, client_id, client_email, subject')
     .is('lead_checked_at', null)
     .order('created_at', { ascending: true })
     .limit(opts.limit ?? 20)
   if (error) throw error
   if (!pending || pending.length === 0) return []
 
-  const rule: OfficeRule = await loadOfficeRule(db as never)
-  // Known contacts are the receiving organisation's own: another agency's
+  // Each conversation is judged as its own organisation's (email_conversations.
+  // org_id, 20261204): that organisation's office rule — another company's
+  // address is a customer here — and its known contacts — another agency's
   // client writing to this one is a new lead here, not a "known contact" to
-  // skip. Loaded once per organisation per run.
+  // skip. Each loaded once per organisation per run.
+  const ruleByOrg = new Map<string, Promise<OfficeRule>>()
+  const ruleFor = (orgId: string) => {
+    if (!ruleByOrg.has(orgId)) ruleByOrg.set(orgId, loadOfficeRule(db as never, orgId))
+    return ruleByOrg.get(orgId)!
+  }
   const knownByOrg = new Map<string, Promise<Set<string>>>()
   const knownFor = (orgId: string) => {
     if (!knownByOrg.has(orgId)) knownByOrg.set(orgId, knownContactEmailsForOrg(db, orgId))
@@ -150,15 +157,17 @@ export async function processNewEmailLeads(
   }
   const results: Array<{ conversationId: string; outcome: Outcome; clientId?: string }> = []
 
-  for (const conv of pending as { id: string; user_id: string | null; client_id: string | null; client_email: string | null; subject: string | null }[]) {
+  for (const conv of pending as { id: string; org_id: string; user_id: string | null; client_id: string | null; client_email: string | null; subject: string | null }[]) {
+    const orgId = conv.org_id
     const mark = async (outcome: Outcome, clientId?: string) => {
-      await db.from('email_conversations').update({ lead_checked_at: new Date().toISOString(), lead_check: outcome }).eq('id', conv.id)
+      await db.from('email_conversations').update({ lead_checked_at: new Date().toISOString(), lead_check: outcome }).eq('id', conv.id).eq('org_id', orgId)
       results.push({ conversationId: conv.id, outcome, clientId })
     }
     try {
       // The customer's first message.
       const { data: firstIn } = await db.from('email_messages')
         .select('from_address, subject, body_text, body_html, snippet, sent_at')
+        .eq('org_id', orgId)
         .eq('conversation_id', conv.id)
         .eq('direction', 'inbound')
         .order('sent_at', { ascending: true })
@@ -172,9 +181,7 @@ export async function processNewEmailLeads(
       if (looksLikeTourUpOrder(emailOrderText(msg.body_text, msg.body_html))) { await mark('web_order'); continue }
 
       const sender = bareAddress(msg.from_address)
-      if (isOfficeAddress(rule, sender)) { await mark('office'); continue }
-      const orgId = await orgForMailbox(db, conv.user_id)
-      if (!orgId) { await mark('error'); continue }
+      if (isOfficeAddress(await ruleFor(orgId), sender)) { await mark('office'); continue }
       if (conv.client_id || (await knownFor(orgId)).has(sender)) { await mark('known_contact'); continue }
       // A no-reply or service address asks for nothing: not worth a model call.
       if (isAutomatedSender(sender)) { await mark('skipped'); continue }
@@ -188,7 +195,7 @@ export async function processNewEmailLeads(
       if (!x.is_travel_request) { await mark('not_a_request'); continue }
 
       // An existing client with this address (added since the contacts were loaded).
-      const { data: existing } = await db.from('clients').select('id').eq('org_id', orgId).ilike('email', sender).limit(1).maybeSingle()
+      const { data: existing } = await db.from('clients').select('id').eq('org_id', orgId).ilike('email', sender.replace(/[\\%_]/g, '\\$&')).limit(1).maybeSingle()
       let clientId = existing?.id as string | undefined
       const fallback = nameFromSender(msg.from_address)
       if (!clientId) {
@@ -212,7 +219,7 @@ export async function processNewEmailLeads(
         clientId = created.id as string
       }
       const clientName = `${x.first_name || fallback.first} ${x.last_name && x.last_name !== '-' ? x.last_name : ''}`.trim()
-      await db.from('email_conversations').update({ client_id: clientId, client_name: clientName }).eq('id', conv.id)
+      await db.from('email_conversations').update({ client_id: clientId, client_name: clientName }).eq('id', conv.id).eq('org_id', orgId)
       await mark(existing ? 'known_contact' : 'lead_created', clientId)
     } catch (e) {
       console.error('[email-leads] conversation', conv.id, e)
@@ -222,37 +229,20 @@ export async function processNewEmailLeads(
   return results
 }
 
-/** The organisation a connected mailbox belongs to (its user's membership). */
+/** The organisation a user's connected mailbox serves (gmail_tokens.org_id,
+ *  20261204) — not the user's oldest membership: a person in both companies
+ *  connects their mailbox to one of them. Null when they have none. */
 export async function orgForMailbox(db: Db, userId: string | null): Promise<string | null> {
-  if (userId) {
-    const { data } = await db.from('organization_members').select('org_id').eq('user_id', userId).order('created_at', { ascending: true }).limit(1).maybeSingle()
-    if (data?.org_id) return data.org_id as string
-  }
-  const { data: orgs } = await db.from('organizations').select('id').limit(2)
-  return (orgs ?? []).length === 1 ? (orgs[0].id as string) : null
+  if (!userId) return null
+  const { data } = await db.from('gmail_tokens').select('org_id').eq('user_id', userId).maybeSingle()
+  return (data?.org_id as string | undefined) ?? null
 }
 
 /**
- * The addresses one organisation knows: its clients and B2B partners, plus
- * suppliers (shared across organisations — suppliers has no org_id yet).
- * lib/email-scoping's loadKnownContactEmails is the platform-wide set the sync
- * uses to decide what to store; a lead is judged against this narrower one.
+ * The addresses one organisation knows: its clients, suppliers and B2B
+ * partners (each per company — suppliers since migration 20261205).
+ * The same set the sync uses (lib/email-scoping loadKnownContactEmails).
  */
 export async function knownContactEmailsForOrg(db: Db, orgId: string): Promise<Set<string>> {
-  const known = new Set<string>()
-  const collect = (rows: Array<Record<string, unknown>> | null | undefined, col: string) => {
-    for (const row of rows ?? []) {
-      const v = row[col]
-      if (typeof v === 'string' && v.includes('@')) known.add(v.trim().toLowerCase())
-    }
-  }
-  const [clients, suppliers, partners] = await Promise.all([
-    db.from('clients').select('email').eq('org_id', orgId),
-    db.from('suppliers').select('contact_email'),
-    db.from('b2b_partners').select('email').eq('org_id', orgId),
-  ])
-  collect(clients.data, 'email')
-  collect(suppliers.data, 'contact_email')
-  collect(partners.data, 'email')
-  return known
+  return loadKnownContactEmails(db, orgId)
 }

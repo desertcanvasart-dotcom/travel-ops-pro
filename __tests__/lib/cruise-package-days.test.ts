@@ -37,16 +37,19 @@ describe('a sailing\'s length in days', () => {
   })
 
   it('a package matches its exact length only — never the closest', () => {
-    const pkgs = [{ id: '4d', duration_days: 4 }, { id: '5d', duration_days: 5 }]
+    // Only a Cruise Sightseeing package prices a sailing (Tours audit #2).
+    const pkgs = [{ id: '4d', duration_days: 4, package_type: 'cruise_sightseeing' }, { id: '5d', duration_days: 5, package_type: 'cruise_sightseeing' }]
     expect(packageForDuration(pkgs, 5)?.id).toBe('5d')
     expect(packageForDuration(pkgs, 6)).toBeNull()
   })
 })
 
-const BASE = { templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0, numPax: 2 }
+// The engine reads the org's own airports and cruise packages (both carry
+// org_id): the fixtures are one org's.
+const BASE = { orgId: 'org-1', templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0, numPax: 2 }
 const cruiseDay = (day: number) => ({ day, title: 'Nile Cruise', city: 'Nile Cruise', overnight_city: 'Nile Cruise', accommodation_type: 'cruise', is_cruise_day: true, attractions: [], meals: {}, services: {} })
 const pkg = (id: string, days: number, van: number) => ({
-  id, package_code: id, package_name: `${days}D Cruise Sightseeing Transport`, package_type: 'cruise_sightseeing', duration_days: days,
+  id, org_id: 'org-1', package_code: id, package_name: `${days}D Cruise Sightseeing Transport`, package_type: 'cruise_sightseeing', duration_days: days,
   sedan_rate: van, sedan_capacity: 3, minivan_rate: van, minivan_capacity: 7, van_rate: van, van_capacity: 12,
   minibus_rate: null, minibus_capacity: null, bus_rate: null, bus_capacity: null, includes: '', notes: null, is_active: true,
 })

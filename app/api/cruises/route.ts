@@ -2,9 +2,12 @@
 
 import { createServerClient } from '@/lib/supabase-server'
 import { NextRequest, NextResponse } from 'next/server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = createServerClient()
     const { searchParams } = new URL(request.url)
     
@@ -15,6 +18,7 @@ export async function GET(request: NextRequest) {
     let query = supabase
       .from('cruise_contacts')
       .select('*')
+      .eq('org_id', orgId)
       .order('name', { ascending: true })
     
     if (isActive === 'true') {
@@ -47,12 +51,14 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const supabase = await createServerClient()
     const body = await request.json()
     
     const { data, error } = await supabase
       .from('cruise_contacts')
-      .insert(body)
+      .insert({ ...body, org_id: orgId })
       .select()
       .single()
     

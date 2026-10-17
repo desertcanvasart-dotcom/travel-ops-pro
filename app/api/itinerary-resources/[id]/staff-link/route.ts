@@ -80,7 +80,8 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
   // phone just means "copy it yourself".
   const contact = await resolveAssigneeContact(
     supabase as unknown as Parameters<typeof resolveAssigneeContact>[0],
-    resource
+    resource,
+    org_id
   )
   return NextResponse.json({
     success: true,

@@ -8,6 +8,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { copilotThreadInOrg } from '@/lib/copilot/thread-access'
 import type { ApproveDraftRequest } from '@/types/copilot'
 
 const supabase = createClient(
@@ -20,6 +22,8 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
 
     const { data: draft, error } = await supabase
@@ -28,25 +32,21 @@ export async function GET(
       .eq('id', id)
       .single()
 
-    if (error || !draft) {
+    // A draft is its thread's organisation's (lib/copilot/thread-access).
+    const thread = draft ? await copilotThreadInOrg(supabase, orgId, draft.thread_id) : null
+    if (error || !draft || !thread) {
       return NextResponse.json(
         { success: false, error: 'Draft not found' },
         { status: 404 }
       )
     }
 
-    // Also fetch the inbox message for display
+    // Also fetch the inbox message for display — the thread's own.
     const { data: inboxMessage } = await supabase
       .from('communication_inbox')
       .select('*')
       .eq('id', draft.inbox_message_id)
-      .single()
-
-    // And the thread
-    const { data: thread } = await supabase
-      .from('communication_threads')
-      .select('*')
-      .eq('id', draft.thread_id)
+      .eq('thread_id', draft.thread_id)
       .single()
 
     return NextResponse.json({
@@ -69,6 +69,8 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
     const body: ApproveDraftRequest = await request.json()
 
@@ -82,11 +84,11 @@ export async function PUT(
     // Fetch current draft
     const { data: draft, error: fetchError } = await supabase
       .from('communication_drafts')
-      .select('id, status')
+      .select('id, status, thread_id')
       .eq('id', id)
       .single()
 
-    if (fetchError || !draft) {
+    if (fetchError || !draft || !(await copilotThreadInOrg(supabase, orgId, draft.thread_id, 'id'))) {
       return NextResponse.json(
         { success: false, error: 'Draft not found' },
         { status: 404 }
@@ -104,6 +106,8 @@ export async function PUT(
     const updateData: Record<string, unknown> = {
       status: body.action === 'approve' ? 'approved' : 'rejected',
       reviewed_at: now,
+      // Who approved or rejected it — never written before.
+      reviewed_by: await getCurrentUserId(),
     }
 
     // If operator provided an edited body, store it

@@ -2,7 +2,7 @@ import { createActorAdminClient } from '@/lib/supabase-actor'
 import { clientMessage } from '@/lib/api-errors'
 import { vehicleBands } from '@/lib/rates/vehicle-bands'
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
 
@@ -32,8 +32,10 @@ interface AvailableRate {
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     // Rate amounts in text carry the org's rate-currency symbol, never a hard-coded euro.
-    const rateSym = currencySymbol(await getOrgRateCurrency(supabaseAdmin, await getCurrentOrgId()))
+    const rateSym = currencySymbol(await getOrgRateCurrency(supabaseAdmin, orgId))
     const { searchParams } = new URL(request.url)
     const rate_type = searchParams.get('type')
     const city = searchParams.get('city')
@@ -54,6 +56,7 @@ export async function GET(request: NextRequest) {
         ? supabaseAdmin
         .from('transportation_rates')
         .select('id, service_code, service_type, route_name, city, origin_city, destination_city, rate_currency, vehicles, supplier_id, suppliers (name)')
+        .eq('org_id', orgId)
         .eq('is_active', true)
         .order('city')
         .order('service_type')
@@ -64,6 +67,7 @@ export async function GET(request: NextRequest) {
         ? supabaseAdmin
         .from('guide_rates')
         .select('id, guide_type, city, half_day_rate, full_day_rate, supplier_id, suppliers (name)')
+        .eq('org_id', orgId)
         .eq('is_active', true)
         .order('city')
         : null
@@ -73,6 +77,7 @@ export async function GET(request: NextRequest) {
         ? supabaseAdmin
         .from('activity_rates')
         .select('id, activity_name, activity_category, city, base_rate_eur, base_rate_non_eur, supplier_id, suppliers (name)')
+        .eq('org_id', orgId)
         .eq('is_active', true)
         .order('activity_name')
         : null
@@ -82,6 +87,7 @@ export async function GET(request: NextRequest) {
         ? supabaseAdmin
         .from('meal_rates')
         .select('id, restaurant_name, meal_type, tier, cuisine, city, base_rate_eur, base_rate_non_eur, supplier_id, suppliers (name)')
+        .eq('org_id', orgId)
         .eq('is_active', true)
         .order('restaurant_name')
         : null
@@ -91,6 +97,7 @@ export async function GET(request: NextRequest) {
         ? supabaseAdmin
         .from('accommodation_rates')
         .select('id, hotel_name, room_type, city, star_rating, rate_low_season_sgl, rate_high_season_sgl, rate_peak_season_sgl, supplier_id, suppliers (name)')
+        .eq('org_id', orgId)
         .eq('is_active', true)
         .order('hotel_name')
         : null
@@ -100,6 +107,7 @@ export async function GET(request: NextRequest) {
         ? supabaseAdmin
         .from('nile_cruises')
         .select('id, ship_name, cabin_type, cruise_type, nights, rate_low_season, rate_high_season, rate_peak_season, supplier_id, suppliers (name)')
+        .eq('org_id', orgId)
         .eq('is_active', true)
         .order('ship_name')
         : null

@@ -108,7 +108,7 @@ describe('numbers on documents', () => {
       }
     }
     expect(src('migrations/20261124_itinerary_season_supplement.sql')).toContain('ADD COLUMN IF NOT EXISTS season_uplift_amount')
-    expect(src('app/api/pricing-grid/save/route.ts')).toContain('season_uplift_amount: actualClientTotal > 0')
+    expect(src('app/api/pricing-grid/save/route.ts')).toContain('season_uplift_amount: seasonUplift')
   })
 
   it('contracts print the currency’s own decimals', () => {

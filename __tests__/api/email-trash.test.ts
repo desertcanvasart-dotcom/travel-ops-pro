@@ -13,6 +13,7 @@ const batchModify = vi.fn(async () => ({}))
 const list = vi.fn(async (_args: unknown) => ({ data: { messages: [] } }))
 vi.mock('@/lib/gmail', () => ({
   getAuthenticatedGmail: async () => ({
+    orgId: 'org-1',
     gmail: {
       users: {
         threads: { untrash: threadsUntrash, trash: threadsTrash },
@@ -68,26 +69,31 @@ describe('Inbox: Trash and Spam', () => {
 
 describe('Communicate: Trash', () => {
   it('a deleted conversation’s thread goes to Gmail’s Trash, and comes back on restore', async () => {
-    expect(await moveThreadInGmail('owner', 't1', 'trash')).toEqual({ ok: true })
+    expect(await moveThreadInGmail('owner', 't1', 'trash', 'org-1')).toEqual({ ok: true })
     expect(threadsTrash).toHaveBeenCalledWith({ userId: 'me', id: 't1' })
-    expect(await moveThreadInGmail('owner', 't1', 'untrash')).toEqual({ ok: true })
+    expect(await moveThreadInGmail('owner', 't1', 'untrash', 'org-1')).toEqual({ ok: true })
     expect(threadsUntrash).toHaveBeenCalledWith({ userId: 'me', id: 't1' })
   })
 
   it('a thread already gone from Gmail is not an error; a failure is reported', async () => {
     threadsTrash.mockRejectedValueOnce(Object.assign(new Error('Not Found'), { code: 404 }))
-    expect(await moveThreadInGmail('owner', 't1', 'trash')).toEqual({ ok: true })
+    expect(await moveThreadInGmail('owner', 't1', 'trash', 'org-1')).toEqual({ ok: true })
     threadsTrash.mockRejectedValueOnce(new Error('invalid_grant'))
-    expect(await moveThreadInGmail('owner', 't1', 'trash')).toEqual({ ok: false, error: 'invalid_grant' })
-    expect(await moveThreadInGmail(null, 't1', 'trash')).toMatchObject({ ok: false })
+    expect(await moveThreadInGmail('owner', 't1', 'trash', 'org-1')).toEqual({ ok: false, error: 'invalid_grant' })
+    expect(await moveThreadInGmail(null, 't1', 'trash', 'org-1')).toMatchObject({ ok: false })
+  })
+
+  it("a mailbox now connected to another company is not touched", async () => {
+    expect(await moveThreadInGmail('owner', 't1', 'trash', 'org-2')).toMatchObject({ ok: false })
+    expect(threadsTrash).not.toHaveBeenCalled()
   })
 
   it('the routes trash and restore in Gmail, and delete is role-gated', () => {
     const r = src('app/api/email/conversations/route.ts')
     const del = r.slice(r.indexOf('export async function DELETE'))
     expect(del).toContain("requireRole(['admin', 'manager', 'agent'])")
-    expect(del).toContain("moveThreadInGmail(data.user_id, data.thread_id, 'trash')")
-    expect(r).toContain("moveThreadInGmail(data.user_id, data.thread_id, 'untrash')")
+    expect(del).toContain("moveThreadInGmail(data.user_id, data.thread_id, 'trash', orgId)")
+    expect(r).toContain("moveThreadInGmail(data.user_id, data.thread_id, 'untrash', orgId)")
   })
 
   it('Trash lists only deleted email conversations', () => {
@@ -98,7 +104,12 @@ describe('Communicate: Trash', () => {
     const conv = src('app/api/email/conversations/route.ts')
     expect(conv).toContain("status: 'trashed',")
     expect(conv).toContain("updateData.status = 'active' // out of Trash (see DELETE)")
-    for (const ch of ['whatsapp', 'portal', 'trip']) expect(r).toContain(`if (!trash && (channel === 'all' || channel === '${ch}'))`)
+    // The other channels sit Trash out (every channel is read for the tab
+    // counts since the counts fix, so the guard no longer names the channel).
+    const task = (name: string, next: string) => r.slice(r.indexOf(`const ${name}`), r.indexOf(`const ${next}`))
+    expect(task('whatsappTask', 'portalTask')).toContain('if (!trash) {')
+    expect(task('portalTask', 'tripTask')).toContain('if (!trash && bookingThreadsWanted) {')
+    expect(task('tripTask', 'emailTask')).toContain('if (!trash && bookingThreadsWanted) {')
   })
 
   it('new mail from a person brings a deleted conversation back — in the sync and the poll', () => {

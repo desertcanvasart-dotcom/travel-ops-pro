@@ -5,7 +5,7 @@ import { describe, it, expect } from 'vitest'
 import { calculateDay, calculatePaxRange, buildTransportTierIndex } from '@/app/pricing-grid/lib/calculator'
 import { isGuideTip } from '@/app/pricing-grid/lib/guide-rule'
 import { soldAccommodationItems, throughoutGuideRows } from '@/app/pricing-grid/lib/sold-lines'
-import { attachPricingBasis } from '@/app/pricing-grid/lib/attach-basis'
+import { hydrateDays } from '@/app/pricing-grid/lib/hydrate-items'
 import type { GridConfig, GridDay, SlotValue } from '@/app/pricing-grid/types'
 
 const slot = (slotId: string, items: Array<Record<string, unknown>> = [], customAmount = 0): SlotValue =>
@@ -40,7 +40,7 @@ describe('the guide switch decides by whose tip it is', () => {
   })
   it('a reloaded tip takes its rate’s role', () => {
     const loaded = [day([slot('tipping', [{ rateId: UUID, name: 'Tip', rateEur: 10, rateNonEur: 10 }])])]
-    const { days } = attachPricingBasis(loaded, { tipping: [{ id: UUID, name: 'Tip', rateEur: 10, rateNonEur: 10, tip_role: 'guide' }] } as never)
+    const { days } = hydrateDays(loaded, { tipping: [{ id: UUID, name: 'Tip', rateEur: 10, rateNonEur: 10, tip_role: 'guide' }] } as never, 2)
     expect(days[0].slots[0].selectedItems[0].tipRole).toBe('guide')
   })
 })

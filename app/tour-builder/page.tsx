@@ -140,7 +140,7 @@ export default function TourBuilderPage() {
       const data = await response.json()
 
       if (data.success) {
-        await dialog.alert(t('tourSaved'), `Tour Code: ${data.data.tour_code}\nTour Name: ${data.data.tour_name}`, 'success')
+        await dialog.alert(t('tourSaved'), `Tour Code: ${data.data.tour_code}\nTour Name: ${data.data.tour_name}${data.warning ? `\n\n${data.warning}` : ''}`, 'success')
       } else {
         await dialog.alert(t('error'), data.error || t('failedToSaveTour'), 'warning')
       }

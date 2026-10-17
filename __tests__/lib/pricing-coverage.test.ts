@@ -90,7 +90,7 @@ describe('computeCoverage — integration with the real engine', () => {
       templates: [{ id: TEMPLATE_ID, name: 'Cairo' }],
       tiers: ['standard'],
       isEurPassport: true,
-      calc: (a) => calculateDayBasedPricing(a),
+      calc: (a) => calculateDayBasedPricing({ ...a, orgId: 'org-1' }),
     })
     expect(report.summary.incomplete).toBe(0)
     expect(report.summary.totalHoles).toBe(0)
@@ -102,7 +102,7 @@ describe('computeCoverage — integration with the real engine', () => {
       templates: [{ id: TEMPLATE_ID, name: 'Cairo' }],
       tiers: ['standard'],
       isEurPassport: true,
-      calc: (a) => calculateDayBasedPricing(a),
+      calc: (a) => calculateDayBasedPricing({ ...a, orgId: 'org-1' }),
     })
     expect(report.summary.incomplete).toBe(1)
     expect(report.summary.holesByKind.hotel).toBeGreaterThanOrEqual(1)

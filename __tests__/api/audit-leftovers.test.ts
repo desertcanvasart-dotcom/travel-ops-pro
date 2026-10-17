@@ -5,7 +5,9 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
-import { pickPaymentFields, positiveAmount } from '@/lib/payment-fields'
+import { pickPaymentFields, checkPaymentAmount } from '@/lib/payments/fields'
+
+const positiveAmount = (raw: unknown) => { const c = checkPaymentAmount(raw); return c.ok ? c.amount : null }
 
 const ROOT = process.cwd()
 const src = (f: string) => readFileSync(join(ROOT, f), 'utf8')
@@ -33,10 +35,11 @@ describe('H25/H26 — payment writes keep only the payment fields', () => {
   })
 
   it('both routes use the allow-list and PUT checks the amount', () => {
-    expect(src('app/api/payments/route.ts')).toContain('blankToNull(pickPaymentFields(await request.json()))')
+    expect(src('app/api/payments/route.ts')).toContain('pickPaymentFields(')
+    expect(src('app/api/payments/route.ts')).toContain('checkPaymentAmount(fields.amount)')
     const put = src('app/api/payments/[id]/route.ts')
-    expect(put).toContain('blankToNull(pickPaymentFields(await request.json()))')
-    expect(put).toMatch(/positiveAmount\(safeBody\.amount\)/)
+    expect(put).toContain('const safeBody = pickPaymentFields(body)')
+    expect(put).toMatch(/checkPaymentAmount\(safeBody\.amount\)/)
     expect(put).not.toMatch(/\.\.\.safeBody|\.\.\.body/)
   })
 })
@@ -44,8 +47,9 @@ describe('H25/H26 — payment writes keep only the payment fields', () => {
 describe('H20 — commission edit is an allow-list', () => {
   const code = src('app/api/commissions/[id]/route.ts')
   it('copies only named fields, never amounts, links or org', () => {
-    expect(code).toContain('const EDITABLE = [')
-    const list = code.slice(code.indexOf('const EDITABLE = ['), code.indexOf('] as const'))
+    expect(code).toContain('buildCommissionUpdate(body, existing)')
+    const lib = src('lib/commission-fields.ts')
+    const list = lib.slice(lib.indexOf('COMMISSION_EDITABLE_FIELDS = ['), lib.indexOf('] as const', lib.indexOf('COMMISSION_EDITABLE_FIELDS = [')))
     for (const f of ['commission_amount', 'commission_rate', 'base_amount', 'cost_amount', 'org_id', 'client_id', 'itinerary_id', 'supplier_id']) {
       expect(list).not.toContain(`'${f}'`)
     }
@@ -56,12 +60,8 @@ describe('H20 — commission edit is an allow-list', () => {
 describe('H22 — invoice paid/partial follow the payments', () => {
   const code = src('app/api/invoices/[id]/route.ts')
   it('an edit may not set paid or partial', () => {
-    expect(code).toContain("const CALLER_SETTABLE_STATUSES = ['draft', 'sent', 'viewed', 'overdue', 'cancelled']")
-    expect(code).toContain('!CALLER_SETTABLE_STATUSES.includes(updateData.status)')
-  })
-  it('re-derives from the payments, including back to sent when none remain', () => {
-    expect(code).toContain("if (paid > 0) derived = paid >= total ? 'paid' : 'partial'")
-    expect(code).toContain("else if (['paid', 'partial'].includes(status)) derived = 'sent'")
+    expect(code).toContain('!isSettableInvoiceStatus(updateData.status)')
+    expect(src('lib/invoices/validate.ts')).toContain("SETTABLE_INVOICE_STATUSES = ['draft', 'sent', 'viewed', 'cancelled']")
   })
 })
 
@@ -128,8 +128,10 @@ describe('H30 — the season premium is priced on the server', async () => {
     expect(settleSeasonUplift({ sellingPrice: 1000, season: high, claimed: undefined })).toBe(0)
     expect(settleSeasonUplift({ sellingPrice: 1000, season: high, claimed: -5 })).toBe(0)
   })
-  it('the save route uses it', () => {
-    expect(src('app/api/pricing-grid/save/route.ts')).toContain('settleSeasonUplift({ sellingPrice: actualClientTotal, season, claimed: totals?.seasonUplift })')
+  it('the save route prices the premium itself, from the departure', () => {
+    const save = src('app/api/pricing-grid/save/route.ts')
+    expect(save).toContain('const season = seasonForDate(await seasonWindowsOn(supabase, callerOrgId, startDate), startDate)')
+    expect(save).toContain('sellingFromCost({ totalCost: supplierTotal, marginPercent: marginPct, season, currency: rateCurrency })')
   })
 })
 
@@ -183,7 +185,7 @@ describe('smaller leftovers (second pass)', () => {
   it('M17: a final invoice needs a live deposit invoice as its parent', () => {
     const code = src('app/api/invoices/route.ts')
     expect(code).toContain("error: 'Deposit invoice not found' }, { status: 404 }")
-    expect(code).toContain("parent.status === 'cancelled' || parent.invoice_type === 'final'")
+    expect(code).toContain("parentInvoice.status === 'cancelled' || parentInvoice.invoice_type === 'final'")
   })
   it('M29: a failed expense cascade on pay is reported, not swallowed', () => {
     const code = src('app/api/supplier-invoices/[id]/pay/route.ts')
@@ -194,11 +196,11 @@ describe('smaller leftovers (second pass)', () => {
     expect(src('app/api/exchange-rates/route.ts')).toContain('!Number.isFinite(amount) || amount < 0')
   })
   it("expenses: the trip is checked against the caller's org on create and edit", () => {
-    expect(src('app/api/expenses/route.ts')).toContain('recordsInOrg(supabaseAdmin, orgId, { itinerary_id: body.itinerary_id })')
-    expect(src('app/api/expenses/[id]/route.ts')).toContain('recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updateData.itinerary_id })')
+    expect(src('app/api/expenses/route.ts')).toContain('recordsInOrg(supabaseAdmin, orgId, { supplier_id: body.supplier_id, itinerary_id: body.itinerary_id })')
+    expect(src('app/api/expenses/[id]/route.ts')).toContain('recordsInOrg(supabaseAdmin, orgId, { supplier_id: updateData.supplier_id, itinerary_id: updateData.itinerary_id })')
   })
-  it('pricing-grid: the total reconciliation is org-scoped', () => {
-    expect(src('app/api/pricing-grid/save/route.ts')).toMatch(/update\(\{ total_cost: authoritativeTotal \}\)\s*\.eq\('id', itineraryId\)\s*\.eq\('org_id', callerOrgId\)/)
+  it('pricing-grid: every write after the header is org-scoped', () => {
+    expect(src('app/api/pricing-grid/save/route.ts')).toMatch(/update\(\{ season_uplift_amount: seasonUplift \}\)\s*\.eq\('id', itineraryId\)\s*\.eq\('org_id', callerOrgId\)/)
   })
 })
 

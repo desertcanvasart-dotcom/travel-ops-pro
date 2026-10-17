@@ -57,6 +57,9 @@ import ServiceRatePicker from '@/components/ServiceRatePicker'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { useRole } from '@/hooks/useRole'
+import { editorFxRate, editorSaveTotals, repriceEditorLine } from '@/lib/itineraries/editor-pricing'
+import { frozenToExchangeRates, parseFrozenFx } from '@/lib/itinerary-fx'
 import { LegCityOptions, useAirports } from '@/app/components/AirportOptions'
 
 const ItineraryMap = dynamic(() => import('@/components/ItineraryMap'), {
@@ -147,6 +150,8 @@ interface Itinerary {
   total_cost: number
   supplier_cost?: number | null
   margin_percent?: number | null
+  /** The pricing grid's season premium, charged on top of the lines. */
+  season_uplift_amount?: number | null
   notes: string
   cabin_allocation?: CabinAllocationItem[] | null
   // Provenance: when set, this itinerary was spun from a Copilot thread
@@ -173,6 +178,8 @@ interface ItineraryService {
   rate_eur: number
   rate_non_eur: number
   total_cost: number
+  /** What the client pays for the line, in the trip currency. */
+  client_price?: number | null
   notes: string
   isNew?: boolean
   isDeleted?: boolean
@@ -270,7 +277,10 @@ interface Programme {
 }
 
 export default function ItineraryEditorPage() {
-  const { rateSymbol } = useCurrency()
+  const { rateSymbol, rateCurrency } = useCurrency()
+  // Reprice FX is a manager's action (the route refuses anyone else).
+  const { canAccess } = useRole()
+  const canRepriceFx = canAccess(['admin', 'manager'])
   const t = useTranslations('itineraries.edit')
   const orgDocuments = useOrgDocumentTemplates()
   const tCommon = useTranslations('common')
@@ -333,6 +343,10 @@ export default function ItineraryEditorPage() {
   const [saving, setSaving] = useState(false)
   const [calculating, setCalculating] = useState(false)
   const [itinerary, setItinerary] = useState<Itinerary | null>(null)
+  // 1 unit of the rate currency in the trip's currency: the frozen rate when
+  // the trip has one, else today's (/api/exchange-rates). Null = not known
+  // yet, and a rate change on a trip in another currency waits for it.
+  const [liveRates, setLiveRates] = useState<{ base: string; rates: Record<string, number> } | null>(null)
   const [days, setDays] = useState<ItineraryDay[]>([])
   // The cities a flight can leave from or land in are the cities the agency's
   // airports are in — so this list needs no second place to be maintained.
@@ -552,17 +566,24 @@ export default function ItineraryEditorPage() {
 
   const loadAttractions = async () => {
     try {
+      // The trip's company's attractions only. RLS lets someone in both
+      // companies read both companies' rates; this trip is priced from its own.
+      const { data: own } = await supabase.from('itineraries').select('org_id').eq('id', itineraryId).maybeSingle()
+      const tripOrgId = (own as { org_id?: string } | null)?.org_id
+      if (!tripOrgId) return
       // Load both entrance fees and activities in parallel
       const [entranceRes, activityRes] = await Promise.all([
         supabase
           .from('entrance_fees')
           .select('id, attraction_name, city, eur_rate, non_eur_rate')
+          .eq('org_id', tripOrgId)
           .neq('is_active', false)
           .order('city')
           .order('attraction_name'),
         supabase
           .from('activity_rates')
           .select('id, activity_name, city, base_rate_eur, base_rate_non_eur')
+          .eq('org_id', tripOrgId)
           .eq('is_active', true)
           .order('city')
           .order('activity_name')
@@ -601,19 +622,21 @@ export default function ItineraryEditorPage() {
 
   // The "Sold by" guide list. Each line's own supplier list is
   // ServiceSupplierSelect: its kind, in its city.
+  // Through /api/suppliers, not the browser client: the server reads the
+  // ACTIVE workspace's suppliers (suppliers.org_id, 20261205). RLS alone would
+  // hand someone in both companies both companies' guides.
   const loadSuppliers = async () => {
     try {
-      const { data, error } = await supabase
-        .from('suppliers')
-        .select('id, name, type, types, city, contact_phone')
-        .order('type')
-        .order('name')
-
-      if (error) {
-        console.error('Error loading suppliers:', error)
+      const res = await fetch('/api/suppliers')
+      const json = await res.json().catch(() => null)
+      if (!res.ok || !json?.success) {
+        console.error('Error loading suppliers:', json?.error ?? res.status)
         return
       }
-      setSuppliers(data || [])
+      const data = ((json.data ?? []) as Supplier[])
+        .slice()
+        .sort((a, b) => String(a.type ?? '').localeCompare(String(b.type ?? '')) || String(a.name ?? '').localeCompare(String(b.name ?? '')))
+      setSuppliers(data)
     } catch (error) {
       console.error('Error loading suppliers:', error)
     }
@@ -793,6 +816,44 @@ export default function ItineraryEditorPage() {
     setServicesChanged(true)
   }
 
+  const tripFx = useMemo(() => {
+    if (!itinerary) return null
+    const frozen = parseFrozenFx(itinerary.fx_frozen)
+    return editorFxRate(rateCurrency, itinerary.currency, {
+      frozen: frozen ? frozenToExchangeRates(frozen) : null,
+      live: liveRates as never,
+    })
+  }, [itinerary, rateCurrency, liveRates])
+
+  useEffect(() => {
+    if (!itinerary?.currency || itinerary.currency === rateCurrency || parseFrozenFx(itinerary.fx_frozen)) return
+    let live = true
+    fetch(`/api/exchange-rates?base=${encodeURIComponent(rateCurrency)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(d => { if (live && d?.success && d.data) setLiveRates(d.data) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [itinerary?.currency, itinerary?.fx_frozen, rateCurrency])
+
+  /** A quantity or rate change: priced in the trip's currency, client price
+   *  moved with it (lib/itineraries/editor-pricing). Refused, with a message,
+   *  when the exchange rate is not known — a rate-currency number must never
+   *  be written as a trip-currency one. */
+  const repriceService = (service: ItineraryService, change: { quantity: number; rate_eur: number; rate_non_eur: number }, extra: Partial<ItineraryService> = {}) => {
+    if (!itinerary) return
+    const priced = repriceEditorLine(service, change, {
+      rateCurrency,
+      tripCurrency: itinerary.currency,
+      fx: tripFx,
+      marginPercent: itinerary.margin_percent,
+    })
+    if (!priced) {
+      dialog.alert(tCommon('error'), t('fxUnavailable', { from: rateCurrency, to: itinerary.currency }), 'warning')
+      return
+    }
+    updateService(service.id, { ...extra, ...priced })
+  }
+
   const calculateServiceTotal = (service: ItineraryService) => {
     const rate = service.rate_non_eur || service.rate_eur || 0
     return service.quantity * rate
@@ -831,42 +892,7 @@ export default function ItineraryEditorPage() {
     try {
       console.log('💾 Saving draft...')
 
-      // 1. Update itinerary metadata.
-      // Column semantics (must match generate-itinerary): supplier_cost =
-      // what we pay suppliers (Σ service total_cost); total_cost = the
-      // CLIENT price (supplier + margin). This save previously wrote the
-      // supplier sum into total_cost, so a B2C quote or invoice created
-      // after an edit-save either double-margined or billed cost with no
-      // margin depending on which writer ran last.
-      const supplierCost = services
-        .filter(s => !s.isDeleted)
-        .reduce((sum, s) => sum + (s.total_cost || 0), 0)
-      const marginPct = Number(itinerary.margin_percent) || 0
-      const clientTotal = Math.round(supplierCost * (1 + marginPct / 100) * 100) / 100
-
-      const { error: itinError } = await supabase
-        .from('itineraries')
-        .update({
-          trip_name: itinerary.trip_name,
-          tier: itinerary.tier,
-          package_type: itinerary.package_type,
-          total_days: days.length,
-          total_cost: clientTotal,
-          supplier_cost: supplierCost,
-          profit: clientTotal - supplierCost,
-          status: itinerary.status, // Preserve the current status
-          cabin_allocation: itinerary.cabin_allocation || null,
-          template_id: itinerary.template_id || null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', itineraryId)
-
-      if (itinError) throw itinError
-      // Keep local state in sync so the invoice button bills the fresh client total
-      setItinerary(prev => prev ? { ...prev, total_cost: clientTotal, supplier_cost: supplierCost } : prev)
-      console.log('✅ Itinerary updated')
-
-      // 2. Save the days — batched. This save used to make one round trip per
+      // 1. Save the days — batched. This save used to make one round trip per
       // row, from the BROWSER, so its latency scaled with the size of the trip:
       // a 12-day, 40-service save was 50+ sequential round trips over the
       // internet. New days go in one bulk insert; updates carry different
@@ -929,7 +955,7 @@ export default function ItineraryEditorPage() {
         console.log(`✅ ${existingDays.length} day(s) updated`)
       }
 
-      // 3. Save services if changed
+      // 2–3. Save services if changed
       if (servicesChanged) {
         console.log('💾 Saving services...', { activeLanguage, baseServiceDataKeys: Object.keys(baseServiceData) })
         
@@ -1128,6 +1154,33 @@ export default function ItineraryEditorPage() {
         setServices(services.filter(s => !s.isDeleted))
         setServicesChanged(false)
       }
+
+      // 4. The itinerary row, LAST: the services' database trigger rewrites
+      // total_cost on every service write, so the total written here — what
+      // the client pays (Σ line client prices + the season supplement, the
+      // figure the view page, documents and bookings use) — is the one that
+      // stands. supplier_cost is Σ line cost, in the trip's currency.
+      const totals = editorSaveTotals(itinerary, services)
+      const { error: itinError } = await supabase
+        .from('itineraries')
+        .update({
+          trip_name: itinerary.trip_name,
+          tier: itinerary.tier,
+          package_type: itinerary.package_type,
+          total_days: days.length,
+          total_cost: totals.total_cost,
+          supplier_cost: totals.supplier_cost,
+          profit: totals.profit,
+          status: itinerary.status, // Preserve the current status
+          cabin_allocation: itinerary.cabin_allocation || null,
+          template_id: itinerary.template_id || null,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', itineraryId)
+
+      if (itinError) throw itinError
+      // Keep local state in sync so the invoice button bills the fresh client total
+      setItinerary(prev => prev ? { ...prev, total_cost: totals.total_cost, supplier_cost: totals.supplier_cost } : prev)
 
       console.log('🎉 Draft saved successfully!')
       return true
@@ -1412,7 +1465,7 @@ export default function ItineraryEditorPage() {
                   {t('fxReprice.frozenAt', { date: new Date(itinerary.fx_frozen.frozen_at).toLocaleDateString() })}
                 </span>
               )}
-              {itinerary.fx_frozen && (
+              {itinerary.fx_frozen && canRepriceFx && (
                 <button
                   onClick={handleRepriceFx}
                   disabled={repricing}
@@ -1992,14 +2045,14 @@ export default function ItineraryEditorPage() {
                                             currentValue={service.service_name}
                                             paxCount={(itinerary?.num_adults || 1) + (itinerary?.num_children || 0)}
                                             onSelectRate={(rate) => {
-                                              updateService(service.id, {
-                                                service_name: rate.service_name,
-                                                rate_eur: rate.rate_eur,
-                                                rate_non_eur: rate.rate_non_eur,
-                                                supplier_id: rate.supplier_id,
-                                                supplier_name: rate.supplier_name,
-                                                total_cost: service.quantity * (rate.rate_non_eur || rate.rate_eur || 0)
-                                              })
+                                              // A picked rate is the line's new price, so
+                                              // the line takes today's (or the frozen)
+                                              // exchange rate, not the one it had.
+                                              repriceService(
+                                                { ...service, exchange_rate_used: null, client_price: service.client_price },
+                                                { quantity: service.quantity, rate_eur: rate.rate_eur, rate_non_eur: rate.rate_non_eur },
+                                                { service_name: rate.service_name, supplier_id: rate.supplier_id, supplier_name: rate.supplier_name }
+                                              )
                                             }}
                                           />
                                         </>
@@ -2048,8 +2101,7 @@ export default function ItineraryEditorPage() {
                                           value={service.quantity}
                                           onChange={(e) => {
                                             const qty = parseInt(e.target.value) || 1
-                                            const total = qty * (service.rate_non_eur || service.rate_eur || 0)
-                                            updateService(service.id, { quantity: qty, total_cost: total })
+                                            repriceService(service, { quantity: qty, rate_eur: service.rate_eur, rate_non_eur: service.rate_non_eur })
                                           }}
                                           className="w-16 px-2 py-1.5 border border-gray-300 rounded text-sm text-center focus:outline-none focus:border-[#647C47]"
                                           min="1"
@@ -2062,11 +2114,7 @@ export default function ItineraryEditorPage() {
                                           value={service.rate_non_eur || service.rate_eur || 0}
                                           onChange={(e) => {
                                             const rate = parseFloat(e.target.value) || 0
-                                            updateService(service.id, { 
-                                              rate_non_eur: rate, 
-                                              rate_eur: rate,
-                                              total_cost: service.quantity * rate 
-                                            })
+                                            repriceService(service, { quantity: service.quantity, rate_eur: rate, rate_non_eur: rate })
                                           }}
                                           className="w-24 px-2 py-1.5 border border-gray-300 rounded text-sm text-right focus:outline-none focus:border-[#647C47]"
                                           step="0.01"

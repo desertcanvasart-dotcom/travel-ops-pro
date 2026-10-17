@@ -26,6 +26,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import Papa from 'papaparse'
 import { createServerClient } from '@/lib/supabase-server'
 import { SUPPLIER_CSV_COLUMNS, supplierCsvHeaders, supplierCsvRow } from '@/lib/suppliers/import-csv'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createServerClient()
 
@@ -34,6 +35,8 @@ const CHUNK = 200
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json().catch(() => ({}))
     const ids: unknown = body?.ids
     if (!Array.isArray(ids) || ids.some(id => typeof id !== 'string')) {
@@ -48,6 +51,7 @@ export async function POST(request: NextRequest) {
       const { data, error } = await supabase
         .from('suppliers')
         .select('*')
+        .eq('org_id', orgId) // another company's id exports nothing
         .in('id', ids.slice(i, i + CHUNK) as string[])
       if (error) {
         console.error('[suppliers/export]', error)

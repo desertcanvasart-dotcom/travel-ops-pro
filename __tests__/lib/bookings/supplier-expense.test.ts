@@ -8,6 +8,9 @@ vi.mock('@/lib/document-numbering', () => ({
   insertWithUniqueRetry: async (o: { generateRow: () => Promise<unknown>; insert: (r: unknown) => Promise<unknown> }) => o.insert(await o.generateRow()),
 }))
 let seq = 0
+vi.mock('@/lib/expense-number', () => ({
+  nextExpenseNumber: async () => `EXP-2026-${String(++seq).padStart(3, '0')}`,
+}))
 
 const {
   planSupplierExpense, supplierRowCost, expenseCategoryForSupplierType, supplierTypeKeyForSupplierType, syncSupplierExpense,
@@ -64,8 +67,21 @@ beforeEach(() => {
 describe('planSupplierExpense', () => {
   const today = '2026-10-05'
   it('creates on confirmation, with the service date', () => {
-    expect(planSupplierExpense({ status: 'confirmed', confirmed_cost: null, quoted_cost: 50, service_date: '2026-11-01' }, null, today))
-      .toEqual({ action: 'create', amount: 50, expense_date: '2026-11-01' })
+    // The plan now carries the currency too (the row's own, else the booking's).
+    expect(planSupplierExpense({ status: 'confirmed', confirmed_cost: null, quoted_cost: 50, service_date: '2026-11-01' }, null, today, 'usd'))
+      .toEqual({ action: 'create', amount: 50, currency: 'USD', expense_date: '2026-11-01' })
+  })
+  it("records the supplier's own currency when the row has one", () => {
+    expect(planSupplierExpense({ status: 'confirmed', confirmed_cost: null, quoted_cost: 3000, service_date: '2026-11-01', cost_currency: 'EGP' }, null, today, 'JPY'))
+      .toEqual({ action: 'create', amount: 3000, currency: 'EGP', expense_date: '2026-11-01' })
+  })
+  it('updates a pending expense whose currency differs from its row, even at the same amount', () => {
+    const row = { status: 'confirmed', confirmed_cost: null, quoted_cost: 3000, service_date: '2026-11-01', cost_currency: 'EGP' }
+    expect(planSupplierExpense(row, { status: 'pending', amount: 3000, currency: 'JPY', expense_date: '2026-11-01' }, today, 'JPY'))
+      .toEqual({ action: 'update', amount: 3000, currency: 'EGP', expense_date: '2026-11-01' })
+    expect(planSupplierExpense(row, { status: 'pending', amount: 3000, currency: 'egp', expense_date: '2026-11-01' }, today, 'JPY').action).toBe('none')
+    // approved / paid: still never touched
+    expect(planSupplierExpense(row, { status: 'approved', amount: 3000, currency: 'JPY', expense_date: '2026-11-01' }, today, 'JPY').action).toBe('kept')
   })
   it('does nothing before confirmation or without a cost', () => {
     expect(planSupplierExpense({ status: 'contacted', confirmed_cost: null, quoted_cost: 50, service_date: null }, null, today).action).toBe('none')
@@ -108,6 +124,18 @@ describe('syncSupplierExpense', () => {
     // saving again makes no second copy
     expect((await syncSupplierExpense(client, 'o1', 's1'))).toMatchObject({ ok: true, action: 'none' })
     expect(expenses()).toHaveLength(1)
+  })
+
+  it("records the expense in the row's own currency, not the booking's", async () => {
+    supplierRow().status = 'confirmed'
+    supplierRow().cost_currency = 'EGP'
+    supplierRow().confirmed_cost = 3000
+    await syncSupplierExpense(client, 'o1', 's1')
+    expect(expenses()[0]).toMatchObject({ amount: 3000, currency: 'EGP' })
+    // the booking's currency only when the row has none
+    supplierRow().cost_currency = null
+    expect(await syncSupplierExpense(client, 'o1', 's1')).toMatchObject({ ok: true, action: 'update' })
+    expect(expenses()[0]).toMatchObject({ amount: 3000, currency: 'USD' })
   })
 
   it('a new confirmed cost updates the pending expense', async () => {

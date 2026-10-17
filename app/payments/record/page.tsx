@@ -8,6 +8,7 @@ import Link from 'next/link'
 import { ArrowLeft, Save } from 'lucide-react'
 import { usePreferences } from '@/app/contexts/PreferencesContext'
 import { formatMoney } from '@/lib/currency-totals'
+import { useTripPaid } from '@/lib/payments/use-trip-paid'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
 
@@ -27,6 +28,8 @@ export default function RecordPaymentPage() {
   const [loading, setLoading] = useState(false)
   const [itineraries, setItineraries] = useState<Itinerary[]>([])
   const [selectedItinerary, setSelectedItinerary] = useState<Itinerary | null>(null)
+  // From the trip's payment rows: itineraries.total_paid is never updated.
+  const paidSoFar = useTripPaid(selectedItinerary?.id) ?? 0
   const [error, setError] = useState<string | null>(null)
   // This form is long enough that the error banner sits well above the submit
   // button. Setting an error the user cannot see is indistinguishable from the
@@ -146,7 +149,7 @@ export default function RecordPaymentPage() {
 
   const calculateBalance = () => {
     if (!selectedItinerary) return 0
-    return selectedItinerary.total_cost - (selectedItinerary.total_paid || 0)
+    return selectedItinerary.total_cost - paidSoFar
   }
 
   return (
@@ -205,7 +208,7 @@ export default function RecordPaymentPage() {
                 </div>
                 <div>
                   <span className="text-gray-600">{t('alreadyPaid')}:</span>
-                  <p className="font-bold text-success">{formatMoney(selectedItinerary.total_paid || 0, selectedItinerary.currency || formData.currency || 'EUR')}</p>
+                  <p className="font-bold text-success">{formatMoney(paidSoFar, selectedItinerary.currency || formData.currency || 'EUR')}</p>
                 </div>
                 <div>
                   <span className="text-gray-600">{t('balanceDue')}:</span>

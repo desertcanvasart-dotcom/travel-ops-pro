@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
+import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
+import { findDefaultVariation, isWithdrawn } from '@/lib/tours/default-variation'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -11,37 +13,49 @@ const supabase = createClient(
 // catalogue is variation-less, and language versions attach at the TEMPLATE
 // level — requiring a variation here made "create version" fail with "Tour
 // not found" on every imported programme.
-async function resolveTarget(
-  code: string
-): Promise<{ template_id: string; variation: { id: string; variation_code: string; template_id: string } | null } | null> {
+//
+// Within the caller's company only: another company's code or id is "not
+// found" (codes are unique per company, so both may hold the same one).
+// The same variation the tour page opens on (lib/tours/default-variation):
+// active only, the company's default tier first — and a withdrawn variation
+// or tour is 'withdrawn', not a target.
+type Target = { template_id: string; variation: { id: string; variation_code: string; template_id: string } | null }
+async function resolveTarget(code: string, orgId: string): Promise<Target | 'withdrawn' | null> {
   // First, try to find by variation_code
   const { data: varByCode } = await supabase
     .from('tour_variations')
-    .select('id, variation_code, template_id')
+    .select('id, variation_code, template_id, is_active, tour_templates (is_active)')
+    .eq('org_id', orgId)
     .eq('variation_code', code)
-    .single()
+    .maybeSingle()
 
-  if (varByCode) return { template_id: varByCode.template_id, variation: varByCode }
+  if (varByCode) {
+    if (isWithdrawn(varByCode) || isWithdrawn((varByCode as any).tour_templates)) return 'withdrawn'
+    return { template_id: varByCode.template_id, variation: varByCode }
+  }
 
   // Otherwise the code names a template, by UUID or by template_code.
   const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(code)
   const { data: template } = await supabase
     .from('tour_templates')
-    .select('id')
+    .select('id, is_active')
+    .eq('org_id', orgId)
     .eq(isUUID ? 'id' : 'template_code', code)
-    .single()
+    .maybeSingle()
 
   if (!template) return null
+  if (isWithdrawn(template)) return 'withdrawn'
 
-  const { data: variation } = await supabase
-    .from('tour_variations')
-    .select('id, variation_code, template_id')
-    .eq('template_id', template.id)
-    .order('tier', { ascending: true })
-    .limit(1)
-    .single()
-
+  const variation = await findDefaultVariation<Target['variation'] & { tier: string }>(
+    supabase, orgId, template.id, 'id, variation_code, template_id, tier'
+  )
   return { template_id: template.id, variation: variation ?? null }
+}
+
+function targetMissing(target: 'withdrawn' | null) {
+  return target === 'withdrawn'
+    ? NextResponse.json({ success: false, withdrawn: true, error: 'This tour is no longer offered' }, { status: 410 })
+    : NextResponse.json({ success: false, error: 'Tour not found' }, { status: 404 })
 }
 
 // GET - Fetch all language versions for a tour
@@ -50,15 +64,12 @@ export async function GET(
   { params }: { params: Promise<{ code: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { code } = await params
 
-    const target = await resolveTarget(code)
-    if (!target) {
-      return NextResponse.json(
-        { success: false, error: 'Tour not found' },
-        { status: 404 }
-      )
-    }
+    const target = await resolveTarget(code, orgId)
+    if (!target || target === 'withdrawn') return targetMissing(target)
 
     // Fetch variation versions (a variation-less programme has none)
     let variationVersions: any[] = []
@@ -116,6 +127,13 @@ export async function POST(
   { params }: { params: Promise<{ code: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    // Language versions are catalogue content: admin/manager, as RLS has it
+    // for the tables (is_manager_or_above) — the service-role client here
+    // bypasses RLS, and the middleware lets agents write under /api/tours.
+    const denied = await requireRole(['admin', 'manager'])
+    if (denied) return denied
     const { code } = await params
     const body = await request.json()
 
@@ -128,13 +146,8 @@ export async function POST(
       )
     }
 
-    const target = await resolveTarget(code)
-    if (!target) {
-      return NextResponse.json(
-        { success: false, error: 'Tour not found' },
-        { status: 404 }
-      )
-    }
+    const target = await resolveTarget(code, orgId)
+    if (!target || target === 'withdrawn') return targetMissing(target)
     const variation = target.variation
 
     const results: { variationVersion?: unknown; templateVersion?: unknown } = {}

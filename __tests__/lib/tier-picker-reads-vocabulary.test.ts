@@ -29,7 +29,9 @@ const TIER_PICKERS = [
   'app/b2b/import/import-content.tsx',
   'app/pricing-grid/components/GridHeader.tsx',
   'app/whatsapp-parser/whatsapp-parser-content.tsx',
-  'app/settings/page.tsx',
+  // The user's default tier: the Preferences panel (it moved out of
+  // app/settings/page.tsx so agents can open it at /settings/preferences).
+  'components/settings/PreferencesPanel.tsx',
   'app/tours/tours-browser-page.tsx',
   // 2026-09-15: the tour TEMPLATE form was never converted, and it was the one
   // that mattered most — an agency could add a tier, watch it appear on the
@@ -57,7 +59,9 @@ describe('tier routes read the org ladder', () => {
   for (const rel of TIER_ROUTES) {
     it(`${rel} validates or iterates tiers from tierLadderForCurrentOrg, not a frozen list`, () => {
       const src = read(rel)
-      expect(src.includes('tierLadderForCurrentOrg('), `${rel} must read the org ladder`).toBe(true)
+      // tierLadderForOrg( for a route that runs one company at a time without a
+      // session (recalculate-prices: the scheduler loops every company).
+      expect(src.includes('tierLadderForCurrentOrg(') || src.includes('tierLadderForOrg('), `${rel} must read the org ladder`).toBe(true)
       expect(
         /\[\s*'budget',\s*'standard',\s*'deluxe',\s*'luxury'\s*\]/.test(src),
         `${rel} carries a four-entry tier list — an agency-added tier is refused or skipped`
@@ -205,7 +209,7 @@ describe('transportation routes write vehicles through the one helper', () => {
   // list through the one reader, so an agency-added vehicle shows where it
   // is priced.
   for (const rel of [
-    'app/api/pricing-grid/rates/route.ts',
+    'app/api/pricing-grid/rate-options.ts',
     'app/api/rates/available/route.ts',
     'app/api/tours/variations/[id]/services/route.ts',
     'app/rates/page.tsx',

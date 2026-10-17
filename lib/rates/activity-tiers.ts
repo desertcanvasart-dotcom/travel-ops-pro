@@ -13,6 +13,9 @@
 // Bands are matched on max_pax in ascending order; a group larger than every
 // band gets the last band's rate. rate_non_eur falls back to rate_eur.
 
+import type { RateNormalizer } from '@/lib/rates/rate-currency'
+import { rateValidOn } from '@/lib/pricing/service-rates'
+
 export interface ActivityTier {
   min_pax: number
   max_pax: number
@@ -73,12 +76,24 @@ export function pickTier(tiers: ActivityTier[], numPax: number): ActivityTier {
  *  safer fuzzy fallback. */
 export async function getTieredActivityRate(
   supabase: { from: (table: string) => any },
-  serviceName: string
+  /** Whose activities: this company's (activity_rates.org_id). */
+  orgId: string | null | undefined,
+  serviceName: string,
+  opts?: {
+    /** Converts the bands from the row's own rate_currency into the run
+     *  currency (lib/rates/rate-currency) — they were read as stored, so a
+     *  felucca entered in EGP priced ~50× in a USD quote. */
+    normalizer?: RateNormalizer
+    /** The travel date: a rate whose validity does not cover it is skipped. */
+    date?: string | null
+  }
 ): Promise<{ tiers: ActivityTier[]; activity_name: string } | null> {
+  if (!orgId) return null
   const base = () =>
     supabase
       .from('activity_rates')
-      .select('activity_name, service_code, tiers')
+      .select('id, activity_name, service_code, tiers, rate_currency, rate_valid_from, rate_valid_to')
+      .eq('org_id', orgId)
       .eq('is_active', true)
       .eq('pricing_type', 'tiered')
       .not('tiers', 'is', null)
@@ -89,11 +104,19 @@ export async function getTieredActivityRate(
     (q: any) => q.ilike('activity_name', `%${serviceName}%`),
   ]
   for (const refine of attempts) {
-    const { data, error } = await refine(base()).limit(1)
+    const { data, error } = await refine(base())
     if (error) return null
-    if (data?.length) {
-      const tiers = sanitizeTiers(data[0].tiers)
-      if (tiers) return { tiers, activity_name: data[0].activity_name }
+    // Valid on the date, then a fixed order (newest period, then code) —
+    // never whichever row the database returned first.
+    const valid = ((data ?? []) as Record<string, unknown>[])
+      .filter(r => rateValidOn(r as { rate_valid_from?: string | null; rate_valid_to?: string | null }, opts?.date))
+      .sort((a, b) =>
+        String(b.rate_valid_from ?? '').localeCompare(String(a.rate_valid_from ?? '')) ||
+        String(a.service_code ?? '').localeCompare(String(b.service_code ?? '')))
+    if (valid.length) {
+      const row = (opts?.normalizer ? (await opts.normalizer.normalize('activity_rates', [valid[0]]))?.[0] : valid[0]) ?? valid[0]
+      const tiers = sanitizeTiers(row.tiers)
+      if (tiers) return { tiers, activity_name: String(row.activity_name ?? '') }
     }
   }
   return null

@@ -4,13 +4,19 @@ import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getTieredActivityRate, applyActivityTiers } from '@/lib/rates/activity-tiers'
 import { makeDayTourVehicleFinder } from '@/lib/rates/day-tour-vehicle'
-import { calculateAutoPricing, calculatePricingWithPassengerBreakdown, ServiceTier, CHILD_DISCOUNT_PERCENT, loadSeasonWindows } from '@/lib/auto-pricing-service'
+import { calculateAutoPricing, calculatePricingWithPassengerBreakdown, ServiceTier, CHILD_DISCOUNT_PERCENT, loadSeasonWindows, buildEntranceFeeCache, getGuideRate } from '@/lib/auto-pricing-service'
+import { priceEntranceLine, priceMealLine } from '@/lib/b2b/variation-service-rates'
+import { guideLanguageWord } from '@/lib/guides/guide-language'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
-import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
+import { getOrgDefaultMargin } from '@/lib/org-default-margin'
+import { quoteMarginPercent, partnerOverrideOn } from '@/lib/b2b/partner-margin'
+import { belowMinPaxMessage } from '@/lib/tours/min-pax'
+import { pickPackage, firstSailing } from '@/lib/pricing/cruise-package'
 import { getCurrentOrgId } from '@/lib/auth/current-org'
+import { quoteRefsInOrg, quoteRefNotFound } from '@/lib/b2b/quote-scope'
 import { parseOptionalSelection, isOptionalSelected } from '@/lib/b2b/optional-selection'
 // Catalogue extras chosen at QUOTE time — same rule as options: cost + margin,
 // or the operator's set price as-is. Ported from autoura-saas.
@@ -36,7 +42,7 @@ import {
 // If tour_variation_services is empty, uses auto-pricing
 // from tour_templates.itinerary (via auto-pricing-service.ts)
 //
-// SHARED B2C RATE TABLES:
+// B2C RATE TABLES (the caller's company's rows — every rate table has org_id):
 // - vehicles, guides, entrance_fees, hotel_contacts, meal_rates, nile_cruises
 // 
 // B2B-SPECIFIC TABLES:
@@ -138,6 +144,30 @@ interface PriceCalculationResult {
   warnings?: string[]
 }
 
+// The partner's own margins: its default, and its override for this
+// variation (an active b2b_partner_pricing row valid on the travel date — its
+// valid_from/valid_to were never read, so an expired override still priced).
+// The caller has checked the partner is this org's.
+async function loadPartnerMargins(orgId: string, partnerId: string, variationId: string | null | undefined, travelDate: string) {
+  const { data: partner } = await supabaseAdmin
+    .from('b2b_partners')
+    .select('default_margin_percent')
+    .eq('id', partnerId)
+    .eq('org_id', orgId)
+    .maybeSingle()
+  let override: unknown = null
+  if (variationId) {
+    const { data } = await supabaseAdmin
+      .from('b2b_partner_pricing')
+      .select('id, margin_percent_override, valid_from, valid_to')
+      .eq('partner_id', partnerId)
+      .eq('variation_id', variationId)
+      .eq('is_active', true)
+    override = partnerOverrideOn(data ?? [], travelDate)?.margin_percent_override ?? null
+  }
+  return { default: partner?.default_margin_percent ?? null, override }
+}
+
 // Catalogue extras chosen for this quote. Only ACTIVE rows of this org come
 // back; a withdrawn or foreign id is therefore a hole downstream, never a sale.
 // A row entered in another currency (rate_currency) is converted into the run
@@ -229,19 +259,45 @@ function foldExtras(
   }
 }
 
-// Get transport package for cruise sightseeing (kept for package deals)
-async function getTransportPackage(packageType: string, originCity: string, destCity: string): Promise<any | null> {
+// Get transport package for cruise sightseeing (kept for package deals) —
+// the org's own (b2b_transport_packages.org_id): this priced with whichever
+// company's package came first. No org, no package.
+// It read Luxor→Aswan only, any length, `.limit(1)` in no order, and added the
+// package's own number to the total whatever currency it was in. Now: the
+// sailing's length (sightseeing) and route, the engine's fixed pick
+// (lib/pricing/cruise-package), converted into the run currency — a package
+// that cannot be converted is neutralised and the line falls through.
+async function getTransportPackage(
+  orgId: string | null,
+  packageType: string,
+  want: { durationDays?: number | null; route?: string[] },
+  runCurrency: string,
+): Promise<any | null> {
+  if (!orgId) return null
   const { data, error } = await supabaseAdmin
     .from('b2b_transport_packages')
     .select('*')
+    .eq('org_id', orgId)
     .eq('package_type', packageType)
-    .eq('origin_city', originCity)
-    .eq('destination_city', destCity)
     .eq('is_active', true)
-    .limit(1)
 
   if (error || !data || data.length === 0) return null
-  return data[0]
+  const rows = await createRateNormalizer(runCurrency).normalize('b2b_transport_packages', data as Record<string, unknown>[])
+  return pickPackage(rows as any[], { type: packageType, ...want })
+}
+
+// The sailing a variation's own service list is priced for: its template's
+// first run of cruise days (length nights + 1, route from the days' cities),
+// else the tour's length with no route to check.
+async function legacySailing(orgId: string | null, templateId: string | null | undefined, tourDays: number) {
+  if (!orgId || !templateId) return firstSailing(null, tourDays)
+  const { data } = await supabaseAdmin
+    .from('tour_templates')
+    .select('itinerary')
+    .eq('id', templateId)
+    .eq('org_id', orgId)
+    .maybeSingle()
+  return firstSailing((data as { itinerary?: unknown } | null)?.itinerary, tourDays)
 }
 
 // Select vehicle from transport package based on group size. A vehicle with no
@@ -255,68 +311,31 @@ function selectVehicleFromPackage(pkg: any, numPax: number): { rate: number; veh
   return band ? { rate: band.rate_eur, vehicle: vehicleKeyLabel(band.key) } : null
 }
 
-// Select guide from guides table based on language and tier
-async function selectGuideFromB2CTable(language: string = 'English', tier: string = 'standard'): Promise<{ rate: number; name: string; id: string } | null> {
-  const { data: guides, error } = await supabaseAdmin
-    .from('guides')
-    .select('id, name, daily_rate, languages, tier, is_preferred')
+// The guide_rates row a service line picked, this company's, in the run
+// currency — the operator chose it, so it prices whatever the defaults say.
+async function pickedGuideRate(
+  orgId: string | null,
+  id: string,
+  normalizer: ReturnType<typeof createRateNormalizer>
+): Promise<{ id: string; name: string; dailyRate: number } | null> {
+  const { data } = await supabaseAdmin
+    .from('guide_rates')
+    .select('*')
+    .eq('org_id', orgId ?? NO_ORG)
+    .eq('id', id)
     .eq('is_active', true)
-    .contains('languages', [language])
-    .order('is_preferred', { ascending: false })
-
-  if (error || !guides || guides.length === 0) {
-    // Fallback: any guide
-    const { data: anyGuide } = await supabaseAdmin
-      .from('guides')
-      .select('id, name, daily_rate, tier')
-      .eq('is_active', true)
-      .order('is_preferred', { ascending: false })
-      .limit(1)
-
-    if (!anyGuide || anyGuide.length === 0) return null
-    
-    return {
-      rate: anyGuide[0].daily_rate || 0,
-      name: anyGuide[0].name || 'Guide',
-      id: anyGuide[0].id
-    }
-  }
-
-  // Find guide matching tier
-  const selectedGuide = guides.find((g: any) => g.tier === tier) || guides[0]
-
-  return {
-    rate: selectedGuide.daily_rate || 0,
-    name: selectedGuide.name || 'Guide',
-    id: selectedGuide.id
-  }
+  const row = ((await normalizer.normalize('guide_rates', (data ?? []) as Record<string, any>[])) ?? [])[0]
+  const dailyRate = Number(row?.base_rate_eur) || 0
+  return row && dailyRate > 0 ? { id: row.id, name: `${guideLanguageWord(row.guide_language)} Speaking Guide`, dailyRate } : null
 }
 
-// Get entrance fee from entrance_fees table
-async function getEntranceFee(attractionName: string, isEurPassport: boolean): Promise<{ rate: number; name: string; id: string } | null> {
-  const { data: fees, error } = await supabaseAdmin
-    .from('entrance_fees')
-    .select('id, attraction_name, eur_rate, non_eur_rate')
-    .eq('is_active', true)
-    .ilike('attraction_name', `%${attractionName}%`)
-    .limit(1)
+// Matches no organisation: a rate read without one finds nothing (a missing
+// rate), never another company's rate.
+const NO_ORG = '00000000-0000-0000-0000-000000000000'
 
-  if (error || !fees || fees.length === 0) return null
-
-  const fee = fees[0]
-  const rate = isEurPassport 
-    ? (fee.eur_rate || 0) 
-    : (fee.non_eur_rate || fee.eur_rate || 0)
-
-  return {
-    rate,
-    name: fee.attraction_name,
-    id: fee.id
-  }
-}
-
-// Get hotel rate from accommodation_rates table (authoritative per-person rates)
+// Get hotel rate from accommodation_rates table (authoritative per-person rates) — this company's.
 async function getHotelRate(
+  orgId: string | null,
   city: string,
   tier: string = 'standard',
   isEurPassport: boolean = true
@@ -324,6 +343,7 @@ async function getHotelRate(
   const { data: hotels, error } = await supabaseAdmin
     .from('accommodation_rates')
     .select('id, property_name, pp_double_eur, pp_double_non_eur, city, tier')
+    .eq('org_id', orgId ?? NO_ORG)
     .eq('is_active', true)
     .ilike('city', `%${city}%`)
     .eq('tier', tier)
@@ -352,6 +372,7 @@ async function getHotelRate(
     const { data: fbHotels } = await supabaseAdmin
       .from('accommodation_rates')
       .select('id, property_name, pp_double_eur, pp_double_non_eur, city, tier')
+      .eq('org_id', orgId ?? NO_ORG)
       .eq('is_active', true)
       .ilike('city', `%${city}%`)
       .eq('tier', fbTier)
@@ -411,8 +432,27 @@ export async function POST(request: NextRequest) {
       guide_mode = 'spot'
     } = body
     const guideGrade = guide_grade === 'senior' ? 'senior' as const : 'egyptologist' as const
+
+    // The partner whose margin prices this must be the org's own: partner_id
+    // came from the body and was read — with its b2b_partner_pricing override
+    // — whichever company it belonged to. The same 404 as a missing one.
+    const orgId = await getCurrentOrgId()
+    if (partner_id && !(orgId && await quoteRefsInOrg(supabaseAdmin, orgId, { partner_id }))) {
+      return quoteRefNotFound()
+    }
     const guideMode = guide_mode === 'throughout' ? 'throughout' as const : 'spot' as const
-    const margin_percent = resolveMarginPercent({ requested: requestedMargin, orgDefault: await getOrgDefaultMargin(supabaseAdmin, await getCurrentOrgId()) })
+    // The operator's own margin wins; else the partner's (per variation, then
+    // its default); else the company's. One rule for the calculator's screen
+    // and for the save's re-price (lib/b2b/partner-margin.ts) — the partner
+    // used to override a margin the operator had typed, and the calculator
+    // never sent the partner at all.
+    const partnerMargins = partner_id && orgId ? await loadPartnerMargins(orgId, partner_id, variation_id, travel_date) : null
+    const margin_percent = quoteMarginPercent({
+      requested: requestedMargin,
+      partnerOverride: partnerMargins?.override,
+      partnerDefault: partnerMargins?.default,
+      orgDefault: await getOrgDefaultMargin(supabaseAdmin, orgId),
+    })
 
     // WHICH optional services the customer is buying, not merely whether. The
     // old boolean priced every option or none — see lib/b2b/optional-selection.
@@ -460,6 +500,9 @@ export async function POST(request: NextRequest) {
           tour_templates (id, template_name, template_code, duration_days, uses_day_builder, pricing_mode)
         `)
         .eq('id', variation_id)
+        // The caller's company's variation (tour_variations.org_id, 20261207);
+        // another company's is "not found".
+        .eq('org_id', orgId ?? NO_ORG)
         .single()
 
       if (varError || !varRow) {
@@ -467,6 +510,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ error: 'Variation not found' }, { status: 404 })
       }
       variation = varRow
+      // A variation sold from 4 travellers was priced for 1 without a word —
+      // its per-person costs spread over fewer people than it is ever run for.
+      const belowMin = belowMinPaxMessage(varRow.min_pax, effectiveTotalPax)
+      if (belowMin) return NextResponse.json({ error: belowMin }, { status: 400 })
     } else {
       // Template-direct: synthesize the variation shape the rest of this route
       // expects. No services row exists, so the auto-pricing fallback below is
@@ -475,6 +522,7 @@ export async function POST(request: NextRequest) {
         .from('tour_templates')
         .select('id, template_name, template_code, duration_days, uses_day_builder, pricing_mode')
         .eq('id', template_id)
+        .eq('org_id', orgId ?? NO_ORG)
         .single()
 
       if (tplError || !templateRow) {
@@ -527,19 +575,8 @@ export async function POST(request: NextRequest) {
       console.log(`   tourLeaderIncluded: ${tour_leader_included}`)
       console.log(`   usePassengerBreakdown: ${usePassengerBreakdown}`)
 
-      // Determine effective margin (partner override)
-      let effectiveMargin = margin_percent
-      if (partner_id) {
-        const { data: partner } = await supabaseAdmin
-          .from('b2b_partners')
-          .select('default_margin_percent')
-          .eq('id', partner_id)
-          .single()
-
-        if (partner?.default_margin_percent) {
-          effectiveMargin = partner.default_margin_percent
-        }
-      }
+      // The margin, partner's included, was resolved above.
+      const effectiveMargin = margin_percent
 
       // Use passenger breakdown pricing if breakdown is provided
       let autoPriceResult
@@ -737,31 +774,8 @@ export async function POST(request: NextRequest) {
     // ORIGINAL LOGIC: Process tour_variation_services
     // ============================================
 
-    // Determine effective margin (partner override)
-    let effectiveMargin = margin_percent
-    if (partner_id) {
-      const { data: partner } = await supabaseAdmin
-        .from('b2b_partners')
-        .select('default_margin_percent')
-        .eq('id', partner_id)
-        .single()
-      
-      if (partner?.default_margin_percent) {
-        effectiveMargin = partner.default_margin_percent
-      }
-
-      const { data: override } = await supabaseAdmin
-        .from('b2b_partner_pricing')
-        .select('margin_percent_override')
-        .eq('partner_id', partner_id)
-        .eq('variation_id', variation_id)
-        .eq('is_active', true)
-        .single()
-      
-      if (override?.margin_percent_override) {
-        effectiveMargin = override.margin_percent_override
-      }
-    }
+    // The margin, partner's included, was resolved above.
+    const effectiveMargin = margin_percent
 
     const calculatedServices: CalculatedService[] = []
     const optionalServices: CalculatedService[] = []
@@ -774,7 +788,26 @@ export async function POST(request: NextRequest) {
     // Day-tour vehicle rates come from transportation_rates (the operator's
     // catalog with their own capacity bands) — NOT the `vehicles` fleet list,
     // which has no rates and priced these lines at 0. Cache built once per request.
-    const findDayTourVehicle = makeDayTourVehicleFinder()
+    const findDayTourVehicle = makeDayTourVehicleFinder(orgId, rateCurrency)
+    // The Guides & Services tables, read once per request and converted into
+    // the run currency — each row from ITS OWN rate_currency (a fee entered as
+    // 600 EGP was priced as 600 in a USD quote). Same normaliser, same policy
+    // as the engine: a row that cannot be converted prices as missing.
+    const serviceNormalizer = createRateNormalizer(rateCurrency)
+    let feeRows: Promise<Record<string, any>[]> | null = null
+    const entranceFees = () => (feeRows ??= buildEntranceFeeCache(orgId, serviceNormalizer) as Promise<Record<string, any>[]>)
+    let mealRowsP: Promise<Record<string, any>[]> | null = null
+    const mealRows = () => (mealRowsP ??= (async () => {
+      const { data } = await supabaseAdmin
+        .from('meal_rates')
+        .select('*')
+        .eq('org_id', orgId ?? NO_ORG)
+        .eq('is_active', true)
+      return ((await serviceNormalizer.normalize('meal_rates', (data ?? []) as Record<string, any>[])) ?? []) as Record<string, any>[]
+    })())
+    // Read once, and only when a line asks for a transport package.
+    let sailing: Promise<{ durationDays: number; route: string[] }> | null = null
+    const legacyCruise = () => (sailing ??= legacySailing(orgId, templateId, template?.duration_days || 1))
 
     for (const service of (services || [])) {
       let unitCost = 0
@@ -790,7 +823,7 @@ export async function POST(request: NextRequest) {
       // production since launch, so tiered pricing never actually fired.
       // ============================================
       if (service.rate_type === 'activity' && service.service_name) {
-        const tiered = await getTieredActivityRate(supabaseAdmin, service.service_name)
+        const tiered = await getTieredActivityRate(supabaseAdmin, orgId, service.service_name, { normalizer: serviceNormalizer, date: travel_date })
 
         if (tiered) {
           const priceResult = applyActivityTiers(tiered.tiers, num_pax, is_eur_passport, rateSym)
@@ -807,28 +840,34 @@ export async function POST(request: NextRequest) {
       // ============================================
       // STEP 2: Check for B2B transport packages (cruise sightseeing)
       // ============================================
+      // The vehicle carries everyone aboard it — adults, children and
+      // infants (effectiveTotalPax); num_pax defaulted to 2 when the request
+      // sent only the breakdown. A sightseeing package must fit the sailing's
+      // length; a transfer is not sold by length.
       if (rateSource === 'manual' && service.service_category === 'transportation') {
         if (service.service_name?.toLowerCase().includes('sightseeing')) {
-          const pkg = await getTransportPackage('cruise_sightseeing', 'Luxor', 'Aswan')
-          const vehicle = pkg ? selectVehicleFromPackage(pkg, num_pax) : null
+          const { durationDays, route } = await legacyCruise()
+          const pkg = await getTransportPackage(orgId, 'cruise_sightseeing', { durationDays, route }, rateCurrency)
+          const vehicle = pkg ? selectVehicleFromPackage(pkg, effectiveTotalPax) : null
           if (vehicle) {
             unitCost = vehicle.rate
             lineTotal = vehicle.rate
             effectiveQuantityMode = 'fixed'
-            pricingNote = `${vehicle.vehicle}: ${rateSym}${vehicle.rate} (${num_pax} pax)`
+            pricingNote = `${vehicle.vehicle}: ${rateSym}${vehicle.rate} (${effectiveTotalPax} pax)`
             rateSource = 'b2b_package'
             console.log(`✅ B2B Package applied: ${service.service_name} -> ${pricingNote}`)
           }
         }
         else if (service.service_name?.toLowerCase().includes('transfer') || 
                  service.service_name?.toLowerCase().includes('airport')) {
-          const pkg = await getTransportPackage('cruise_transfer', 'Luxor', 'Aswan')
-          const vehicle = pkg ? selectVehicleFromPackage(pkg, num_pax) : null
+          const { route } = await legacyCruise()
+          const pkg = await getTransportPackage(orgId, 'cruise_transfer', { route }, rateCurrency)
+          const vehicle = pkg ? selectVehicleFromPackage(pkg, effectiveTotalPax) : null
           if (vehicle) {
             unitCost = vehicle.rate
             lineTotal = vehicle.rate
             effectiveQuantityMode = 'fixed'
-            pricingNote = `${vehicle.vehicle}: ${rateSym}${vehicle.rate} (${num_pax} pax)`
+            pricingNote = `${vehicle.vehicle}: ${rateSym}${vehicle.rate} (${effectiveTotalPax} pax)`
             rateSource = 'b2b_package'
           }
         }
@@ -855,29 +894,33 @@ export async function POST(request: NextRequest) {
           }
 
           case 'guide': {
-            const guide = await selectGuideFromB2CTable(language, effectiveTier)
+            // From guide_rates, the table Rates → Guides maintains, exactly as
+            // the day-by-day engine prices a guide (language by key, grade,
+            // mode, valid on the travel date); the line's picked rate wins. It
+            // read the legacy guides view's daily_rate and fell back to "any
+            // guide" of any language.
+            const picked = service.rate_id ? await pickedGuideRate(orgId, service.rate_id, serviceNormalizer) : null
+            const guide = picked ?? await getGuideRate(orgId, language, effectiveTier, serviceNormalizer, { grade: guideGrade, mode: guideMode, date: travel_date })
             if (guide) {
-              unitCost = guide.rate
-              lineTotal = guide.rate
+              unitCost = guide.dailyRate
+              lineTotal = guide.dailyRate
               effectiveQuantityMode = 'fixed'
-              pricingNote = `${guide.name}: ${rateSym}${guide.rate}/day`
-              rateSource = 'guides'
-              console.log(`✅ Guide from B2C: ${guide.name} -> ${rateSym}${guide.rate}`)
+              pricingNote = `${guide.name}: ${rateSym}${guide.dailyRate}/day`
+              rateSource = 'guide_rates'
             }
             break
           }
 
           case 'activity':
           case 'entrance': {
-            if (service.service_name) {
-              const fee = await getEntranceFee(service.service_name, is_eur_passport)
-              if (fee) {
-                unitCost = fee.rate
-                lineTotal = fee.rate * num_pax
-                effectiveQuantityMode = 'per_pax'
-                pricingNote = `${fee.name}: ${rateSym}${fee.rate}/pax (${is_eur_passport ? 'EUR' : 'non-EUR'})`
-                rateSource = 'entrance_fees'
-                console.log(`✅ Entrance from B2C: ${fee.name} -> ${rateSym}${fee.rate}/pax`)
+            if (service.service_name || service.rate_id) {
+              const priced = priceEntranceLine(await entranceFees(), {
+                serviceName: service.service_name, rateId: service.rate_id, date: travel_date,
+                numPax: num_pax, isEurPassport: is_eur_passport, rateSym,
+              })
+              if (priced) {
+                ({ unitCost, lineTotal, pricingNote, rateSource } = priced)
+                effectiveQuantityMode = priced.quantityMode
               }
             }
             break
@@ -885,7 +928,7 @@ export async function POST(request: NextRequest) {
 
           case 'accommodation': {
             // rate_double_eur is per-person (double occupancy), not per-room
-            const hotel = await getHotelRate(service.city || 'Cairo', effectiveTier, is_eur_passport)
+            const hotel = await getHotelRate(orgId, service.city || 'Cairo', effectiveTier, is_eur_passport)
             if (hotel) {
               unitCost = hotel.rate
               lineTotal = hotel.rate * num_pax
@@ -903,6 +946,7 @@ export async function POST(request: NextRequest) {
               const { data: cruise } = await supabaseAdmin
                 .from('nile_cruises')
                 .select('*')
+                .eq('org_id', orgId ?? NO_ORG)
                 .eq('id', service.rate_id)
                 .single()
 
@@ -927,24 +971,18 @@ export async function POST(request: NextRequest) {
           }
 
           case 'meal': {
-            const { data: mealRate } = await supabaseAdmin
-              .from('meal_rates')
-              .select('*')
-              .eq('is_active', true)
-              .limit(1)
-              .single()
-
-            if (mealRate) {
-              if (service.service_name?.toLowerCase().includes('dinner')) {
-                unitCost = mealRate.dinner_rate_eur || 0
-              } else {
-                unitCost = mealRate.lunch_rate_eur || 0
-              }
-              lineTotal = unitCost * num_pax
-              effectiveQuantityMode = 'per_pax'
-              pricingNote = `${rateSym}${unitCost}/pax`
-              rateSource = 'meal_rates'
-              console.log(`✅ Meal from B2C: ${service.service_name} -> ${rateSym}${unitCost}/pax`)
+            // meal_rates has no lunch_rate_eur / dinner_rate_eur: every meal
+            // line priced 0 and was marked found, so the stored cost below was
+            // never used. One restaurant's rate now (the line's pick, else the
+            // tier's for that meal on the travel date), per group or per
+            // person with its minimum; no rate = the stored cost.
+            const priced = priceMealLine(await mealRows(), {
+              serviceName: service.service_name, rateId: service.rate_id, tier: effectiveTier,
+              date: travel_date, numPax: num_pax, rateSym,
+            })
+            if (priced) {
+              ({ unitCost, lineTotal, pricingNote, rateSource } = priced)
+              effectiveQuantityMode = priced.quantityMode
             }
             break
           }

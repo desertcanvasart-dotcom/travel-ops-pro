@@ -239,7 +239,7 @@ function folderListParams(folder: FolderType, query: string | undefined, params:
 }
 
 export default function InboxPage() {
-  const { user } = useAuth()
+  const { user, isAgent } = useAuth()
   const [loading, setLoading] = useState(true)
   const [emails, setEmails] = useState<Email[]>([])
   const [selectedEmail, setSelectedEmail] = useState<Email | null>(null)
@@ -247,6 +247,8 @@ export default function InboxPage() {
   const [searchQuery, setSearchQuery] = useState('')
   const [isConnected, setIsConnected] = useState(false)
   const [connectedEmail, setConnectedEmail] = useState<string>('')
+  // A colleague's connection: the company's mailbox, not the user's own.
+  const [mailboxShared, setMailboxShared] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showCompose, setShowCompose] = useState(false)
   // What the compose window is for, and the draft it was opened from.
@@ -390,6 +392,7 @@ export default function InboxPage() {
 
       setIsConnected(true)
       setConnectedEmail(data.gmail_email || '')
+      setMailboxShared(!!data.gmail_shared)
       await fetchEmails()
     } catch (err) {
       setIsConnected(false)
@@ -1310,13 +1313,21 @@ ${bodyText}`
           <p className="text-gray-500 mb-6">
             Connect your Gmail account to send and receive emails directly from Autoura.
           </p>
-          <Link
-            href="/settings/email"
-            className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
-          >
-            <Mail className="w-4 h-4" />
-            Connect Gmail
-          </Link>
+          {/* Settings is admin / manager only: the button sent an agent to a
+              page that bounced them to the dashboard. */}
+          {isAgent ? (
+            <p className="text-sm text-gray-600" data-testid="inbox-connect-ask">
+              Ask an admin or manager to connect Gmail in Settings › Email.
+            </p>
+          ) : (
+            <Link
+              href="/settings/email"
+              className="inline-flex items-center gap-2 px-6 py-3 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 transition-colors"
+            >
+              <Mail className="w-4 h-4" />
+              Connect Gmail
+            </Link>
+          )}
         </div>
       </div>
     )
@@ -1338,6 +1349,13 @@ ${bodyText}`
                   </span>
                 )}
               </h1>
+              {/* Which mailbox this is — in a company with several connections,
+                  or for a person in two companies, it is not always your own. */}
+              {connectedEmail && (
+                <span className="hidden sm:inline text-xs text-gray-500 truncate max-w-[16rem]" title={connectedEmail}>
+                  Mailbox: {connectedEmail}{mailboxShared ? ' (shared)' : ''}
+                </span>
+              )}
             </div>
 
             <form onSubmit={handleSearch} className="flex-1 max-w-md">

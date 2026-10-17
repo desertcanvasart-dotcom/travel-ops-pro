@@ -147,7 +147,6 @@ export interface CopilotContextPayment {
   amount: number | null
   currency: string | null
   payment_method: string | null
-  status: string | null
   paid_at: string | null
 }
 

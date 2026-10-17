@@ -6,11 +6,12 @@ import Link from 'next/link'
 import {
   FileText, Search, Send, Eye, Trash2, Pencil,
   Hotel, Car, Ship, MapPin, Users, CheckCircle,
-  Clock, RotateCcw, AlertTriangle
+  Clock, RotateCcw, AlertTriangle, XCircle
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { BackLink, TripBreadcrumb } from '@/components/nav/TripNav'
 import { withReturnTo, safeReturnPath, FROM_PARAM } from '@/lib/nav/return-to'
+import { deleteBlockReason } from '@/lib/documents/supplier-document-fields'
 
 interface SupplierDocument {
   id: string
@@ -27,6 +28,7 @@ interface SupplierDocument {
   currency: string
   total_cost: number
   status: string
+  sent_at?: string | null
   created_at: string
   itinerary?: {
     id: string
@@ -34,13 +36,15 @@ interface SupplierDocument {
   }
 }
 
+// Counted by the server over the company's documents (or the trip's), not
+// the filtered rows (lib/documents/supplier-document-stats).
 interface Stats {
   total: number
   draft: number
   sent: number
   confirmed: number
   completed: number
-  by_type: Record<string, number>
+  cancelled: number
 }
 
 const DOCUMENT_TYPES = [
@@ -68,6 +72,13 @@ export default function SupplierDocumentsPage() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  // The search the server runs: the box, once typing pauses. With a page at
+  // a time the search has to cover every voucher, not the 50 on screen.
+  const [search, setSearch] = useState('')
+  // A page at a time (GET /api/supplier-documents, 50 to a page, newest first).
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+  const [pageSize, setPageSize] = useState(50)
   const [typeFilter, setTypeFilter] = useState('')
   const [statusFilter, setStatusFilter] = useState('')
   const [mounted, setMounted] = useState(false)
@@ -96,11 +107,21 @@ export default function SupplierDocumentsPage() {
   }, [])
 
   useEffect(() => {
+    const id = setTimeout(() => setSearch(searchQuery.trim()), 300)
+    return () => clearTimeout(id)
+  }, [searchQuery])
+
+  // A new filter or search starts again from the newest.
+  useEffect(() => {
+    setPage(1)
+  }, [typeFilter, statusFilter, itineraryFilter, search])
+
+  useEffect(() => {
     if (mounted) {
       fetchDocuments()
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [mounted, typeFilter, statusFilter, itineraryFilter])
+  }, [mounted, typeFilter, statusFilter, itineraryFilter, search, page])
 
   const fetchTripCheck = async (id: string | null) => {
     if (!id) { setMissing([]); setStale([]); return }
@@ -160,6 +181,8 @@ export default function SupplierDocumentsPage() {
       if (typeFilter) params.append('type', typeFilter)
       if (statusFilter) params.append('status', statusFilter)
       if (itineraryFilter) params.append('itineraryId', itineraryFilter)
+      if (search) params.append('search', search)
+      params.append('page', String(page))
       
       const response = await fetch(`/api/supplier-documents?${params}`)
       
@@ -169,6 +192,8 @@ export default function SupplierDocumentsPage() {
       
       const result = await response.json()
       setDocuments(result.data || [])
+      setTotal(result.total ?? (result.data || []).length)
+      setPageSize(result.pageSize ?? 50)
       setStats(result.stats || null)
       
     } catch (err) {
@@ -197,7 +222,13 @@ export default function SupplierDocumentsPage() {
     }
   }
 
-  const handleDelete = async (docId: string) => {
+  const handleDelete = async (doc: SupplierDocument) => {
+    // A document the supplier holds is cancelled first, then deleted (the
+    // server refuses it too).
+    if (deleteBlockReason(doc)) {
+      await dialog.alert(t('cannotDeleteTitle'), t('cannotDeleteSent'), 'warning')
+      return
+    }
     const confirmed = await dialog.confirm({
       title: t('deleteDocument'),
       message: t('confirmDeleteDocument'),
@@ -207,13 +238,16 @@ export default function SupplierDocumentsPage() {
     if (!confirmed) return
 
     try {
-      const response = await fetch(`/api/supplier-documents/${docId}`, {
+      const response = await fetch(`/api/supplier-documents/${doc.id}`, {
         method: 'DELETE'
       })
 
       if (response.ok) {
         fetchDocuments()
         fetchTripCheck(itineraryFilter)
+      } else {
+        const result = await response.json().catch(() => null)
+        await dialog.alert(t('cannotDeleteTitle'), result?.error || t('deleteFailed'), 'warning')
       }
     } catch (error) {
       console.error('Error deleting document:', error)
@@ -228,16 +262,11 @@ export default function SupplierDocumentsPage() {
     return STATUS_OPTIONS.find(s => s.value === status) || STATUS_OPTIONS[0]
   }
 
-  const filteredDocuments = documents.filter(doc => {
-    if (!searchQuery) return true
-    const search = searchQuery.toLowerCase()
-    return (
-      doc.document_number?.toLowerCase().includes(search) ||
-      doc.supplier_name?.toLowerCase().includes(search) ||
-      doc.client_name?.toLowerCase().includes(search) ||
-      doc.city?.toLowerCase().includes(search)
-    )
-  })
+  // The server searched and paged (number, supplier, client, city).
+  const filteredDocuments = documents
+  const pages = Math.max(1, Math.ceil(total / pageSize))
+  const first = total === 0 ? 0 : (page - 1) * pageSize + 1
+  const last = Math.min(total, page * pageSize)
 
   if (!mounted) {
     return (
@@ -331,7 +360,8 @@ export default function SupplierDocumentsPage() {
 
         {/* Stats Cards */}
         {stats && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <div>
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-3">
             <div className="bg-white rounded-lg border border-gray-200 p-3">
               <div className="flex items-center gap-1.5 mb-1">
                 <FileText className="w-4 h-4 text-gray-500" />
@@ -367,6 +397,15 @@ export default function SupplierDocumentsPage() {
               <p className="text-xl font-bold text-purple-600">{stats.completed}</p>
               <p className="text-xs text-gray-500">{t('completed')}</p>
             </div>
+            <div className="bg-white rounded-lg border border-gray-200 p-3">
+              <div className="flex items-center gap-1.5 mb-1">
+                <XCircle className="w-4 h-4 text-red-500" />
+              </div>
+              <p className="text-xl font-bold text-red-600">{stats.cancelled}</p>
+              <p className="text-xs text-gray-500">{t('cancelled')}</p>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">{itineraryFilter ? t('statsScopeTrip') : t('statsScopeCompany')}</p>
           </div>
         )}
 
@@ -553,11 +592,11 @@ export default function SupplierDocumentsPage() {
                               </button>
                             )}
 
-                            {/* Delete */}
+                            {/* Delete: a draft never sent, or a cancelled document */}
                             <button
-                              onClick={() => handleDelete(doc.id)}
+                              onClick={() => handleDelete(doc)}
                               className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"
-                              title={t('delete')}
+                              title={deleteBlockReason(doc) ? t('cannotDeleteSent') : t('delete')}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
@@ -571,6 +610,30 @@ export default function SupplierDocumentsPage() {
             </div>
           )}
         </div>
+
+        {total > pageSize && (
+          <div className="flex items-center justify-between text-sm text-gray-600">
+            <span>{t('showingRange', { first, last, total })}</span>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={page <= 1 || loading}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg bg-white disabled:opacity-40 hover:bg-gray-50"
+              >
+                {t('newer')}
+              </button>
+              <button
+                type="button"
+                disabled={page >= pages || loading}
+                onClick={() => setPage(p => Math.min(pages, p + 1))}
+                className="px-3 py-1.5 border border-gray-200 rounded-lg bg-white disabled:opacity-40 hover:bg-gray-50"
+              >
+                {t('older')}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

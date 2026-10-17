@@ -27,6 +27,12 @@
 //
 // The awaiting-reply state needs nothing from here beyond storing each new
 // message: the email_messages insert trigger recomputes it (20261019).
+//
+// WHICH COMPANY (20261204). A connection serves one organisation
+// (gmail_tokens.org_id): everything a run stores is stamped with it, and the
+// run sees only that organisation's store — its stored message ids (the same
+// Gmail message can sit in two companies' mailboxes), this mailbox's
+// conversations, its office rule and its known contacts.
 
 import { isOfficeAddress, officeRule, type OfficeRule } from '@/lib/email/office-addresses'
 import { loadOfficeRule } from '@/lib/email/office-addresses-server'
@@ -35,9 +41,9 @@ import type { gmail_v1 } from 'googleapis'
 import { getAuthenticatedGmail, getUserEmail } from '@/lib/gmail'
 import type { EmailSyncOptions, EmailSyncResult } from '@/types/unified'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
-import { orgForMailbox } from '@/lib/email/email-leads'
 import { loadKnownContactEmails, looksAutomated } from '@/lib/email-scoping'
-import { isMissingMailboxColumn } from '@/lib/email/connected-mailboxes'
+import { mailboxConversationFilter, type MailboxRef } from '@/lib/email/conversation-access'
+import { escapeLike } from '@/lib/db/escape-like'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -110,13 +116,13 @@ export async function mapWithConcurrency<T, R>(items: readonly T[], limit: numbe
 const chunks = <T>(xs: readonly T[], n: number): T[][] =>
   Array.from({ length: Math.ceil(xs.length / n) }, (_, i) => xs.slice(i * n, i * n + n))
 
-/** Which of these Gmail message ids are already in the store — one query per
- *  hundred ids, instead of one per message. Throws on a read error: guessing
- *  "not stored" would insert duplicates (message_id is indexed, not unique). */
-async function storedMessageIds(ids: readonly string[]): Promise<Set<string>> {
+/** Which of these Gmail message ids are already in this organisation's store
+ *  — one query per hundred ids, instead of one per message. Throws on a read
+ *  error: guessing "not stored" would insert duplicates. */
+async function storedMessageIds(orgId: string, ids: readonly string[]): Promise<Set<string>> {
   const stored = new Set<string>()
   for (const chunk of chunks([...new Set(ids)], IN_CHUNK)) {
-    const { data, error } = await supabase.from('email_messages').select('message_id').in('message_id', chunk)
+    const { data, error } = await supabase.from('email_messages').select('message_id').eq('org_id', orgId).in('message_id', chunk)
     if (error) throw new Error(`Could not check stored messages: ${error.message}`)
     for (const r of (data ?? []) as { message_id: string }[]) stored.add(r.message_id)
   }
@@ -206,15 +212,16 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
       throw new MailboxNotFoundError('Gmail email address not found. Please reconnect your Gmail account.')
     }
 
-    console.log('[Email Sync] Using email:', userEmail)
-    const loaded = await loadOfficeRule(supabase)
-    const rule = officeRule([userEmail], [...loaded.addresses, ...loaded.domains])
+    // The organisation this connection serves — everything below is its.
+    const orgId = auth.orgId
+    if (!orgId) {
+      throw new MailboxNotFoundError('This Gmail connection belongs to no company. Please reconnect your Gmail account.')
+    }
+    const mailbox: MailboxRef = { orgId, mailboxEmail: userEmail.toLowerCase(), mailboxUserId: user_id }
 
-    // The organisation this mailbox receives for — resolved once, and only
-    // when an inbound message needs it. The copilot entry is filed under it
-    // (not "the default org") and the sender is matched to its clients only.
-    let mailboxOrg: Promise<string | null> | null = null
-    const mailboxOrgId = () => (mailboxOrg ??= orgForMailbox(supabase, user_id))
+    console.log('[Email Sync] Using email:', userEmail)
+    const loaded = await loadOfficeRule(supabase, orgId)
+    const rule = officeRule([userEmail], [...loaded.addresses, ...loaded.domains])
 
     // Where the last run got to. A read failure only costs the incremental
     // path this run — the listing below still syncs.
@@ -299,7 +306,7 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
     }
 
     // ── 2. Only what is not stored yet ────────────────────────────────────
-    const stored = await storedMessageIds(candidates.map(c => c.id))
+    const stored = await storedMessageIds(orgId, candidates.map(c => c.id))
     const missing = candidates.filter(c => !stored.has(c.id))
     console.log(`[Email Sync] ${mode}: ${candidates.length} candidate(s), ${stored.size} already stored, ${missing.length} to fetch`)
 
@@ -333,12 +340,21 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
     // 2026-10-11).
     const deletedConversations = new Set<string>()
     for (const chunk of chunks([...missingByThread.keys()], IN_CHUNK)) {
-      const { data, error } = await supabase.from('email_conversations').select('id, thread_id, is_hidden, status').in('thread_id', chunk)
+      // This mailbox's conversations in this organisation: a Gmail thread id
+      // means nothing in another mailbox (lib/email/conversation-access).
+      const { data, error } = await supabase.from('email_conversations')
+        .select('id, thread_id, is_hidden, status')
+        .eq('org_id', orgId)
+        .in('thread_id', chunk)
+        .or(mailboxConversationFilter(mailbox))
       if (error) throw new Error(`Could not read conversations: ${error.message}`)
       for (const r of (data ?? []) as { id: string; thread_id: string; is_hidden: boolean | null; status: string | null }[]) {
         if (!existingByThread.has(r.thread_id)) existingByThread.set(r.thread_id, r.id)
         // Deleted in Communicate — not hidden as personal mail, which stays hidden.
         if (r.is_hidden && r.status === 'trashed') deletedConversations.add(r.id)
+        // Archived in Communicate: new mail brings it back to the inbox the
+        // same way, as Gmail does with an archived thread.
+        if (!r.is_hidden && r.status === 'archived') deletedConversations.add(r.id)
       }
     }
 
@@ -378,7 +394,7 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
       .flatMap((job, i) => job.kind === 'thread' ? fetched[i] : [])
       .map(m => m.id!)
       .filter(id => id && !stored.has(id))
-    const storedExtras = threadExtras.length ? await storedMessageIds(threadExtras) : new Set<string>()
+    const storedExtras = threadExtras.length ? await storedMessageIds(orgId, threadExtras) : new Set<string>()
 
     // Group messages by thread for processing
     const threadMessages: Map<string, GmailMessage[]> = new Map()
@@ -396,7 +412,7 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
     // The shared store holds correspondence, not the whole mailbox — see
     // lib/email-scoping.ts. Loaded once per run, not per message — and not
     // at all when nothing new arrived.
-    const knownContacts = threadMessages.size ? await loadKnownContactEmails(supabase) : new Set<string>()
+    const knownContacts = threadMessages.size ? await loadKnownContactEmails(supabase, orgId) : new Set<string>()
     let threadsSkipped = 0
 
     // Process each thread
@@ -473,32 +489,26 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
           // insert trigger counts each message as it is stored (20261019) —
           // starting from messages.length counted every message twice.
           // The address it came from (mailbox_email, migration 20261128), so
-          // it can be left out while that address is disconnected. Before
-          // the migration the column is not there: stored without it.
-          const conversationRow = {
-            thread_id: threadId,
-            user_id,
-            client_email: clientEmail,
-            subject,
-            last_message_snippet: lastMessage.snippet,
-            last_message_at: lastMessageDate,
-            message_count: 0,
-            status: 'active',
-            is_hidden: false,
-            last_sync_at: new Date().toISOString()
-          }
-          let { data: newConv, error: convError } = await supabase
+          // it can be left out while that address is disconnected; the
+          // organisation the connection serves (org_id, 20261204).
+          const { data: newConv, error: convError } = await supabase
             .from('email_conversations')
-            .insert({ ...conversationRow, mailbox_email: userEmail.toLowerCase() })
+            .insert({
+              org_id: orgId,
+              mailbox_email: userEmail.toLowerCase(),
+              thread_id: threadId,
+              user_id,
+              client_email: clientEmail,
+              subject,
+              last_message_snippet: lastMessage.snippet,
+              last_message_at: lastMessageDate,
+              message_count: 0,
+              status: 'active',
+              is_hidden: false,
+              last_sync_at: new Date().toISOString()
+            })
             .select()
             .single()
-          if (convError && isMissingMailboxColumn(convError)) {
-            ;({ data: newConv, error: convError } = await supabase
-              .from('email_conversations')
-              .insert(conversationRow)
-              .select()
-              .single())
-          }
 
           if (convError) throw convError
           conversationId = newConv.id
@@ -570,6 +580,7 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
           const { error: insertError } = await supabase
             .from('email_messages')
             .insert({
+              org_id: orgId,
               conversation_id: conversationId,
               message_id: message.id,
               thread_id: threadId,
@@ -620,16 +631,17 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
             try {
               // Try to find client by email
               const senderEmail = extractEmailAddress(msgFrom)
-              const orgId = await mailboxOrgId()
               // Another organisation's client with this address is not ours.
-              const { data: matchedClient } = orgId
+              // Case-insensitive: the address is the same however it is typed,
+              // and an exact match missed "John@x.com" against "john@x.com".
+              const { data: matchedClient } = senderEmail
                 ? await supabase
-                  .from('clients')
-                  .select('id, first_name, last_name')
-                  .eq('org_id', orgId)
-                  .eq('email', senderEmail)
-                  .limit(1)
-                  .maybeSingle()
+                    .from('clients')
+                    .select('id, first_name, last_name')
+                    .eq('org_id', orgId)
+                    .ilike('email', escapeLike(senderEmail))
+                    .limit(1)
+                    .maybeSingle()
                 : { data: null }
 
               const senderDisplayName = msgFrom.match(/^([^<]+)<?/)
@@ -677,6 +689,7 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
               ...(revive ? { is_hidden: false, status: 'active' } : {}),
             })
             .eq('id', existingConvId)
+            .eq('org_id', orgId)
           result.conversations_updated++
         }
       } catch (threadError) {

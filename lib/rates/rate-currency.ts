@@ -51,13 +51,25 @@ export const RATE_MONETARY_COLUMNS = {
   // Hotels and cruises price from dated periods in `seasons` — handled like
   // activity tiers below — with these flat columns as the no-period fallback
   // the engine actually reads (resolveHotel/CruiseRatesForDate).
+  // The old high_/peak_ columns too: a row whose `seasons` is empty (or was
+  // neutralised below) has its periods REBUILT from them
+  // (rate-seasons seasonsFromAccommodationColumns), so an unconverted one
+  // priced a raw EGP number as the run currency.
   accommodation_rates: [
     'pp_double_eur', 'single_supp_eur', 'triple_red_eur',
     'pp_double_non_eur', 'single_supp_non_eur', 'triple_red_non_eur',
+    'high_pp_double_eur', 'high_single_supp_eur', 'high_triple_red_eur',
+    'high_pp_double_non_eur', 'high_single_supp_non_eur', 'high_triple_red_non_eur',
+    'peak_pp_double_eur', 'peak_single_supp_eur', 'peak_triple_red_eur',
+    'peak_pp_double_non_eur', 'peak_single_supp_non_eur', 'peak_triple_red_non_eur',
   ],
   nile_cruises: [
     'rate_low_single_eur', 'rate_low_double_eur', 'rate_low_triple_eur', 'rate_low_suite_eur',
     'rate_low_single_non_eur', 'rate_low_double_non_eur', 'rate_low_triple_non_eur', 'rate_low_suite_non_eur',
+    'rate_high_single_eur', 'rate_high_double_eur', 'rate_high_triple_eur', 'rate_high_suite_eur',
+    'rate_high_single_non_eur', 'rate_high_double_non_eur', 'rate_high_triple_non_eur', 'rate_high_suite_non_eur',
+    'rate_peak_single_eur', 'rate_peak_double_eur', 'rate_peak_triple_eur', 'rate_peak_suite_eur',
+    'rate_peak_single_non_eur', 'rate_peak_double_non_eur', 'rate_peak_triple_non_eur', 'rate_peak_suite_non_eur',
     'rate_single_eur', 'rate_double_eur', 'rate_triple_eur', 'rate_suite_eur',
   ],
   // The vehicles list (20261018) is converted below; the five columns are

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { calculateDay, calculatePaxRange, buildTransportTierIndex, countMissingGuideBeds } from '@/app/pricing-grid/lib/calculator'
-import { mapSlotsToServices, mapServicesToSlots } from '@/app/pricing-grid/lib/slot-mapping'
+import { mapServicesToSlots } from '@/app/pricing-grid/lib/slot-mapping'
+import { throughoutGuideRows } from '@/app/pricing-grid/lib/sold-lines'
 import type { GridConfig, GridDay, SlotValue } from '@/app/pricing-grid/types'
 
 // The Quote Builder learns the throughout "+1" (operator ask 2026-09-05):
@@ -77,6 +78,10 @@ describe('rate sheet in throughout mode', () => {
   })
 })
 
+// The save writes these rows (throughoutGuideRows, tagged
+// `__grid:slot:throughout_guide|<kind>`); mapSlotsToServices, a test-only copy
+// of the save's rules, was removed — the save itself is covered in
+// __tests__/api/pricing-grid-save-sold-lines.test.ts.
 describe('saving a throughout quote', () => {
   it('writes synthetic guide rows the reload skips (never doubled back into slots)', () => {
     const d = day([
@@ -84,24 +89,28 @@ describe('saving a throughout quote', () => {
       slot('flights', [flight]),
       slot('meals', [lunch]),
     ])
-    const rows = mapSlotsToServices(d, config())
-    const synthetic = rows.filter(r => (r.notes ?? '').startsWith('slot:throughout_guide'))
-    expect(synthetic.map(r => [r.service_name, r.total_cost])).toEqual([
+    const rows = throughoutGuideRows(d.slots as never, { ...config(), pax: 2, passport: 'non_eu' }, '2026-11-03')
+    expect(rows.map(r => [r.name, r.amount])).toEqual([
       ['Throughout Guide — bed (Cairo Standard)', 40],
       ['Throughout Guide — seat (CAI→LXR)', 100],
       ['Throughout Guide — Lunch', 30],
     ])
-    // Round-trip: the synthetic rows must NOT rejoin the slots.
-    const slots = mapServicesToSlots(rows.map((r, i) => ({ id: String(i), ...r })), 2)
+    // Round-trip: the lines as the save stores them; the synthetic rows must
+    // NOT rejoin the slots.
+    const saved = [
+      { service_type: 'accommodation', service_name: 'Cairo Standard', quantity: 2, rate_eur: 85, rate_non_eur: 95, total_cost: 190, notes: '__grid:slot:accommodation|rate_id:h1' },
+      { service_type: 'flight', service_name: 'CAI→LXR', quantity: 2, rate_eur: 120, rate_non_eur: 120, total_cost: 240, notes: '__grid:slot:flights|rate_id:f1' },
+      ...rows.map(r => ({ service_type: r.serviceType, service_name: r.name, quantity: 1, rate_eur: r.amount, rate_non_eur: r.amount, total_cost: r.amount, notes: `__grid:slot:throughout_guide|${r.kind}` })),
+    ]
+    const slots = mapServicesToSlots(saved.map((r, i) => ({ id: String(i), ...r })), 2)
     const flightsBack = slots.find(sl => sl.slotId === 'flights')!
     expect(flightsBack.selectedItems).toHaveLength(1)
     const accBack = slots.find(sl => sl.slotId === 'accommodation')!
     expect(accBack.selectedItems.filter(i => /Throughout/.test(i.name))).toHaveLength(0)
   })
 
-  it('spot mode writes exactly what it always wrote', () => {
+  it('spot mode writes no guide rows', () => {
     const d = day([slot('accommodation', [hotel]), slot('flights', [flight])])
-    const rows = mapSlotsToServices(d, { ...config(), guideMode: 'spot' })
-    expect(rows.some(r => /Throughout/.test(r.service_name))).toBe(false)
+    expect(throughoutGuideRows(d.slots as never, { ...config(), guideMode: 'spot', pax: 2, passport: 'non_eu' }, '2026-11-03')).toEqual([])
   })
 })

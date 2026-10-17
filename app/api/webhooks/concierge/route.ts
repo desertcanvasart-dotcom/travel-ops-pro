@@ -5,7 +5,9 @@
 // Receives structured planning briefs from the Travel2Egypt AI Concierge.
 //
 // Auth:        HMAC-SHA256, X-Autoura-Signature: t=<unix>,v1=<hex>  (see lib/concierge-webhook-auth.ts)
-// Idempotency: UNIQUE(conversation_id, brief_revision)             (see lib/concierge-brief-intake.ts)
+// Company:     the secret that signed the brief names it              (lib/concierge/brief-org.ts)
+// Idempotency: UNIQUE(org_id, conversation_id) + revisions UNIQUE(brief_id, brief_revision)
+//                                                                   (see lib/concierge-brief-intake.ts)
 // Schema/map:  lib/concierge-brief-schema.ts                       (spec docs/concierge-autoura-webhook-spec.md)
 //
 // Dry-run: send header `X-Autoura-Dry-Run: true` (or ?dry_run=1) to verify
@@ -33,6 +35,7 @@ import {
 import { validateBrief, mapBrief } from '@/lib/concierge-brief-schema'
 import { ingestBrief, type IngestOutcome } from '@/lib/concierge-brief-intake'
 import { promoteBriefToThread } from '@/lib/concierge/promote-brief-to-thread'
+import { resolveBriefOrg } from '@/lib/concierge/brief-org'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -67,15 +70,18 @@ export async function POST(request: NextRequest) {
   // 1. Raw body — MUST be read before JSON parsing; HMAC is over raw bytes.
   const rawBody = await request.text()
 
-  // 2. Signature verification (HMAC-SHA256, dual-secret, replay window).
+  // 2. Signature verification (HMAC-SHA256, per-company + legacy secrets,
+  //    replay window). The secret that matched names the brief's company.
   const verify = verifyConciergeSignature({
     rawBody,
     signatureHeader: request.headers.get(SIGNATURE_HEADER),
     timestampHeader: request.headers.get(TIMESTAMP_HEADER),
   })
   if (!verify.ok) {
-    // Server misconfig (no secret) is our fault -> 500; everything else -> 401.
-    const status = verify.code === 'no_secret_configured' ? 500 : 401
+    // Server misconfig (no secret, bad secrets JSON, one secret for two
+    // companies) is our fault -> 500; everything else -> 401.
+    const misconfigured = ['no_secret_configured', 'secret_config_invalid', 'ambiguous_secret'].includes(verify.code)
+    const status = misconfigured ? 500 : 401
     console.warn('[concierge] signature rejected', { requestId, code: verify.code })
     return json({ success: false, error: verify.message, code: verify.code }, status)
   }
@@ -105,6 +111,7 @@ export async function POST(request: NextRequest) {
     session_id: validation.payload.session_id,
     brief_revision: mapped.briefRevision,
     secret_used: verify.secretUsed,
+    org_slug: verify.orgSlug,
     actionable: mapped.isActionable,
   })
 
@@ -120,6 +127,10 @@ export async function POST(request: NextRequest) {
         success: true,
         dry_run: true,
         signature: { valid: true, secret_used: verify.secretUsed },
+        // Which company the brief would be filed under (no DB read in a dry run).
+        organization: verify.orgSlug
+          ? { slug: verify.orgSlug, resolved_by: 'per-organisation secret' }
+          : { slug: null, resolved_by: 'legacy secret — the default organisation' },
         validation: { ok: true },
         would: {
           // Actual create-vs-update is resolved against stored state at ingest time.
@@ -141,11 +152,18 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // 6. Ingest (idempotent upsert + revision history).
-  try {
-    const result = await ingestBrief(mapped, { requestId, rawPayload: validation.payload }, supabase)
+  // 6. The brief's company, from the secret that signed it.
+  const org = await resolveBriefOrg(verify.orgSlug, supabase)
+  if (!org.ok) {
+    console.error('[concierge] organisation not resolved', { requestId, reason: org.reason, org_slug: verify.orgSlug })
+    return json({ success: false, error: 'Autoura could not resolve the organisation for this secret.', code: org.reason }, 500)
+  }
 
-    // 6a. Promote the brief into the Copilot inbox (new thread on first
+  // 7. Ingest (idempotent upsert + revision history), in that company.
+  try {
+    const result = await ingestBrief(mapped, { requestId, rawPayload: validation.payload }, supabase, org.orgId)
+
+    // 7a. Promote the brief into the Copilot inbox (new thread on first
     // receipt; refresh + new inbox row on revision). Failure here MUST NOT
     // turn a successful brief storage into a 500 — the operator can recover
     // by re-firing the webhook; the brief itself is already durable.
@@ -215,9 +233,10 @@ export async function GET(request: NextRequest) {
         signed_content: '`${t}.${rawBody}`',
         algorithm: 'HMAC-SHA256, lowercase hex',
         tolerance_seconds: DEFAULT_TOLERANCE_SECONDS,
-        dual_secret: 'CONCIERGE_WEBHOOK_SECRET (current) and CONCIERGE_WEBHOOK_SECRET_PREVIOUS (rotation overlap) both accepted',
+        per_organisation: 'Each organisation signs with its own secret; the secret that matches decides which organisation the brief is filed under.',
+        dual_secret: 'CONCIERGE_WEBHOOK_SECRET (current) and CONCIERGE_WEBHOOK_SECRET_PREVIOUS (rotation overlap) are still accepted and file under the default organisation',
       },
-      // Count only — never leaks secret values. 0 means env is not configured.
+      // Counts only — never leaks secret values or which companies are set up. 0 means env is not configured.
       secrets_configured: getConfiguredSecrets().length,
       test_vector: {
         secret: TEST_SECRET,

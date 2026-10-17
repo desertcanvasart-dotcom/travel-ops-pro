@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { orgAuth } from '@/lib/auth/org-auth'
-import { mergeCapacityEntry } from '@/lib/capacity-availability'
+import { capacityInputError, mergeCapacityEntry } from '@/lib/capacity-availability'
+import { loadDayLoads } from '@/lib/capacity-load'
+
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 // ============================================
 // OPERATOR CAPACITY API
@@ -67,6 +70,13 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       )
     }
+    if (!ISO_DATE.test(startDate) || !ISO_DATE.test(endDate) || endDate < startDate ||
+        (Date.parse(endDate) - Date.parse(startDate)) / 86_400_000 > 366) {
+      return NextResponse.json(
+        { success: false, error: 'start_date and end_date must be YYYY-MM-DD, in order, at most 366 days apart' },
+        { status: 400 }
+      )
+    }
 
     let query = supabase
       .from('operator_capacity')
@@ -90,9 +100,14 @@ export async function GET(request: NextRequest) {
       )
     }
 
+    // What is out on each day, counted from sold trips and running
+    // departures (lib/capacity-load) — booked_groups was never written.
+    const loads = await loadDayLoads(supabase, org_id, startDate, endDate)
+
     return NextResponse.json({
       success: true,
-      data: data || []
+      data: data || [],
+      loads: Object.fromEntries(loads)
     })
   } catch (error: unknown) {
     console.error('Capacity GET error:', error)
@@ -139,14 +154,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate entries
-    const validStatuses = ['available', 'limited', 'busy', 'blackout']
-    for (const entry of entries as Partial<CapacityEntry>[]) {
-      if (!entry?.date || !/^\d{4}-\d{2}-\d{2}$/.test(String(entry.date))) {
-        throw new Error('Each entry must have a date (YYYY-MM-DD)')
+    // Validate entries — a bad one is the caller's mistake (400), not a
+    // server error: these used to throw into the 500 handler. Counts are
+    // whole numbers ≥ 0; max guides / vehicles may be null (no limit).
+    if (entries.length > 400) {
+      return NextResponse.json({ success: false, error: 'Too many days at once (max 400)' }, { status: 400 })
+    }
+    for (const entry of entries as Array<Record<string, unknown>>) {
+      if (!entry?.date || !ISO_DATE.test(String(entry.date))) {
+        return NextResponse.json({ success: false, error: 'Each entry must have a date (YYYY-MM-DD)' }, { status: 400 })
       }
-      if (entry.status && !validStatuses.includes(entry.status)) {
-        throw new Error(`Invalid status: ${entry.status}`)
+      const bad = capacityInputError(entry)
+      if (bad) {
+        return NextResponse.json({ success: false, error: `${entry.date}: ${bad}` }, { status: 400 })
       }
     }
 
@@ -250,10 +270,16 @@ export async function DELETE(request: NextRequest) {
         { status: 400 }
       )
     }
+    if (!ISO_DATE.test(startDate) || !ISO_DATE.test(endDate) || endDate < startDate) {
+      return NextResponse.json(
+        { success: false, error: 'start_date and end_date must be YYYY-MM-DD, in order' },
+        { status: 400 }
+      )
+    }
 
     const { error, count } = await supabase
       .from('operator_capacity')
-      .delete()
+      .delete({ count: 'exact' })
       .eq('org_id', org_id)
       .gte('date', startDate)
       .lte('date', endDate)

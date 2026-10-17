@@ -65,7 +65,9 @@ describe('the template day card says everything the calculator day says', () => 
   it('previews transport from the engine, over the RAW days', () => {
     // parseItinerary derives accommodation_type; handing it a pre-derived one
     // puts a hotel night on the departure day.
-    expect(editor).toContain("body: JSON.stringify({ days: itinerary, num_pax: 2 })")
+    // The template and the tour type on screen ride along, so a day tour
+    // previews as the day trip Calculate Price charges (Tours audit #8).
+    expect(editor).toContain("body: JSON.stringify({ days: itinerary, num_pax: 2, template_id: templateId || undefined, tour_type: tourType || undefined })")
     expect(editor).toContain("fetch('/api/b2b/transport-preview'")
   })
 

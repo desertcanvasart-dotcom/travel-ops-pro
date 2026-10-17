@@ -3,12 +3,12 @@ import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { teamMemberInOrg } from '@/lib/whatsapp-org'
+import { createNotification } from '@/lib/notifications'
 
-// Both the conversation and the assignee must be the caller's org's. The
-// conversation by org_id (migration 20261125); the assignee through their
-// login's organization membership, as team_members has no org_id of its own
-// (lib/whatsapp-org teamMemberInOrg). Otherwise any org could take over, or
-// hand to its own staff, another org's customer.
+// Both the conversation and the assignee must be the caller's org's: the
+// conversation by org_id (migration 20261125), the assignee by its own org_id
+// (migration 20261203, lib/whatsapp-org teamMemberInOrg). Otherwise any org
+// could take over, or hand to its own staff, another org's customer.
 
 // POST /api/whatsapp/conversations/assign - Assign or claim a conversation
 export async function POST(request: NextRequest) {
@@ -99,59 +99,37 @@ export async function POST(request: NextRequest) {
     if (newAssigneeId && actionType !== 'claimed') {
       const { data: teamMember } = await supabase
         .from('team_members')
-        .select('id, name, email')
+        .select('id, name, user_id')
         .eq('id', newAssigneeId)
+        .eq('org_id', orgId)
         .eq('is_active', true)
-        .single()
+        .maybeSingle()
 
       if (teamMember) {
         const clientName = conversation.client_name || conversation.contact_name || conversation.phone_number
-
-        const { error: notifError } = await supabase
-          .from('notifications')
-          .insert({
-            team_member_id: teamMember.id,
-            type: 'whatsapp_assigned',
-            title: 'New WhatsApp Chat Assigned',
-            message: `You've been assigned a WhatsApp conversation with ${clientName}`,
-            link: `/communications?conversation=${conversation_id}`,
-            is_read: false,
-            email_sent: false
-          })
-
-        if (notifError) {
-          console.error('Notification insert error:', notifError)
-        } else {
-          console.log('Notification created for team member:', teamMember.id, teamMember.name)
-        }
-
-        if (teamMember.email) {
-          try {
-            const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://autoura.net'
-            await fetch(`${baseUrl}/api/notifications`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                team_member_id: teamMember.id,
-                type: 'whatsapp_assigned',
-                title: 'New WhatsApp Chat Assigned',
-                message: `You've been assigned a WhatsApp conversation with ${clientName}. Last message: "${conversation.last_message?.substring(0, 100) || 'No messages yet'}"`,
-                link: `/communications?conversation=${conversation_id}`,
-                send_email: true
-              })
-            })
-          } catch (emailError) {
-            console.error('Failed to send assignment email:', emailError)
-          }
-        }
-      } else {
-        console.log('Team member not found for notification, id:', newAssigneeId)
+        // One in-app row, and its email from this organisation's mailbox
+        // (lib/notifications). This used to insert the row here AND fetch
+        // /api/notifications from the server for the email — a request with
+        // no session, so the /api gate answered 401 and no email ever went
+        // (and had it got through, a second row).
+        const result = await createNotification({
+          org_id: orgId,
+          user_id: teamMember.user_id ?? null,
+          team_member_id: teamMember.id,
+          type: 'whatsapp_assigned',
+          title: 'New WhatsApp Chat Assigned',
+          message: `You've been assigned a WhatsApp conversation with ${clientName}. Last message: "${conversation.last_message?.substring(0, 100) || 'No messages yet'}"`,
+          link: `/communications?conversation=${conversation_id}`,
+        })
+        if (!result.success) console.error('Notification failed:', result.error)
       }
     }
 
-    // Log activity
+    // Log activity. agent_id references team_members since 20261209 (it
+    // referenced sales_agents, so this insert always failed). A failed log
+    // never fails the assignment, but it is reported.
     try {
-      await supabase
+      const { error: activityError } = await supabase
         .from('conversation_activity')
         .insert({
           conversation_id,
@@ -164,8 +142,9 @@ export async function POST(request: NextRequest) {
             action: action || 'assign'
           }
         })
+      if (activityError) console.error('Activity log failed:', activityError.message)
     } catch (activityError) {
-      console.log('Activity log skipped:', activityError)
+      console.error('Activity log failed:', activityError)
     }
 
     // Fetch updated conversation
@@ -183,6 +162,7 @@ export async function POST(request: NextRequest) {
         .from('team_members')
         .select('id, name, email, avatar_url, role, is_available')
         .eq('id', newAssigneeId)
+        .eq('org_id', orgId)
         .single()
       assigneeDetails = tm
     }
@@ -235,7 +215,8 @@ export async function GET(request: NextRequest) {
         .from('team_members')
         .select('id, name, email, avatar_url, role, is_available')
         .eq('id', assigneeId)
-        .single()
+        .eq('org_id', orgId)
+        .maybeSingle()
       assignee = tm
     }
 

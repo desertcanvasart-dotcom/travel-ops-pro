@@ -64,14 +64,14 @@ test('rate periods editor is on the cruises form too', async ({ page }) => {
 
   await page.getByRole('button', { name: /add period/i }).click()
   const card = page.getByTestId('rate-period').first()
-  // Cruises are entered the hotel way (PP double, single supp., triple red.)
-  // plus a suite rate: four figures per passport set — and since 2026-09-04
-  // one passport-less "Guide bed / night" for the throughout guide (+1).
+  // Cruises are entered the hotel way (PP double, single supp., triple red.):
+  // three figures per passport set — no Suite box since the Suppliers & Rates
+  // audit (a suite is its own row, Cabin Type = Suite) — and one
+  // passport-less "Guide bed / night" for the throughout guide (+1).
   await expect(card.getByText(/Sgl Supp/i).first()).toBeVisible()
   await expect(card.getByText(/Tpl Red/i).first()).toBeVisible()
-  await expect(card.getByText('Suite').first()).toBeVisible()
   await expect(card.getByText(/Guide bed/i).first()).toBeVisible()
-  await expect(card.locator('input[type="number"]')).toHaveCount(9)
+  await expect(card.locator('input[type="number"]')).toHaveCount(7)
 
   await page.screenshot({ path: 'test-results/rate-periods-cruise.png' })
 })

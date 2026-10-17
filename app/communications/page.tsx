@@ -6,7 +6,6 @@ import { UnifiedConversationList, UnifiedMessageThread, ComposeEmailModal } from
 import { UnifiedConversation } from '@/types/unified'
 import { useAuth } from '@/app/contexts/AuthContext'
 import { useEmailPolling } from '@/lib/use-email-polling'
-import { createClient } from '@/lib/supabase'
 
 export default function UnifiedCommunicationsPage() {
   const { user } = useAuth()
@@ -16,19 +15,25 @@ export default function UnifiedCommunicationsPage() {
   // Bumped after a conversation is deleted so the list refetches immediately
   // instead of waiting for its 30s auto-refresh.
   const [listRefreshKey, setListRefreshKey] = useState(0)
+  // The assignment notification links here with ?conversation=<id>; the list
+  // opens it once it has loaded. This was never read, so the link opened the
+  // inbox with nothing selected.
+  const [openConversationId, setOpenConversationId] = useState<string | null>(null)
+  useEffect(() => {
+    setOpenConversationId(new URLSearchParams(window.location.search).get('conversation'))
+  }, [])
 
-  // Check Gmail connection before enabling polling (matches Email Inbox pattern)
+  // Check Gmail connection before enabling polling (matches Email Inbox
+  // pattern): the mailbox this user works in for the ACTIVE company (lib/
+  // gmail-mailbox) — not merely "has a token", which for a person in both
+  // companies may serve the other one.
   useEffect(() => {
     if (!user?.id) return
     const checkConnection = async () => {
       try {
-        const supabase = createClient()
-        const { data } = await supabase
-          .from('gmail_tokens')
-          .select('id')
-          .eq('user_id', user.id)
-          .single()
-        setIsGmailConnected(!!data)
+        const res = await fetch('/api/settings/email')
+        const data = res.ok ? await res.json() : null
+        setIsGmailConnected(!!data?.gmail_connected)
       } catch {
         setIsGmailConnected(false)
       }
@@ -66,6 +71,7 @@ export default function UnifiedCommunicationsPage() {
           selectedConversationId={selectedConversation?.id}
           userId={user?.id}
           refreshKey={listRefreshKey}
+          openConversationId={openConversationId}
         />
         {/* Compose Email FAB */}
         <button

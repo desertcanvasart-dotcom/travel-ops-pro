@@ -68,8 +68,10 @@ async function main() {
   }
 
   // Floors, not exact numbers: this must not fail every time somebody adds a
-  // table. It exists to catch a baseline that silently stopped short.
-  const FLOORS = { tables: 150, views: 15, indexes: 600, policies: 250, functions: 60 }
+  // table. It exists to catch a baseline that silently stopped short. (Views:
+  // 14 since 20261206/20261207 dropped the dead tour_overview and
+  // tour_templates_with_languages.)
+  const FLOORS = { tables: 150, views: 14, indexes: 600, policies: 250, functions: 60 }
   const short = Object.entries(FLOORS).filter(([k, min]) => counts[k] < min)
 
   // -------------------------------------------------------------------------

@@ -1,4 +1,5 @@
 import { SupabaseClient } from '@supabase/supabase-js'
+import { tourInOrg } from '@/lib/tours/org-scope'
 
 // ============================================
 // TOUR MATCHER SERVICE
@@ -46,11 +47,14 @@ export interface MatchResult {
 // below is built in; every ACTIVE destination city (and its aliases, entered
 // in Settings → Destinations) is merged in at match time, mapping to itself —
 // so "petra" or "amm" resolves the moment Jordan's cities exist as data.
-async function destinationCityKeywords(supabase: { from(t: string): any }): Promise<Record<string, string[]>> {  // eslint-disable-line @typescript-eslint/no-explicit-any
+// The cities are the matching company's own (destination_cities hang off
+// destinations, which carry org_id since 20261206).
+async function destinationCityKeywords(supabase: { from(t: string): any }, orgId: string): Promise<Record<string, string[]>> {  // eslint-disable-line @typescript-eslint/no-explicit-any
   try {
     const { data } = await supabase
       .from('destination_cities')
-      .select('name, aliases')
+      .select('name, aliases, destinations!inner(org_id)')
+      .eq('destinations.org_id', orgId)
       .eq('is_active', true)
     const out: Record<string, string[]> = {}
     for (const row of data ?? []) {
@@ -107,9 +111,15 @@ const TOUR_TYPE_KEYWORDS: Record<string, string[]> = {
   'adventure': ['adventure', 'hiking', 'trekking']
 }
 
+/**
+ * Match a request against ONE company's programmes (tour_templates.org_id,
+ * 20261207) and that company's destination cities — the caller's company,
+ * passed in (app/api/ai/build-quote).
+ */
 export async function matchTourTemplate(
   supabase: SupabaseClient,
-  input: MatchInput
+  input: MatchInput,
+  orgId: string
 ): Promise<MatchResult> {
   
   const result: MatchResult = {
@@ -134,7 +144,7 @@ export async function matchTourTemplate(
     // Built-in Egypt attraction map + every active destination city and its
     // aliases from the vocabulary (Settings → Destinations).
     const cityKeywords: Record<string, string[]> = {
-      ...(await destinationCityKeywords(supabase)),
+      ...(await destinationCityKeywords(supabase, orgId)),
       ...ATTRACTION_KEYWORDS,
     }
 
@@ -196,6 +206,7 @@ export async function matchTourTemplate(
         *,
         variations:tour_variations(id, variation_name, tier, min_pax, max_pax, is_active)
       `)
+      .eq('org_id', orgId)
       .eq('is_active', true)
 
     // Filter by tour type if determined
@@ -363,22 +374,22 @@ export interface TemplateWithPricing {
   pricing: any[]
 }
 
+/** One company's template (another company's id is "not found": null). */
 export async function getTemplateWithPricing(
   supabase: SupabaseClient,
   templateId: string,
   pax: number,
-  isEuroPassport: boolean
+  isEuroPassport: boolean,
+  orgId: string
 ): Promise<TemplateWithPricing | null> {
   
   try {
     // Get template with all related data
     const { data: template, error: templateError } = await supabase
       .from('tour_templates')
-      .select(`
-        *,
-        category:tour_categories(id, category_name)
-      `)
+      .select('*')
       .eq('id', templateId)
+      .eq('org_id', orgId)
       .single()
 
     if (templateError || !template) {
@@ -391,10 +402,16 @@ export async function getTemplateWithPricing(
       .from('tour_variations')
       .select('*')
       .eq('template_id', templateId)
+      .eq('org_id', orgId)
       .eq('is_active', true)
 
+    // tour_days / tour_pricing are the legacy builder's (tour_id → tours),
+    // read here by the template's id. Only when that id is one of this
+    // company's tours — a day or price row is its tour's company's.
+    const ownTour = await tourInOrg(supabase, orgId, templateId)
+
     // Get days with activities
-    const { data: days } = await supabase
+    const { data: days } = !ownTour ? { data: [] } : await supabase
       .from('tour_days')
       .select(`
         *,
@@ -412,7 +429,7 @@ export async function getTemplateWithPricing(
       .order('day_number', { ascending: true })
 
     // Get pricing for this pax and passport type
-    const { data: pricing } = await supabase
+    const { data: pricing } = !ownTour ? { data: [] } : await supabase
       .from('tour_pricing')
       .select('*')
       .eq('tour_id', templateId)

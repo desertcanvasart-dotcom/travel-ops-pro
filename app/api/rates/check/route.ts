@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { selectAllRows } from '@/lib/db/select-all-rows'
 import { hotelTierFindings, transportTypeFindings, type HotelCheckRow, type TransportCheckRow } from '@/lib/rates/rate-checks'
 
@@ -7,20 +8,25 @@ import { hotelTierFindings, transportTypeFindings, type HotelCheckRow, type Tran
 // GET /api/rates/check — rates likely saved under the wrong category
 // ============================================
 // Read-only: hotels whose tier does not fit their star rating, and transport
-// whose type contradicts its route or name (lib/rates/rate-checks.ts). The
-// signed-in client, so RLS keeps both reads to the caller's organisation.
+// whose type contradicts its route or name (lib/rates/rate-checks.ts). Both
+// reads are the caller's organisation's (org_id), and RLS applies too.
 
 export async function GET() {
   try {
     const supabase = createServerClient()
+    // The company's own rates (rate tables carry org_id since 20261206).
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const [hotels, transport] = await Promise.all([
       selectAllRows<HotelCheckRow>(() => supabase
         .from('accommodation_rates')
         .select('id, property_name, city, tier, star_rating')
+        .eq('org_id', orgId)
         .eq('is_active', true)),
       selectAllRows<TransportCheckRow>(() => supabase
         .from('transportation_rates')
         .select('id, route_name, service_type, city, origin_city, destination_city')
+        .eq('org_id', orgId)
         .eq('is_active', true)),
     ])
     const error = hotels.error ?? transport.error

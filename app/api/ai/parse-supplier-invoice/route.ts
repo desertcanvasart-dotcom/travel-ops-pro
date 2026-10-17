@@ -33,7 +33,7 @@ EXTRACTION RULES:
 3. For dates, convert to YYYY-MM-DD format when possible
 4. If a field is not present or unreadable, set it to null
 5. For line items, extract each individual line with description, quantity, unit price, and total
-6. Detect the currency from symbols or text (€, $, £, EGP, E£, LE, etc.)
+6. Detect the currency from symbols or text (€, $, £, ¥, EGP, E£, LE, JPY, etc.)
 7. Look for tax/VAT amounts separately from the subtotal
 8. The supplier name is typically at the top of the invoice or in the header/letterhead
 9. The invoice number may be labeled as "Invoice #", "Inv No", "Bill No", "Reference", "Ref", etc.
@@ -52,7 +52,7 @@ Return ONLY a valid JSON object (no markdown, no explanation) with this exact st
   "supplier_invoice_number": "string or null",
   "invoice_date": "YYYY-MM-DD or null",
   "due_date": "YYYY-MM-DD or null",
-  "currency": "EUR|USD|GBP|EGP",
+  "currency": "EUR|USD|GBP|EGP|JPY",
   "subtotal": number or null,
   "tax_amount": number or null,
   "total_amount": number or null,
@@ -187,7 +187,7 @@ export async function POST(request: NextRequest) {
         supplier_invoice_number: extracted.supplier_invoice_number || '',
         invoice_date: extracted.invoice_date || '',
         due_date: extracted.due_date || '',
-        currency: extracted.currency || 'EUR',
+        currency: extracted.currency || '',
         // L2: coerce money fields with a strict numeric parser that strips
         // currency symbols / thousands separators / whitespace. Previously
         // strings like "€1,234.50" or "1.234,50 EUR" would land in the DB

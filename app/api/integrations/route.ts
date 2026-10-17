@@ -89,9 +89,10 @@ export async function POST(request: NextRequest) {
     }
 
     // Creating a connection mints credentials that read this org's calendar and
-    // write its departures. That is an admin action, and the middleware's
-    // prefix-based role gate does not cover this path.
-    const forbidden = await requireRole(['admin', 'manager'])
+    // write its departures. That is an admin action — middleware already gates
+    // every write under /api/integrations to admin; this is the same rule
+    // in-route, so the two cannot drift apart again (it said admin+manager).
+    const forbidden = await requireRole(['admin'])
     if (forbidden) return forbidden
 
     const body = await request.json().catch(() => ({}))

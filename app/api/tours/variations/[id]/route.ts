@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { variationInOrg } from '@/lib/tours/org-scope'
+import { countCatalogueReferences, referenceTotal, refusalMessage } from '@/lib/tours/catalogue-references'
 
 // GET - Get single variation
 export async function GET(
@@ -9,10 +12,16 @@ export async function GET(
   try {
     const supabase = createServerClient()
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await variationInOrg(supabase, orgId, id))) {
+      return NextResponse.json({ success: false, error: 'Variation not found' }, { status: 404 })
+    }
 
     const { data, error } = await supabase
       .from('tour_variations')
       .select('*')
+      .eq('org_id', orgId)
       .eq('id', id)
       .single()
 
@@ -45,6 +54,11 @@ export async function PUT(
   try {
     const supabase = createServerClient()
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    if (!(await variationInOrg(supabase, orgId, id))) {
+      return NextResponse.json({ success: false, error: 'Variation not found' }, { status: 404 })
+    }
     const body = await request.json()
 
     const updateData: any = {}
@@ -79,6 +93,7 @@ export async function PUT(
     const { data, error } = await supabase
       .from('tour_variations')
       .update(updateData)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select()
       .single()
@@ -106,7 +121,14 @@ export async function PUT(
   }
 }
 
-// DELETE - Delete variation
+// DELETE - Delete an unused variation
+//
+// Refused (409, counts by kind) while a quote of any status, a departure, a
+// partner price or a seat hold refers to it — the same rule as the template
+// delete (lib/tours/catalogue-references). Before, a quoted variation failed
+// with a bare 500 on the tour_quotes foreign key, and an unquoted one
+// silently cascaded its partner prices away and unlinked its departures.
+// Such a variation is deactivated instead (PUT is_active false).
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -114,10 +136,29 @@ export async function DELETE(
   try {
     const supabase = createServerClient()
     const { id } = await params
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const variation = await variationInOrg<{ id: string; variation_name: string | null }>(supabase, orgId, id, 'id, variation_name')
+    if (!variation) {
+      return NextResponse.json({ success: false, error: 'Variation not found' }, { status: 404 })
+    }
+
+    const { counts, error: refErr } = await countCatalogueReferences(supabase, orgId, { templateId: null, variationIds: [id] })
+    if (refErr) {
+      console.error('Error checking variation references:', refErr)
+      return NextResponse.json({ success: false, error: 'Failed to check what uses this variation' }, { status: 500 })
+    }
+    if (referenceTotal(counts) > 0) {
+      return NextResponse.json(
+        { success: false, error: refusalMessage('variation', variation.variation_name, counts), references: counts, can_deactivate: true },
+        { status: 409 }
+      )
+    }
 
     const { error } = await supabase
       .from('tour_variations')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
     if (error) {

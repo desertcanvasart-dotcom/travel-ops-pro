@@ -34,6 +34,19 @@ export async function POST(request: NextRequest) {
     if (!orgId) return noOrgResponse()
 
     const userId = await getCurrentUserId()
+    // Finishing a website order: only one that is still open. Opening an
+    // already-quoted order's link again and confirming made a SECOND quote,
+    // client hold and seat hold, and repointed the order at the new quote —
+    // the first one dropped out of the list.
+    const finishing = dryRun !== true && typeof intakeId === 'string' && intakeId ? intakeId : null
+    if (finishing) {
+      const { data: open } = await supabase.from('web_order_intakes').select('id')
+        .eq('org_id', orgId).eq('id', finishing).eq('outcome', 'needs_attention').is('resolved_at', null)
+        .maybeSingle()
+      if (!open) {
+        return NextResponse.json({ success: false, error: 'This website order is already finished (a quote was made from it, or it was dismissed). Open it from the list to see its quote.' }, { status: 409 })
+      }
+    }
     const result = await processTourUpOrder(supabase, {
       orgId,
       userId,
@@ -41,7 +54,7 @@ export async function POST(request: NextRequest) {
       dryRun: dryRun === true,
     })
     const quote = result.body.quote
-    if (!dryRun && quote && typeof intakeId === 'string' && intakeId) {
+    if (finishing && quote) {
       const { error } = await supabase.from('web_order_intakes').update({
         outcome: 'quote_created',
         reason: null,
@@ -50,7 +63,7 @@ export async function POST(request: NextRequest) {
         departure_booking_id: result.body.departureBooking?.id ?? null,
         resolved_at: new Date().toISOString(),
         resolved_by: userId,
-      }).eq('org_id', orgId).eq('id', intakeId)
+      }).eq('org_id', orgId).eq('id', finishing).eq('outcome', 'needs_attention').is('resolved_at', null)
       if (error) console.error('[intake/order-form] intake not updated:', error)
     }
     return NextResponse.json(result.body, { status: result.status })

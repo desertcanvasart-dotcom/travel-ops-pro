@@ -33,7 +33,6 @@ import { looksLikeTourUpOrder, parseTourUpOrder, type TourUpOrder } from '@/lib/
 import { emailOrderText } from '@/lib/intake/tup-mail'
 import { processTourUpOrder } from '@/lib/intake/process-order'
 import { notifyOrgManagers } from '@/lib/notify-managers'
-import { orgForMailbox } from '@/lib/email/email-leads'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from(table: string): any }
@@ -70,7 +69,7 @@ export async function processNewWebOrders(
 ): Promise<WebOrderResult[]> {
   const runPipeline = opts.process ?? processTourUpOrder
   const { data: pending, error } = await db.from('email_messages')
-    .select('id, message_id, conversation_id, subject, body_text, body_html, sent_at')
+    .select('id, org_id, message_id, conversation_id, subject, body_text, body_html, sent_at')
     .is('order_checked_at', null)
     .eq('direction', 'inbound')
     .order('sent_at', { ascending: true })
@@ -78,10 +77,9 @@ export async function processNewWebOrders(
   if (error) throw error
 
   const results: WebOrderResult[] = []
-  const orgByConversation = new Map<string, string | null>()
 
   for (const msg of (pending ?? []) as Array<{
-    id: string; message_id: string; conversation_id: string | null; subject: string | null
+    id: string; org_id: string | null; message_id: string; conversation_id: string | null; subject: string | null
     body_text: string | null; body_html: string | null; sent_at: string
   }>) {
     const checked = () => db.from('email_messages').update({ order_checked_at: new Date().toISOString() }).eq('id', msg.id)
@@ -89,17 +87,11 @@ export async function processNewWebOrders(
       const text = emailOrderText(msg.body_text, msg.body_html)
       if (!looksLikeTourUpOrder(text)) { await checked(); continue }
 
-      // The organisation: the mailbox's.
-      let orgId: string | null = null
-      if (msg.conversation_id) {
-        if (!orgByConversation.has(msg.conversation_id)) {
-          const { data: conv } = await db.from('email_conversations').select('user_id').eq('id', msg.conversation_id).maybeSingle()
-          orgByConversation.set(msg.conversation_id, await orgForMailbox(db, (conv?.user_id as string | null) ?? null))
-        }
-        orgId = orgByConversation.get(msg.conversation_id) ?? null
-      } else {
-        orgId = await orgForMailbox(db, null)
-      }
+      // The organisation: the mailbox's — stamped on the message by the sync
+      // from the connection it came through (email_messages.org_id, 20261204).
+      // It was the mailbox owner's OLDEST membership, so a person in both
+      // companies had the other company's orders filed under the first.
+      const orgId = msg.org_id
       if (!orgId) {
         // Left unchecked: the next run tries again once the mailbox has an org.
         console.error('[web-order] no organisation for message', msg.id)
@@ -112,6 +104,7 @@ export async function processNewWebOrders(
         await db.from('email_conversations')
           .update({ lead_checked_at: new Date().toISOString(), lead_check: 'web_order' })
           .eq('id', msg.conversation_id)
+          .eq('org_id', orgId)
           .is('lead_checked_at', null)
       }
 
@@ -205,7 +198,8 @@ export async function processNewWebOrders(
         await notifyOrgManagers(db as never, orgId, {
           type: 'order_received',
           title: `ウェブ注文 ${quote.quote_number}: ${order.tourCode}`,
-          message: `ウェブサイトの注文メールより自動作成。${summary}`,
+          // A party larger than the seats left got no seat hold: say so.
+          message: `ウェブサイトの注文メールより自動作成。${result.body.departureFull ? `座席は未確保（出発の空き ${result.body.departureFull.free} 席に対し ${result.body.departureFull.requested} 名）。` : ''}${summary}`,
           link: `/b2b/quotes/${quote.id}`,
         })
         await checked()

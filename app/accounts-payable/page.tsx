@@ -26,6 +26,7 @@ import {
 import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
 import { formatMoney, formatTotals, addToTotals, emptyTotals, currencySymbol, type CurrencyTotals } from '@/lib/currency-totals'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 
 interface AgingBucket {
   current: CurrencyTotals
@@ -44,7 +45,6 @@ function payableExportRows(suppliers: SupplierPayable[]): Record<string, unknown
   for (const s of suppliers) {
     const codes = new Set([
       ...Object.keys(s.total_expenses ?? {}),
-      ...Object.keys(s.total_paid ?? {}),
       ...Object.keys(s.total_outstanding ?? {}),
     ])
     if (codes.size === 0) codes.add('')
@@ -53,7 +53,6 @@ function payableExportRows(suppliers: SupplierPayable[]): Record<string, unknown
         supplier_name: s.supplier_name,
         currency: currency || null,
         total_expenses: s.total_expenses?.[currency] ?? 0,
-        total_paid: s.total_paid?.[currency] ?? 0,
         total_outstanding: s.total_outstanding?.[currency] ?? 0,
         expense_count: s.expense_count,
       })
@@ -66,7 +65,6 @@ interface SupplierPayable {
   supplier_name: string
   supplier_type: string
   total_expenses: CurrencyTotals
-  total_paid: CurrencyTotals
   total_outstanding: CurrencyTotals
   expense_count: number
   oldest_expense_date: string
@@ -93,12 +91,17 @@ interface Expense {
   days_past_due: number
   aging_bucket: string
   is_overdue: boolean
+  /** 'bill' for a supplier bill with no expense behind it (acts on the Bills screen). */
+  kind?: 'bill'
+  bill_status?: string
 }
 
 interface Summary {
   total_outstanding: CurrencyTotals
   supplier_count: number
   expense_count: number
+  bill_count: number
+  bill_amount: CurrencyTotals
   aging: AgingBucket
   pending_count: number
   pending_amount: CurrencyTotals
@@ -142,7 +145,12 @@ const CATEGORY_CONFIG: Record<string, { label: string; icon: string }> = {
 
 const ITEMS_PER_PAGE = 15
 
+// An unmatched supplier bill is a row here too, but it is worked on the Bills screen.
+const rowHref = (e: Expense) => (e.kind === 'bill' ? `/supplier-invoices/${e.id}` : `/expenses/${e.id}`)
+const rowStatusLabel = (e: Expense) => (e.kind === 'bill' ? 'Bill' : e.status === 'pending' ? 'Pending' : 'Approved')
+
 export default function AccountsPayablePage() {
+  const dialog = useConfirmDialog()
   // Payables default to the rate currency (what suppliers are paid in) when a tile is empty.
   const { rateCurrency } = useCurrency()
   const money = (t: CurrencyTotals) => formatTotals(t, { defaultCurrency: rateCurrency })
@@ -152,8 +160,6 @@ export default function AccountsPayablePage() {
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [recentPayments, setRecentPayments] = useState<Expense[]>([])
   const [summary, setSummary] = useState<Summary | null>(null)
-  const [categoryBreakdown, setCategoryBreakdown] = useState<Record<string, number>>({})
-  const [supplierTypeBreakdown, setSupplierTypeBreakdown] = useState<Record<string, number>>({})
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState('')
   const [agingFilter, setAgingFilter] = useState('')
@@ -188,8 +194,6 @@ export default function AccountsPayablePage() {
           setExpenses(result.expenses)
           setRecentPayments(result.recentPayments || [])
           setSummary(result.summary)
-          setCategoryBreakdown(result.categoryBreakdown || {})
-          setSupplierTypeBreakdown(result.supplierTypeBreakdown || {})
         }
       }
     } catch (error: any) {
@@ -211,21 +215,29 @@ export default function AccountsPayablePage() {
     setCurrentPage(1)
   }, [searchTerm, agingFilter, supplierTypeFilter, statusFilter, viewMode])
 
+  // A failed save used to look like nothing happened; say what went wrong.
+  const reportFailure = async (response: Response, fallback: string) => {
+    const err = await response.json().catch(() => ({}))
+    await dialog.alert('Could not save', err?.error || fallback, 'warning')
+  }
+
+  // Pays the expense AND the supplier bill it completes (see
+  // /api/accounts-payable/pay-expense); a bare expense update left the bill owed.
   const handleMarkAsPaid = async (expense: Expense) => {
     try {
-      const response = await fetch(`/api/expenses/${expense.id}`, {
-        method: 'PUT',
+      const response = await fetch('/api/accounts-payable/pay-expense', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          status: 'paid', 
-          payment_date: todayLocal()
-        })
+        body: JSON.stringify({ expenseId: expense.id, payment_date: todayLocal() })
       })
       if (response.ok) {
         fetchData()
+      } else {
+        await reportFailure(response, 'The payment was not recorded.')
       }
     } catch (error) {
       console.error('Error marking as paid:', error)
+      await dialog.alert('Could not save', 'The payment was not recorded. Check your connection and try again.', 'warning')
     }
   }
 
@@ -238,9 +250,12 @@ export default function AccountsPayablePage() {
       })
       if (response.ok) {
         fetchData()
+      } else {
+        await reportFailure(response, 'The expense was not approved.')
       }
     } catch (error) {
       console.error('Error approving expense:', error)
+      await dialog.alert('Could not save', 'The expense was not approved. Check your connection and try again.', 'warning')
     }
   }
 
@@ -272,6 +287,7 @@ export default function AccountsPayablePage() {
     switch (status) {
       case 'pending': return 'text-yellow-600 bg-yellow-100'
       case 'approved': return 'text-blue-600 bg-blue-100'
+      case 'bill': return 'text-purple-600 bg-purple-100'
       case 'paid': return 'text-green-600 bg-green-100'
       default: return 'text-gray-600 bg-gray-100'
     }
@@ -287,9 +303,15 @@ export default function AccountsPayablePage() {
            expense.description?.toLowerCase().includes(searchTerm.toLowerCase())
   })
 
+  const filteredPayments = recentPayments.filter(expense => {
+    return expense.expense_number?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           expense.supplier_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+           expense.description?.toLowerCase().includes(searchTerm.toLowerCase())
+  })
+
   const getDisplayData = () => {
     if (viewMode === 'suppliers') return filteredSuppliers
-    if (viewMode === 'payments') return recentPayments
+    if (viewMode === 'payments') return filteredPayments
     return filteredExpenses
   }
 
@@ -335,7 +357,6 @@ export default function AccountsPayablePage() {
               const cols = [
                 { key: 'supplier_name', label: 'Supplier' },
                 { key: 'total_expenses', label: 'Total Expenses', align: 'right' as const, money: true },
-                { key: 'total_paid', label: 'Total Paid', align: 'right' as const, money: true },
                 { key: 'total_outstanding', label: 'Outstanding', align: 'right' as const, money: true },
                 { key: 'expense_count', label: 'Expense Count', align: 'right' as const },
               ]
@@ -351,7 +372,6 @@ export default function AccountsPayablePage() {
               const cols = [
                 { key: 'supplier_name', label: 'Supplier' },
                 { key: 'total_expenses', label: 'Total Expenses', align: 'right' as const, money: true },
-                { key: 'total_paid', label: 'Total Paid', align: 'right' as const, money: true },
                 { key: 'total_outstanding', label: 'Outstanding', align: 'right' as const, money: true },
                 { key: 'expense_count', label: 'Expense Count', align: 'right' as const },
               ]
@@ -384,7 +404,7 @@ export default function AccountsPayablePage() {
 
       {/* Summary Cards */}
       {summary && (
-        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-8 gap-4">
           <div className="bg-white border border-gray-200 rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2">
               <span className="text-lg">💰</span>
@@ -392,7 +412,7 @@ export default function AccountsPayablePage() {
             </div>
             <p className="text-xs text-gray-500 mb-1">Total Payable</p>
             <p className="text-2xl font-semibold text-red-600">{money(summary.total_outstanding)}</p>
-            <p className="text-xs text-gray-400 mt-1">{summary.expense_count} expenses</p>
+            <p className="text-xs text-gray-400 mt-1">{summary.expense_count} expenses{summary.bill_count > 0 ? ` + ${summary.bill_count} bills` : ''}</p>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -420,8 +440,27 @@ export default function AccountsPayablePage() {
               <span className="text-lg">✅</span>
               <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
             </div>
+            <p className="text-xs text-gray-500 mb-1">Unmatched bills</p>
+            <p className="text-2xl font-semibold text-purple-600">{money(summary.bill_amount)}</p>
+            <p className="text-xs text-gray-400 mt-1">{summary.bill_count} bills</p>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">✅</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+            </div>
             <p className="text-xs text-gray-500 mb-1">Not due yet</p>
             <p className="text-2xl font-semibold text-green-600">{money(summary.aging.current)}</p>
+          </div>
+
+          <div className="bg-white border border-gray-200 rounded-lg p-4">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="text-lg">📅</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-yellow-500"></span>
+            </div>
+            <p className="text-xs text-gray-500 mb-1">1-30 days overdue</p>
+            <p className="text-2xl font-semibold text-yellow-600">{money(summary.aging.days30)}</p>
           </div>
 
           <div className="bg-white border border-gray-200 rounded-lg p-4">
@@ -608,6 +647,7 @@ export default function AccountsPayablePage() {
                 <option value="">All Statuses</option>
                 <option value="pending">Pending Approval</option>
                 <option value="approved">Approved</option>
+                <option value="bill">Unmatched bills</option>
               </select>
             </div>
           </div>
@@ -644,7 +684,7 @@ export default function AccountsPayablePage() {
                     <div className="flex items-center gap-6">
                       <div className="text-right">
                         <p className="text-sm font-semibold text-gray-900">{money(supplier.total_outstanding)}</p>
-                        <p className="text-xs text-gray-500">{supplier.expense_count} expense{supplier.expense_count !== 1 ? 's' : ''}</p>
+                        <p className="text-xs text-gray-500">{supplier.expense_count} item{supplier.expense_count !== 1 ? 's' : ''}</p>
                       </div>
                       
                       {/* Mini aging bars */}
@@ -686,7 +726,7 @@ export default function AccountsPayablePage() {
                               <div className="flex items-center gap-3">
                                 <span className="text-lg">{catConfig.icon}</span>
                                 <div>
-                                  <Link href={`/expenses/${expense.id}`} className="text-sm font-medium text-gray-900 hover:text-[#647C47]">
+                                  <Link href={rowHref(expense)} className="text-sm font-medium text-gray-900 hover:text-[#647C47]">
                                     {expense.expense_number}
                                   </Link>
                                   <p className="text-xs text-gray-500">
@@ -704,12 +744,12 @@ export default function AccountsPayablePage() {
                                   </p>
                                   <div className="flex items-center gap-2">
                                     <span className={`text-xs px-2 py-0.5 rounded ${getStatusColor(expense.status)}`}>
-                                      {expense.status === 'pending' ? 'Pending' : 'Approved'}
+                                      {rowStatusLabel(expense)}
                                     </span>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-1">
-                                  {expense.status === 'pending' && (
+                                  {expense.kind !== 'bill' && expense.status === 'pending' && (
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleApprove(expense); }}
                                       className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -718,7 +758,7 @@ export default function AccountsPayablePage() {
                                       <CheckCircle className="h-4 w-4" />
                                     </button>
                                   )}
-                                  {expense.status === 'approved' && (
+                                  {expense.kind !== 'bill' && expense.status === 'approved' && (
                                     <button
                                       onClick={(e) => { e.stopPropagation(); handleMarkAsPaid(expense); }}
                                       className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
@@ -728,9 +768,9 @@ export default function AccountsPayablePage() {
                                     </button>
                                   )}
                                   <Link
-                                    href={`/expenses/${expense.id}`}
+                                    href={rowHref(expense)}
                                     className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded transition-colors"
-                                    title="View Expense"
+                                    title={expense.kind === 'bill' ? 'View Bill' : 'View Expense'}
                                   >
                                     <Eye className="h-4 w-4" />
                                   </Link>
@@ -780,7 +820,7 @@ export default function AccountsPayablePage() {
                         <div className="flex items-center gap-2">
                           <span>{catConfig.icon}</span>
                           <div>
-                            <Link href={`/expenses/${expense.id}`} className="text-sm font-medium text-gray-900 hover:text-[#647C47]">
+                            <Link href={rowHref(expense)} className="text-sm font-medium text-gray-900 hover:text-[#647C47]">
                               {expense.expense_number}
                             </Link>
                             <p className="text-xs text-gray-500">{expense.description || catConfig.label}</p>
@@ -807,7 +847,7 @@ export default function AccountsPayablePage() {
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${getStatusColor(expense.status)}`}>
-                          {expense.status === 'pending' ? 'Pending' : 'Approved'}
+                          {rowStatusLabel(expense)}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
@@ -817,7 +857,7 @@ export default function AccountsPayablePage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <div className="flex items-center justify-end gap-1">
-                          {expense.status === 'pending' && (
+                          {expense.kind !== 'bill' && expense.status === 'pending' && (
                             <button
                               onClick={() => handleApprove(expense)}
                               className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded transition-colors"
@@ -826,7 +866,7 @@ export default function AccountsPayablePage() {
                               <CheckCircle className="h-4 w-4" />
                             </button>
                           )}
-                          {expense.status === 'approved' && (
+                          {expense.kind !== 'bill' && expense.status === 'approved' && (
                             <button
                               onClick={() => handleMarkAsPaid(expense)}
                               className="p-1.5 text-gray-400 hover:text-green-600 hover:bg-green-50 rounded transition-colors"
@@ -836,7 +876,7 @@ export default function AccountsPayablePage() {
                             </button>
                           )}
                           <Link
-                            href={`/expenses/${expense.id}`}
+                            href={rowHref(expense)}
                             className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded transition-colors"
                             title="View"
                           >
@@ -856,6 +896,9 @@ export default function AccountsPayablePage() {
       {/* Payment History View */}
       {viewMode === 'payments' && (
         <div className="bg-white rounded-lg border border-gray-200 overflow-hidden">
+          <p className="px-4 py-2 text-xs text-gray-500 border-b border-gray-100">
+            The 50 most recent payments{supplierTypeFilter ? ' for this supplier type' : ''}. Aging and status filters do not apply.
+          </p>
           <table className="w-full">
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
@@ -883,7 +926,7 @@ export default function AccountsPayablePage() {
                         <div className="flex items-center gap-2">
                           <span>{catConfig.icon}</span>
                           <div>
-                            <Link href={`/expenses/${expense.id}`} className="text-sm font-medium text-gray-900 hover:text-[#647C47]">
+                            <Link href={rowHref(expense)} className="text-sm font-medium text-gray-900 hover:text-[#647C47]">
                               {expense.expense_number}
                             </Link>
                             <p className="text-xs text-gray-500">{expense.description || catConfig.label}</p>
@@ -910,7 +953,7 @@ export default function AccountsPayablePage() {
                       </td>
                       <td className="px-4 py-3 text-right">
                         <Link
-                          href={`/expenses/${expense.id}`}
+                          href={rowHref(expense)}
                           className="p-1.5 text-gray-400 hover:text-[#647C47] hover:bg-gray-100 rounded transition-colors inline-block"
                           title="View"
                         >

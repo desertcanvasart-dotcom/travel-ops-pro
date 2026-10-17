@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { Tip } from '../layout'
 
 export default function SuppliersPage() {
   return (
@@ -13,115 +13,191 @@ export default function SuppliersPage() {
       </nav>
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">Suppliers</h1>
+      <p className="text-gray-600 mb-4">
+        Suppliers is your company&rsquo;s list of everyone you buy from: hotels and hotel groups,
+        transport companies and drivers, guides, cruise lines, restaurants, shops and the rest. A
+        supplier record says who they are and how to reach them. What they charge lives with the
+        rates, under Rates.
+      </p>
       <p className="text-gray-600 mb-8">
-        The Suppliers directory is your central contact book for every partner you work with &mdash; hotels, transport companies, guides, cruises, restaurants, and more. Each supplier stores contact details, commission terms, and type-specific information used across pricing and bookings.
+        Open it from the menu: <strong>Home › Suppliers &amp; Rates › Suppliers</strong>.
       </p>
 
-      {/* Supplier types */}
+      {/* Who */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Supplier Types</h2>
-        <p className="text-gray-600 mb-3">
-          Every supplier has a type that drives its icon, color, and the extra fields it can hold:
-        </p>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Who can use it</h2>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Hotels</strong> &mdash; Star rating and property type</li>
-          <li><strong>Transport &amp; Drivers</strong> &mdash; Vehicle types served</li>
-          <li><strong>Guides</strong> &mdash; Languages spoken</li>
-          <li><strong>Cruises</strong> &mdash; Ship name, cabin count, capacity, and routes</li>
-          <li><strong>Restaurants</strong> &mdash; Cuisine types</li>
-          <li><strong>Local Operators, Tour Operators, Ground Handlers, Activities, Attractions, Shops</strong> and <strong>Other</strong></li>
+          <li>The <strong>Suppliers &amp; Rates</strong> menu is shown to <strong>admins</strong> and <strong>managers</strong> (owners always see it).</li>
+          <li>Only managers and above can add, edit, delete, import or export suppliers.</li>
+          <li>Agents do not use this screen, but they still see supplier names where a screen asks them to pick one (for example when building an itinerary).</li>
         </ul>
-        <ScreenshotPlaceholder caption="Supplier directory grouped by type with colored badges" />
       </section>
 
-      {/* Portable supplier code */}
+      {/* Per company */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">The supplier code (SUP-####)</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Each company has its own suppliers</h2>
         <p className="text-gray-600 mb-3">
-          Every supplier is given a short, stable code &mdash; <strong>SUP-0001</strong>,
-          <strong> SUP-0002</strong>, and so on &mdash; assigned automatically in order. It is
-          yours to edit if you keep your own numbering, as long as it stays unique.
+          If you run more than one company, each one has its own supplier list. A supplier both
+          companies used was copied, one copy per company, and editing one company&rsquo;s copy
+          never changes the other&rsquo;s.
         </p>
         <p className="text-gray-600">
-          This code is what makes rates <em>portable</em>. A supplier&rsquo;s internal id is unique
-          to this install, so it means nothing anywhere else; the SUP-#### code travels with the
-          supplier. When you export rates to another install, each rate carries its supplier code,
-          and on import the rate re-attaches to the supplier with the matching code &mdash; instead
-          of every rate becoming an orphan you re-link by hand.
+          Supplier codes are unique <em>within</em> a company, so both companies can have a
+          SUP-0001. New codes come from one shared counter, so a company&rsquo;s numbers are unique
+          but not always consecutive.
         </p>
       </section>
 
-      {/* CSV import / export */}
+      {/* The form */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Importing &amp; exporting suppliers</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Adding or editing a supplier</h2>
         <p className="text-gray-600 mb-3">
-          The directory has <strong>Sample CSV</strong>, <strong>Export</strong> and{' '}
-          <strong>Import</strong> buttons. Export downloads your suppliers &mdash; codes included
-          &mdash; as a spreadsheet; import reads a filled-in sheet back, matching each row on its
-          supplier code so an existing supplier updates rather than duplicates.
+          Click <strong>Add Supplier</strong>. The form is the same for every kind of supplier:
         </p>
-        <Tip>
-          Import suppliers <em>before</em> their rates. A rate whose supplier code is not yet in
-          this install is reported and skipped, not guessed &mdash; so the order is suppliers first,
-          then rates. The shared CSV rules live in{' '}
-          <Link href="/docs/bulk-csv" className="text-primary-600 hover:underline">Bulk Import (CSV)</Link>.
-        </Tip>
-      </section>
-
-      {/* Adding a supplier */}
-      <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Adding a Supplier</h2>
-        <ol className="list-decimal list-inside space-y-2 text-gray-700">
-          <li>Click <strong>Add Supplier</strong> and choose a type</li>
-          <li>Enter the core details:
-            <ul className="list-disc list-inside ml-6 mt-2 space-y-1 text-gray-600">
-              <li><strong>Name</strong> &mdash; Required</li>
-              <li><strong>Contact</strong> &mdash; Name, email, phone, second phone, and WhatsApp</li>
-              <li><strong>Location</strong> &mdash; Address, city, and country (defaults to Egypt)</li>
-              <li><strong>Commission</strong> &mdash; Default commission rate, commission type, and payment terms</li>
-              <li><strong>Status</strong> &mdash; Active, Inactive, or Pending</li>
-            </ul>
-          </li>
-          <li>Fill in any type-specific fields, then save</li>
-        </ol>
-      </section>
-
-      {/* Hierarchy */}
-      <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Companies &amp; Properties</h2>
-        <p className="text-gray-600 mb-3">
-          Hotels, restaurants, and cruises support a two-level hierarchy: a parent <strong>company</strong> can own multiple individual <strong>properties</strong>. This lets you model a hotel chain or cruise line with its specific properties or ships underneath.
+        <ul className="list-disc list-inside space-y-1 text-gray-700 mb-3">
+          <li><strong>Supplier Name</strong> (required) and <strong>Supplier Code</strong>. Leave the code blank and the next SUP-#### is given automatically. Clearing the code of an existing supplier keeps its old code. A code another supplier of your company already has is refused with a message naming the code.</li>
+          <li><strong>Role(s)</strong> (required): one or more supplier types from Settings › Vocabulary. A driver who also meets clients at the airport holds both roles. The first role is the main one, shown on the badge.</li>
+          <li><strong>Status</strong>: Active, Inactive or Pending.</li>
+          <li>Contact: <strong>Contact Person</strong>, <strong>Email</strong>, <strong>Phone</strong>, <strong>WhatsApp</strong>, <strong>Website</strong>.</li>
+          <li>Location: <strong>City</strong> (from the city list) and <strong>Address</strong>. The country is Egypt unless a CSV says otherwise.</li>
+          <li><strong>Notes</strong>.</li>
+        </ul>
+        <p className="text-gray-600">
+          Commission is not on this form: it is set under{' '}
+          <strong>Rates › Commissions</strong> (a rate from 0 to 100; 0 means no commission). A
+          guide&rsquo;s languages are set on the Guide Rates page.
         </p>
-        <Tip>
-          Use the hierarchy to keep one company record while still pricing each property or ship separately.
-        </Tip>
       </section>
 
       {/* Browsing */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Browsing &amp; Managing</h2>
-        <p className="text-gray-600 mb-3">
-          The directory offers grid, table, and list views. You can:
-        </p>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Finding suppliers</h2>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Search</strong> across supplier records</li>
-          <li><strong>Filter</strong> by type and status</li>
-          <li><strong>Sort</strong> by name, type, city, status, or commission</li>
-          <li><strong>Export</strong> the list, and view, edit, or delete any supplier</li>
+          <li>Grid, table and list views.</li>
+          <li><strong>Search</strong> looks in the code, name, contact person, email and city.</li>
+          <li>The <strong>role chips</strong> filter by role. Each chip counts the suppliers holding that role, so a supplier with two roles is counted on both chips; <strong>All</strong> counts each supplier once.</li>
+          <li>Filter by <strong>status</strong>, and sort by name, type, city or status.</li>
+          <li>Every supplier of your company is loaded, however many there are.</li>
         </ul>
       </section>
 
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link href="/docs" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          All Docs
-        </Link>
-        <Link href="/docs/content-library" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: Content Library
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
+      {/* Detail view */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">A supplier&rsquo;s page</h2>
+        <p className="text-gray-600 mb-3">Click a supplier to open it. It has these tabs:</p>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li>
+            <strong>Details</strong>: contact, location, status and notes. The money section shows
+            the commission (&ldquo;We pay&rdquo; or &ldquo;We receive&rdquo; and the percentage)
+            when the supplier has one above 0%, with a link to manage it under Rates ›
+            Commissions.
+          </li>
+          <li>
+            <strong>Properties</strong>, for hotel groups (their hotels), cruise lines (their ships)
+            and train operators (their trains). Each property has its own name, city and contact.
+            A property that rates still use cannot be deleted &mdash; deactivate it instead.
+          </li>
+          <li>
+            <strong>Rates</strong>: every rate in your company that names this supplier, whatever
+            its role &mdash; a guide&rsquo;s guide rates, a hotel group&rsquo;s hotel rates, a
+            transport company&rsquo;s routes (one line per vehicle), cruises, trains, flights,
+            meals, activities, airport and hotel assistance. Each line shows the type, the code,
+            what it prices, and the EU-passport and non-EU-passport price. Each price is shown in
+            the rate&rsquo;s own currency (a rate entered in EGP shows pounds); a rate with no
+            currency of its own is shown in your company&rsquo;s rate currency. Inactive rates are
+            greyed out. Entrance fees are not listed here.
+          </li>
+          <li><strong>Documents</strong>: not available yet.</li>
+        </ul>
+      </section>
+
+      {/* Delete */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Deleting and deactivating</h2>
+        <p className="text-gray-600 mb-3">
+          A supplier can be deleted only when nothing in your records points at it. Delete is
+          refused, with the counts of what blocks it, while the supplier has any of these:
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-gray-700 mb-3">
+          <li>properties (hotels, ships, trains)</li>
+          <li>rates, in any rate table</li>
+          <li>trip assignments (an itinerary&rsquo;s guide, airport or hotel assistant, or a resource assigned to a trip), departure assignments, or bookings it is the guide on</li>
+          <li>booking statuses, booking extras or catalogue extras</li>
+          <li>invoices, expenses or commissions</li>
+          <li>priced services on a trip, or trip services it sold</li>
+          <li>vouchers and other supplier documents</li>
+        </ul>
+        <p className="text-gray-600 mb-3">
+          The message reads, for example, &ldquo;Supplier is referenced by 1 properties, 12 rates
+          &mdash; deactivate it instead&rdquo;, and the dialog offers a{' '}
+          <strong>Deactivate instead</strong> button, which sets the status to Inactive. An
+          inactive supplier keeps every property, rate, assignment and record.
+        </p>
+        <p className="text-gray-600">
+          With several suppliers selected, <strong>bulk delete</strong> deletes the ones it can and
+          lists each refused supplier with its reason.
+        </p>
+      </section>
+
+      {/* CSV */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Importing and exporting suppliers</h2>
+        <p className="text-gray-600 mb-3">
+          The list has <strong>Sample CSV</strong>, <strong>Import CSV</strong> and{' '}
+          <strong>Export</strong> buttons. The sheet&rsquo;s columns are: name, supplier_code,
+          roles (several separated by <code>;</code>), status, contact_name, contact_email,
+          contact_phone, whatsapp, website, city, country, address, notes,
+          default_commission_rate (0&ndash;100), commission_type (payable = we pay them,
+          receivable = they pay us; blank with a rate = receivable) and languages (a guide&rsquo;s
+          languages, separated by <code>;</code>).
+        </p>
+        <ul className="list-disc list-inside space-y-2 text-gray-700 mb-3">
+          <li><strong>Export</strong> writes the suppliers currently on screen (after your filters and search), in screen order.</li>
+          <li>
+            <strong>Import</strong> checks the file first and shows a preview: how many rows will
+            add new suppliers, which rows will <strong>update</strong> a supplier you already have,
+            and every row that cannot be imported, with its line number and reason. Nothing is
+            written until you confirm. Then the good rows are imported and the others are left out.
+          </li>
+          <li>
+            Matching: a row with a supplier_code updates your supplier with that code (even if the
+            name in the file is new &mdash; that renames it). A row without a code updates your
+            supplier with the same name (capital letters ignored). Anything else is added as a new
+            supplier.
+          </li>
+          <li>
+            An update writes the columns the file has. A column missing from the file is left as it
+            is; an empty cell in a column the file has clears that field (except status, country
+            and supplier code, which keep their value when blank).
+          </li>
+          <li>
+            Rows refused in the preview: the same name or the same supplier code twice in the file;
+            a new code on a row whose name you already have under another code; a code whose
+            supplier is not the one named, when the name belongs to another of your suppliers; a
+            name two of your suppliers share, with no code to pick one; an unknown role; a
+            commission outside 0&ndash;100.
+          </li>
+          <li>The example row from the sample sheet is skipped.</li>
+          <li>Matching only looks at your own company&rsquo;s suppliers.</li>
+        </ul>
+        <Tip>
+          Import suppliers <em>before</em> their rates. A rate row whose supplier code is not in
+          your company is refused, not guessed &mdash; see{' '}
+          <Link href="/docs/bulk-csv" className="text-primary-600 hover:underline">Bulk Import (CSV)</Link>.
+        </Tip>
+      </section>
+
+      {/* Limits */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>It does not hold prices. Rates are entered on the rate pages under Rates.</li>
+          <li>It does not set commissions or guide languages on the form; those are under Rates › Commissions and Guide Rates (or in the CSV).</li>
+          <li>It does not delete a supplier anything still points at. Deactivate it instead.</li>
+          <li>Some rate pickers still list inactive suppliers.</li>
+          <li>The Documents tab is not available yet.</li>
+        </ul>
+      </section>
     </div>
   )
 }

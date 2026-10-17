@@ -19,6 +19,15 @@ vi.mock('@/lib/vocabulary-server', () => ({
   ],
 }))
 
+// The caller's company (suppliers.org_id, 20261205).
+vi.mock('@/lib/auth/current-org', async () => {
+  const { NextResponse } = await import('next/server')
+  return {
+    getCurrentOrgId: async () => 'org-1',
+    noOrgResponse: () => NextResponse.json({ success: false }, { status: 403 }),
+  }
+})
+
 import { GET, POST } from '@/app/api/suppliers/route'
 
 const get = async (qs: string) => {
@@ -33,9 +42,11 @@ const post = async (body: Record<string, unknown>) => {
 beforeEach(() => {
   setMockTables({
     suppliers: [
-      { id: 's-hotel', name: 'Nile Palace', type: 'hotel', types: ['hotel'], status: 'active' },
-      { id: 's-lodge', name: 'Desert Lodge', type: 'lodge', types: ['lodge'], status: 'active' },
-      { id: 's-guide', name: 'Sam', type: 'guide', types: ['guide'], status: 'active' },
+      { id: 's-hotel', name: 'Nile Palace', type: 'hotel', types: ['hotel'], status: 'active', org_id: 'org-1' },
+      { id: 's-lodge', name: 'Desert Lodge', type: 'lodge', types: ['lodge'], status: 'active', org_id: 'org-1' },
+      { id: 's-guide', name: 'Sam', type: 'guide', types: ['guide'], status: 'active', org_id: 'org-1' },
+      // Another company's hotel: never listed here.
+      { id: 's-other', name: 'Other Company Hotel', type: 'hotel', types: ['hotel'], status: 'active', org_id: 'org-2' },
     ],
   })
 })
@@ -61,6 +72,7 @@ describe('POST /api/suppliers', () => {
     expect(status).toBe(201)
     const rows = (await (createMockClient().from('suppliers') as never as { select: (c: string) => Promise<{ data: { name: string; type: string }[] }> }).select('*')).data
     expect(rows.find(r => r.name === 'Oasis Lodge')?.type).toBe('lodge')
+    expect((rows.find(r => r.name === 'Oasis Lodge') as { org_id?: string } | undefined)?.org_id).toBe('org-1')
   })
   it('refuses a role the agency has not defined, pointing at Settings', async () => {
     const { status, json } = await post({ name: 'Tuk Tuk Co', types: ['tuk_tuk'] })

@@ -51,8 +51,11 @@ describe('task reminders', () => {
 
   it('skip archived tasks and deactivated team members', () => {
     expect(s.match(/\.or\('archived\.eq\.false,archived\.is\.null'\)/g)).toHaveLength(2)
-    expect(s.match(/assigned_member:team_members\(id, name, email, user_id, is_active\)/g)).toHaveLength(2)
-    expect(s.match(/task\.assigned_member\.is_active === false\) continue/g)).toHaveLength(2)
+    // One field list for both queries (and the member's org, checked too).
+    expect(s).toMatch(/assigned_member:team_members!tasks_assigned_to_fkey\(id, name, email, user_id, is_active, org_id\)/)
+    expect(s.match(/\.select\(TASK_FIELDS\)/g)).toHaveLength(2)
+    expect(s).toContain('task.assigned_member.is_active !== false')
+    expect(s.match(/if \(!reachable\(task\)\) continue/g)).toHaveLength(2)
   })
 
   it('formats a date-only due date in UTC, and POST is not recorded twice', () => {
@@ -65,7 +68,9 @@ describe('task reminders', () => {
 describe('invoice reminders cannot be starved by one org\'s failing sends', () => {
   const s = src('app/api/cron/send-reminders/route.ts')
   it('the batch is ordered oldest-due first', () => {
-    expect(s).toMatch(/\.order\('next_reminder_date', \{ ascending: true \}\)[\s\S]*\.limit\(50\)/)
+    // Capped per organisation since the cron runs one company at a time.
+    expect(s).toMatch(/\.order\('next_reminder_date', \{ ascending: true \}\)[\s\S]*\.limit\(REMINDERS_PER_ORG\)/)
+    expect(s).toContain('const REMINDERS_PER_ORG = 50')
   })
   it('a failed send is pushed to tomorrow so it does not hold its slot', () => {
     const failBranch = s.slice(s.indexOf('} else {', s.indexOf('if (result.success)')))
@@ -108,8 +113,11 @@ describe('deactivation cannot reach into another workspace', () => {
   it('PUT is_active:false on someone with another membership is refused (409)', () => {
     const s = src('app/api/profiles/[id]/route.ts')
     const put = s.slice(s.indexOf('export async function PUT'), s.indexOf('export async function DELETE'))
-    expect(put).toContain('if (body.is_active === false) {')
-    expect(put).toMatch(/\.eq\('user_id', id\)\s*\n\s*\.neq\('org_id', caller\.orgId\)/)
+    // The membership count moved into inOtherCompany(), shared with DELETE
+    // (Settings audit); behaviour is exercised in
+    // __tests__/api/profiles-authorization.test.ts.
+    expect(put).toContain('if (body.is_active === false && await inOtherCompany(id, caller.orgId)) {')
+    expect(s).toMatch(/\.eq\('user_id', userId\)\s*\n\s*\.neq\('org_id', orgId\)/)
     expect(put).toContain('{ status: 409 }')
   })
 })
@@ -118,6 +126,6 @@ describe('roster-addressed notifications honour the linked login\'s email choice
   it('preferences are read for team_member.user_id when no user_id is given', () => {
     const s = src('lib/notifications.ts')
     expect(s).toContain("team_member:team_members(id, name, email, user_id)")
-    expect(s).toContain('getNotificationPreferences(supabaseAdmin, prefsUserId)')
+    expect(s).toContain('getNotificationPreferences(supabaseAdmin, prefsUserId, org_id)')
   })
 })

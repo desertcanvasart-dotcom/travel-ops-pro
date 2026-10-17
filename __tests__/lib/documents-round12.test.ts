@@ -9,8 +9,8 @@ describe('supplier invoices', () => {
 
   it('AP payment history is the org’s own', () => {
     const ap = src('app/api/accounts-payable/route.ts')
-    const recent = ap.slice(ap.indexOf('// Fetch paid expenses for payment history'))
-    expect(recent.slice(0, 300)).toContain(".eq('org_id', orgId)")
+    const recent = ap.slice(ap.indexOf('// Payment history'))
+    expect(recent.slice(0, 600)).toContain(".eq('org_id', orgId)")
   })
 
   it('match and unmatch only before review, and the write is conditional', () => {
@@ -26,8 +26,8 @@ describe('supplier invoices', () => {
   })
 
   it('expenses match only in the invoice currency', () => {
-    expect(match).toContain(".select('amount, status, currency')")
-    expect(match).toContain(".select('id, amount, currency')")
+    expect(match).toContain(".select('amount, status, currency, supplier_id, supplier_name')")
+    expect(match).toContain(".select('id, amount, currency, status, supplier_id, supplier_name')")
     expect(match).toContain('Expenses must be in the invoice currency')
   })
 
@@ -53,7 +53,7 @@ describe('supplier invoices', () => {
     expect(src('app/supplier-invoices/page.tsx')).toContain('Creating the supplier invoice failed')
     const page = src('app/supplier-invoices/[id]/page.tsx')
     expect(page).toContain("const matchable = invoice.status === 'received' || invoice.status === 'matched'")
-    expect(page).toContain('=== invoiceCurrency')
+    expect(page).toContain('!== invoiceCurrency')
   })
 })
 
@@ -93,7 +93,7 @@ describe('invoice reminders and payments', () => {
 
   it('editing the total re-derives the status; payments pin the currency', () => {
     const u = src('app/api/invoices/[id]/route.ts')
-    expect(u).toContain("if (paid > 0) derived = paid >= total ? 'paid' : 'partial'")
+    expect(u).toContain("updateData.status = paid >= total ? 'paid' : 'partial'")
     expect(u).toContain('An invoice with payments keeps its currency')
   })
 })
@@ -103,7 +103,7 @@ describe('B2B quote revisions and bulk updates', () => {
     const r = src('app/api/b2b/quotes/[id]/revisions/revert/route.ts')
     expect(r).toContain('A converted or booked quote cannot be reverted')
     expect(r).toContain("live.status === 'converted' || live.converted_to_itinerary_id")
-    expect(r).toContain('quoteRefsInOrg(supabaseAdmin, orgId, { itinerary_id: snapshot.itinerary_id, partner_id: snapshot.partner_id })')
+    expect(r).toContain('quoteRefsInOrg(supabaseAdmin, orgId, { itinerary_id: snapshot.itinerary_id, partner_id: snapshot.partner_id, variation_id: snapshot.variation_id })')
   })
 
   it('revert restores the season premium; compare shows it', () => {
@@ -286,8 +286,8 @@ describe('round 12 follow-ups (regression pass)', () => {
   })
   it('an explicit draft or cancelled stands, paid/partial are the payments\' (AUDIT H22); a bad total is refused', () => {
     const u = src('app/api/invoices/[id]/route.ts')
-    expect(u).toContain("if (!['draft', 'cancelled'].includes(status))")
-    expect(u).toContain('!CALLER_SETTABLE_STATUSES.includes(updateData.status)')
+    expect(u).toContain("!['draft', 'cancelled'].includes(status)")
+    expect(u).toContain('!isSettableInvoiceStatus(updateData.status)')
     expect(u).toContain('total_amount must be a non-negative number')
   })
 })

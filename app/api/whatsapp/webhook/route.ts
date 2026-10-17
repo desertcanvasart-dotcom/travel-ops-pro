@@ -9,7 +9,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
-import { orgForWhatsAppNumber } from '@/lib/whatsapp-org'
+import { orgForWhatsAppNumber, whatsappRevival } from '@/lib/whatsapp-org'
 import { verifyTwilioSignature, formDataToParams } from '@/lib/twilio-signature'
 
 // Use service role key to bypass RLS — webhooks have no user session
@@ -115,7 +115,7 @@ export async function POST(request: NextRequest) {
     // a thread in each, and neither org sees the other's.
     const { data: existingConversation, error: convLookupError } = await supabase
       .from('whatsapp_conversations')
-      .select('id')
+      .select('id, is_hidden, status')
       .eq('org_id', inboxOrgId)
       .eq('phone_number', phoneNumber)
       .maybeSingle()
@@ -128,6 +128,19 @@ export async function POST(request: NextRequest) {
 
     if (existingConversation) {
       conversationId = existingConversation.id
+
+      // The customer writing again brings a deleted (hidden) or archived
+      // conversation back to the inbox — the delete dialog promises it, and
+      // nothing did it: the new message was stored where nobody looked.
+      // A blocked number stays blocked.
+      const revive = whatsappRevival(existingConversation)
+      if (revive) {
+        await supabase
+          .from('whatsapp_conversations')
+          .update(revive)
+          .eq('id', conversationId)
+          .eq('org_id', inboxOrgId)
+      }
       
       // Update conversation with client info if we found one and it wasn't linked
       if (clientId) {

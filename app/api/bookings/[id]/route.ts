@@ -8,6 +8,8 @@ import { createClient } from '@supabase/supabase-js'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { supplierBacking } from '@/lib/bookings/supplier-backing'
 import { removeBookingDocumentFiles } from '@/lib/portal/traveller-documents'
+import { rowInOrg } from '@/lib/api/org-scope'
+import { loadTripVatExtras } from '@/lib/vat'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -30,11 +32,7 @@ export async function GET(
       .from('bookings')
       .select(`
         *,
-        itinerary:itineraries (
-          id,
-          itinerary_code,
-          status
-        )
+        itinerary:itineraries ( * )
       `)
       .eq('id', id)
       .eq('org_id', orgId)
@@ -80,14 +78,26 @@ export async function GET(
         .from('suppliers')
         .select('id, name, phone, email')
         .eq('id', booking.assigned_guide_id)
-        .single()
+        .eq('org_id', orgId)
+        .maybeSingle()
       assignedGuide = guide
     }
+
+    // What of the booking total VAT leaves out (owner, 2026-10-13: no VAT on
+    // extras): its confirmed extras (extras_total) and the trip's own extras
+    // lines. The page shows the trip's VAT on the rest (lib/vat.ts).
+    const itinerary = booking.itinerary?.vat_applied === true
+      ? {
+          ...booking.itinerary,
+          vat_excluded: (Number(booking.extras_total) || 0) + (await loadTripVatExtras(supabaseAdmin, booking.itinerary.id)).vat_excluded,
+        }
+      : booking.itinerary
 
     return NextResponse.json({
       success: true,
       data: {
         ...booking,
+        itinerary,
         suppliers: (suppliers || []).map(r => ({ ...r, expense: expenseByRow.get(r.id as string) ?? null })),
         payments: payments || [],
         assigned_guide: assignedGuide,
@@ -121,14 +131,13 @@ export async function PUT(
     const { id } = await params
     const body = await request.json()
 
-    // Fields that can be updated
+    // Fields that can be updated. Not the money: payment_status, deposit_paid,
+    // deposit_paid_date, deposit_amount and balance_due are written only by
+    // record_booking_payment (balance = total − paid, under a lock) and the
+    // repricing routes. From here any agent could mark a booking Paid with
+    // balance 0 and no payment recorded.
     const allowedFields = [
       'status',
-      'payment_status',
-      'deposit_amount',
-      'deposit_paid',
-      'deposit_paid_date',
-      'balance_due',
       'payment_deadline',
       'assigned_guide_id',
       'assigned_vehicle_id',
@@ -147,6 +156,18 @@ export async function PUT(
       if (body[field] !== undefined) {
         updates[field] = body[field]
       }
+    }
+
+    // The guide is one of this company's suppliers (suppliers.org_id, 20261205).
+    if (typeof updates.assigned_guide_id === 'string' && updates.assigned_guide_id &&
+        !(await rowInOrg(supabaseAdmin, 'suppliers', updates.assigned_guide_id, orgId))) {
+      return NextResponse.json({ success: false, error: 'Guide not found' }, { status: 404 })
+    }
+
+    // The vehicle is one of this company's (vehicles.org_id).
+    if (typeof updates.assigned_vehicle_id === 'string' && updates.assigned_vehicle_id &&
+        !(await rowInOrg(supabaseAdmin, 'vehicles', updates.assigned_vehicle_id, orgId))) {
+      return NextResponse.json({ success: false, error: 'Vehicle not found' }, { status: 404 })
     }
 
     // If status is being set to cancelled, set cancelled_at
@@ -288,7 +309,7 @@ export async function DELETE(
     // booking_payments).
     const { data: booking, error: fetchError } = await supabaseAdmin
       .from('bookings')
-      .select('id, booking_code, status')
+      .select('id, booking_code, status, deposit_paid')
       .eq('id', id)
       .eq('org_id', orgId)
       .single()
@@ -303,6 +324,20 @@ export async function DELETE(
         success: false,
         error: 'Cannot delete a booking that is in progress or completed'
       }, { status: 400 })
+    }
+
+    // Recorded customer money is never deleted with the booking (the cascade
+    // would take booking_payments with it). Cancel the booking instead.
+    const { count: paymentCount } = await supabaseAdmin
+      .from('booking_payments')
+      .select('id', { count: 'exact', head: true })
+      .eq('booking_id', id)
+    if ((paymentCount ?? 0) > 0 || booking.deposit_paid) {
+      return NextResponse.json({
+        success: false,
+        code: 'booking_has_payments',
+        error: `Booking ${booking.booking_code} has payments recorded, so it cannot be deleted. Cancel it instead — the payments stay on record for refunds and the accounts.`,
+      }, { status: 409 })
     }
 
     // The cascade takes the passport rows with it, but not the files: remove

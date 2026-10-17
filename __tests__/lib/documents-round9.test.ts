@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { quoteRefsInOrg } from '@/lib/b2b/quote-scope'
+import { pickB2bQuoteUpdates } from '@/lib/b2b/quote-updates'
 import { quoteAmountsInTripCurrency } from '@/lib/b2b/convert-money'
 
 const src = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
@@ -53,8 +54,10 @@ describe('B2B routes are scoped to the organisation', () => {
     expect(t).toMatch(/\.eq\('id', itinerary_id\)\s*\.eq\('org_id', orgId\)/)
   })
   it('creating or editing a quote checks its trip and partner', () => {
-    expect(src('app/api/b2b/quotes/route.ts').match(/quoteRefsInOrg\(supabaseAdmin, orgId/g)?.length).toBe(2)
-    expect(src('app/api/b2b/quotes/[id]/route.ts')).toContain('quoteRefsInOrg(supabaseAdmin, orgId, updates)')
+    // Create checks them; edit can no longer change them at all (2026-10-13
+    // allowlist, lib/b2b/quote-updates.ts), so it has nothing to check.
+    expect(src('app/api/b2b/quotes/route.ts').match(/quoteRefsInOrg\(supabaseAdmin, orgId/g)?.length).toBe(1)
+    expect(pickB2bQuoteUpdates({ itinerary_id: 'x', partner_id: 'y', variation_id: 'z' }, { lock: null })).toEqual({ ok: true, updates: {} })
   })
   it('convert path A reads and updates only our trip', () => {
     const c = src('app/api/b2b/quotes/[id]/convert/route.ts')

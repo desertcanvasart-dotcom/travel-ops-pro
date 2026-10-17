@@ -22,6 +22,9 @@ import {
 } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import SupplierImportExport from '@/components/suppliers/SupplierImportExport'
+import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
+import { rateListFrom, supplierRateRows, type SupplierRateRow } from '@/lib/suppliers/supplier-rate-rows'
+import { commissionDirectionOf } from '@/lib/suppliers/fields'
 
 // Types
 interface Supplier {
@@ -49,19 +52,6 @@ interface Supplier {
   default_commission_rate?: number | null
   commission_type?: string | null
   created_at: string
-}
-
-interface TransportRate {
-  id: string
-  service_code: string
-  service_type: string
-  vehicle_type: string
-  city: string
-  destination_city?: string
-  base_rate_eur: number
-  base_rate_non_eur: number
-  capacity_min?: number
-  capacity_max?: number
 }
 
 type ViewMode = 'grid' | 'table' | 'list'
@@ -188,7 +178,9 @@ function MultiSelect({ options, value, onChange, placeholder, labelFor = (v) => 
 }
 
 export default function SuppliersContent() {
-  const { rateSymbol } = useCurrency()
+  const { formatWithConversion, rateCurrency } = useCurrency()
+  // A rate with no currency of its own is in the company's rate currency.
+  const formatOrgRate = (amount: number) => formatWithConversion(amount, rateCurrency)
   const t = useTranslations('suppliers')
   const supplierTypeLabel = useVocabLabel('supplier_type')
   // The agency's supplier types — what the role picker offers, what the
@@ -214,6 +206,9 @@ export default function SuppliersContent() {
   const [showEditModal, setShowEditModal] = useState(false)
   const [showViewModal, setShowViewModal] = useState(false)
   const [showDeleteModal, setShowDeleteModal] = useState(false)
+  // The server refused the delete because something still uses the supplier
+  // (409, lib/suppliers/delete-guard): the modal then offers to deactivate.
+  const [deleteBlocked, setDeleteBlocked] = useState(false)
   const [selectedSupplier, setSelectedSupplier] = useState<Supplier | null>(null)
   // Bulk selection — same kit as the rates pages. Above every early return.
   const bulk = useBulkSelect()
@@ -230,7 +225,7 @@ export default function SuppliersContent() {
   
   // View modal tabs
   const [viewTab, setViewTab] = useState<'details' | 'properties' | 'rates' | 'documents'>('details')
-  const [supplierRates, setSupplierRates] = useState<TransportRate[]>([])
+  const [supplierRates, setSupplierRates] = useState<SupplierRateRow[]>([])
   const [loadingRates, setLoadingRates] = useState(false)
 
   useEffect(() => {
@@ -268,10 +263,11 @@ export default function SuppliersContent() {
   const fetchSupplierRates = async (supplierId: string) => {
     setLoadingRates(true)
     try {
-      const response = await fetch(`/api/resources/transportation?supplier_id=${supplierId}`)
+      // Every rate table that names this supplier, whatever its roles
+      // (lib/suppliers/supplier-rate-rows explains what this replaced).
+      const response = await fetch(`/api/supplier-rates?supplier_id=${supplierId}`)
       if (response.ok) {
-        const result = await response.json()
-        setSupplierRates(result.data || [])
+        setSupplierRates(supplierRateRows(rateListFrom(await response.json())))
       }
     } catch (error) {
       console.error('Error fetching rates:', error)
@@ -374,14 +370,15 @@ export default function SuppliersContent() {
     setShowViewModal(true)
     setOpenMenuId(null)
     
-    // Fetch rates for transport-side suppliers
-    if (['transport', 'local_operator', 'driver'].includes(supplier.type)) {
-      fetchSupplierRates(supplier.id)
-    }
+    // Any supplier can have rates: a guide's guide rates, a hotel group's
+    // hotel rates, a fleet's vehicles — every role, not the primary one.
+    fetchSupplierRates(supplier.id)
   }
 
   const handleDeleteClick = (supplier: Supplier) => {
     setSelectedSupplier(supplier)
+    setDeleteBlocked(false)
+    setError(null)
     setShowDeleteModal(true)
     setOpenMenuId(null)
   }
@@ -454,8 +451,37 @@ export default function SuppliersContent() {
     setError(null)
     try {
       const response = await fetch(`/api/suppliers/${selectedSupplier.id}`, { method: 'DELETE' })
-      if (!response.ok) throw new Error((await response.json()).error || 'Failed to delete')
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}))
+        if (response.status === 409) setDeleteBlocked(true)
+        throw new Error(body.error || 'Failed to delete')
+      }
       setShowDeleteModal(false)
+      setSelectedSupplier(null)
+      fetchSuppliers()
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  // The way out of a refused delete: the supplier stays, with every property,
+  // rate, assignment and record still linked, and drops out of the pickers
+  // that ask for active suppliers.
+  const handleDeactivate = async () => {
+    if (!selectedSupplier) return
+    setSaving(true)
+    setError(null)
+    try {
+      const response = await fetch(`/api/suppliers/${selectedSupplier.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: 'inactive' })
+      })
+      if (!response.ok) throw new Error((await response.json()).error || 'Failed to update')
+      setShowDeleteModal(false)
+      setDeleteBlocked(false)
       setSelectedSupplier(null)
       fetchSuppliers()
     } catch (err: any) {
@@ -965,7 +991,7 @@ export default function SuppliersContent() {
                 {propertyTypesForRoles(selectedSupplier.types?.length ? selectedSupplier.types : [selectedSupplier.type]).length > 0 && (
                   <button type="button" onClick={() => setViewTab('properties')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'properties' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>{t('propertiesTab')}</button>
                 )}
-                {['transport', 'local_operator', 'driver'].includes(selectedSupplier.type) && (
+                {(
                   <button type="button" onClick={() => setViewTab('rates')} className={`py-3 text-sm font-medium border-b-2 transition-colors ${viewTab === 'rates' ? 'border-primary-600 text-primary-600' : 'border-transparent text-gray-500 hover:text-gray-700'}`}>
                     {t('rates')} {supplierRates.length > 0 && <span className="ml-1.5 px-1.5 py-0.5 bg-gray-100 rounded text-xs">{supplierRates.length}</span>}
                   </button>
@@ -998,9 +1024,10 @@ export default function SuppliersContent() {
                   <div className="col-span-2 space-y-4 pt-4 border-t border-gray-100">
                     <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2"><DollarSign className="w-4 h-4 text-gray-400" /> {t('financial')}</h3>
                     <div className="flex items-center gap-4">
-                      {selectedSupplier.default_commission_rate != null ? (
+                      {/* 0% is no commission — the generator skips it (lib/suppliers/fields). */}
+                      {commissionDirectionOf(selectedSupplier) ? (
                         <div className="p-3 bg-gray-50 rounded-lg">
-                          <p className="text-xs text-gray-500">{selectedSupplier.commission_type === 'payable' ? t('commissionWePay') : t('commissionWeReceive')}</p>
+                          <p className="text-xs text-gray-500">{commissionDirectionOf(selectedSupplier) === 'payable' ? t('commissionWePay') : t('commissionWeReceive')}</p>
                           <p className="text-lg font-semibold text-gray-900">{selectedSupplier.default_commission_rate}%</p>
                         </div>
                       ) : null}
@@ -1034,8 +1061,17 @@ export default function SuppliersContent() {
                     </div>
                   ) : (
                     <table className="w-full">
-                      <thead><tr className="bg-gray-50"><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">{t('service')}</th><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">{t('vehicle')}</th><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">{t('route')}</th><th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">{t('eurRate')}</th><th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">{t('nonEurRate')}</th></tr></thead>
-                      <tbody>{supplierRates.map(rate => (<tr key={rate.id} className="border-t border-gray-100"><td className="px-3 py-2 text-sm font-medium">{rate.service_code}</td><td className="px-3 py-2 text-sm">{rate.vehicle_type}</td><td className="px-3 py-2 text-sm">{rate.city}{rate.destination_city && ` → ${rate.destination_city}`}</td><td className="px-3 py-2 text-sm text-right font-medium text-green-600">{rateSymbol}{rate.base_rate_eur}</td><td className="px-3 py-2 text-sm text-right">{rateSymbol}{rate.base_rate_non_eur}</td></tr>))}</tbody>
+                      <thead><tr className="bg-gray-50"><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">{t('rateKind')}</th><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">{t('code')}</th><th className="text-left px-3 py-2 text-xs font-semibold text-gray-600">{t('service')}</th><th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">{t('eurRate')}</th><th className="text-right px-3 py-2 text-xs font-semibold text-gray-600">{t('nonEurRate')}</th></tr></thead>
+                      <tbody>{supplierRates.map(rate => (
+                        <tr key={rate.key} className={`border-t border-gray-100 ${rate.active ? '' : 'opacity-50'}`}>
+                          <td className="px-3 py-2 text-xs text-gray-500">{t.has(`rateKinds.${rate.table}`) ? t(`rateKinds.${rate.table}`) : rate.table.replace(/_/g, ' ')}</td>
+                          <td className="px-3 py-2 text-sm font-medium font-mono">{rate.code}</td>
+                          <td className="px-3 py-2 text-sm">{rate.label}</td>
+                          {/* Each amount in the rate's OWN currency (an EGP contract shows pounds). */}
+                          <td className="px-3 py-2 text-sm text-right font-medium text-green-600">{rate.eu === null ? '—' : formatRateInRowCurrency(rate.eu, { rate_currency: rate.currency }, formatOrgRate)}</td>
+                          <td className="px-3 py-2 text-sm text-right">{rate.eu === null ? '—' : formatRateInRowCurrency(rate.nonEu ?? rate.eu, { rate_currency: rate.currency }, formatOrgRate)}</td>
+                        </tr>
+                      ))}</tbody>
                     </table>
                   )}
                 </div>
@@ -1063,11 +1099,20 @@ export default function SuppliersContent() {
             <p className="text-sm text-gray-600 mb-6">{t('deleteConfirm', { name: selectedSupplier.name })}</p>
             {error && <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>}
             <div className="flex items-center justify-end gap-3">
-              <button type="button" onClick={() => { setShowDeleteModal(false); setError(null) }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">{t('cancel')}</button>
-              <button type="button" onClick={handleDelete} disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2">
-                {saving && <Loader2 className="w-4 h-4 animate-spin" />}
-                {saving ? t('deleting') : t('delete')}
-              </button>
+              <button type="button" onClick={() => { setShowDeleteModal(false); setDeleteBlocked(false); setError(null) }} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50">{t('cancel')}</button>
+              {deleteBlocked ? (
+                selectedSupplier.status !== 'inactive' && (
+                  <button type="button" onClick={handleDeactivate} disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-primary-600 rounded-lg hover:bg-primary-700 disabled:opacity-50 flex items-center gap-2">
+                    {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                    {t('deactivateInstead')}
+                  </button>
+                )
+              ) : (
+                <button type="button" onClick={handleDelete} disabled={saving} className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 disabled:opacity-50 flex items-center gap-2">
+                  {saving && <Loader2 className="w-4 h-4 animate-spin" />}
+                  {saving ? t('deleting') : t('delete')}
+                </button>
+              )}
             </div>
           </div>
         </div>

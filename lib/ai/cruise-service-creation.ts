@@ -24,6 +24,9 @@ import {
 import { getFixedDailyCosts } from '@/lib/fixed-costs'
 import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, getExchangeRate, persistExchangeRate, type ExchangeRates } from '@/lib/currency-service'
 
+// Matches no organisation: an org-less read finds no rates.
+const NO_ORG = '00000000-0000-0000-0000-000000000000'
+
 // ============================================
 // SHARED GUIDE RATE LOOKUP
 // ============================================
@@ -31,6 +34,8 @@ import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, getExchangeR
 
 export async function fetchGuideRate(
   supabase: any,
+  /** Whose guide rates (guide_rates.org_id). */
+  orgId: string | null | undefined,
   tier: string,
   language: string
 ): Promise<{
@@ -48,6 +53,7 @@ export async function fetchGuideRate(
   const { data: guideRates } = await supabase
     .from('guide_rates')
     .select('*')
+    .eq('org_id', orgId ?? NO_ORG)
     .eq('is_active', true)
     .eq('guide_language', language)
     .limit(1)
@@ -67,27 +73,30 @@ export async function fetchGuideRate(
   // PRIORITY 2: Fall back to guides table (supplier contacts)
   // Tier + language → any tier + language → tier only → any active guide
   let guide: any = null
+  if (!orgId) {
+    return { guidePerDay: 0, guideName: null, guideId: null, guideSupplierId: null }
+  }
 
   const { data: tierLangGuides } = await supabase
-    .from('guides').select('*').eq('is_active', true).eq('tier', tier).contains('languages', [language]).limit(1)
+    .from('guides').select('*').eq('org_id', orgId).eq('is_active', true).eq('tier', tier).contains('languages', [language]).limit(1)
   guide = tierLangGuides?.[0]
 
   if (!guide) {
     const { data: langGuides } = await supabase
-      .from('guides').select('*').eq('is_active', true).contains('languages', [language]).limit(1)
+      .from('guides').select('*').eq('org_id', orgId).eq('is_active', true).contains('languages', [language]).limit(1)
     guide = langGuides?.[0]
   }
 
   if (!guide) {
     const { data: tierGuides } = await supabase
-      .from('guides').select('*').eq('is_active', true).eq('tier', tier).limit(1)
+      .from('guides').select('*').eq('org_id', orgId).eq('is_active', true).eq('tier', tier).limit(1)
     guide = tierGuides?.[0]
     if (guide) console.warn(`⚠️ No ${language}-speaking guide found — using ${guide.name || 'generic'} guide rate`)
   }
 
   if (!guide) {
     const { data: anyGuides } = await supabase
-      .from('guides').select('*').eq('is_active', true).limit(1)
+      .from('guides').select('*').eq('org_id', orgId).eq('is_active', true).limit(1)
     guide = anyGuides?.[0]
     if (guide) console.warn(`⚠️ No guide for ${language}/${tier} — using ${guide.name || 'generic'} as last resort`)
   }
@@ -136,6 +145,8 @@ export async function createCruiseItineraryServices(
     rateCurrency?: string
     /** The trip's billing currency. Service amounts are converted into it, as the land path does. */
     currency?: string
+    /** The trip's organisation — whose cruise transport packages price it. */
+    orgId?: string | null
   }
 ): Promise<{
   createdDays: CruiseCreatedDay[]
@@ -149,6 +160,7 @@ export async function createCruiseItineraryServices(
     marginPercent, includeGuide, effectiveCity,
     rateCurrency = 'EUR',
     currency = rateCurrency,
+    orgId = null,
   } = params
 
   const warnings: string[] = []
@@ -207,8 +219,13 @@ export async function createCruiseItineraryServices(
   // FETCH ALL REQUIRED RATES
   // ============================================
 
-  // 1. Cruise transport (bundled flat rate from b2b_pricing_rules)
-  const cruiseTransportRules = await fetchCruiseTransportPricingRules()
+  // Rate rows may be entered in another currency (per-rate currency work):
+  // each is converted into rateCurrency at the fetch, before toTarget.
+  const cruiseNormalizer = createRateNormalizer(rateCurrency)
+
+  // 1. Cruise transport (bundled flat rate from b2b_transport_packages) — in
+  // rateCurrency like the rest: an EGP package was costed as that many euros.
+  const cruiseTransportRules = await fetchCruiseTransportPricingRules(orgId, cruiseNormalizer)
   const cruiseTransportRule = findCruiseTransportRule(cruiseTransportRules, durationDays)
   let cruiseTransportRate = 0
   let cruiseTransportVehicle = 'Minivan'
@@ -222,21 +239,21 @@ export async function createCruiseItineraryServices(
   }
 
   // 2. Guide rate (guide_rates table → guides table fallback)
-  const guideResult = await fetchGuideRate(supabase, tier, guideLanguage)
+  const guideResult = await fetchGuideRate(supabase, orgId, tier, guideLanguage)
   if (!guideResult.guidePerDay) {
     warnings.push(`No guide rate found for ${guideLanguage} (${tier} tier) — guide will be €0`)
   }
 
   // 3. Tipping rates (itemized, tier-adjusted)
   // Tip rows may be entered in another currency (per-rate currency work).
-  const cruiseNormalizer = createRateNormalizer(rateCurrency)
-  const cruiseTippingRates = await getItemizedTippingRates(supabase, tier, cruiseNormalizer)
+  // The party size, so a per-person tip is charged per traveller.
+  const cruiseTippingRates = await getItemizedTippingRates(supabase, orgId, tier, cruiseNormalizer, { pax: totalPax })
   if (cruiseTippingRates.allRates.length === 0) {
     warnings.push('No tipping rates found — tips will be €0')
   }
 
   // 4. Entrance fees
-  const { data: entranceFees } = await supabase.from('entrance_fees').select('*').eq('is_active', true)
+  const { data: entranceFees } = await supabase.from('entrance_fees').select('*').eq('org_id', orgId ?? NO_ORG).eq('is_active', true)
   if (!entranceFees?.length) {
     warnings.push('No entrance fees found — entrance fees will be €0')
   }
@@ -246,11 +263,15 @@ export async function createCruiseItineraryServices(
   // previously priced at €0 because this module skipped the activity_rates
   // fallback that the land path uses. Mirror it here so cruise quotes don't
   // systematically under-charge for activity-priced items.
-  const { data: activityRates } = await supabase.from('activity_rates').select('*').eq('is_active', true)
+  const { data: activityRates } = await supabase.from('activity_rates').select('*').eq('org_id', orgId ?? NO_ORG).eq('is_active', true)
 
   // 5. Water rate
-  const fixedCosts = await getFixedDailyCosts()
+  const fixedCosts = await getFixedDailyCosts(orgId, cruiseNormalizer)
   const waterRatePerPerson = fixedCosts.waterPerPersonPerDay
+  // Every other active fixed cost is charged like water: its own line, per person, on the same days.
+  const extraFixedItems = fixedCosts.extraItems ?? []
+  // The built-in water default and any cost left uncharged are never silent.
+  warnings.push(...(fixedCosts.warnings ?? []))
 
   // ============================================
   // CREATE DAYS AND SERVICES
@@ -434,7 +455,7 @@ export async function createCruiseItineraryServices(
       // Fetch aliases for resolving alternative attraction names
       let aliasToCanonical: Map<string, string> | null = null
       try {
-        const aliases = await fetchAttractionAliases(supabase)
+        const aliases = await fetchAttractionAliases(supabase, orgId)
         aliasToCanonical = aliases.aliasToCanonical
       } catch { /* ignore if table doesn't exist yet */ }
 
@@ -531,6 +552,28 @@ export async function createCruiseItineraryServices(
       })) {
         totalSupplierCost += waterCost
         totalClientPrice += withMargin(waterCost)
+      }
+
+      for (const item of extraFixedItems) {
+        const itemCost = item.perPersonPerDay * totalPax
+        if (await insertService(dayData.day_number, {
+          itinerary_day_id: day.id,
+          service_type: 'supplies',
+          service_code: 'FIXED_COST',
+          service_name: item.name,
+          quantity: totalPax,
+          rate_eur: item.perPersonPerDay,
+          rate_non_eur: item.perPersonPerDay,
+          total_cost: toTarget(itemCost),
+          client_price: toTarget(withMargin(itemCost)),
+          notes: item.name,
+          supplier_currency: rateCurrency,
+          supplier_cost_original: itemCost,
+          exchange_rate_used: rateToTarget || 1,
+        })) {
+          totalSupplierCost += itemCost
+          totalClientPrice += withMargin(itemCost)
+        }
       }
     }
   }

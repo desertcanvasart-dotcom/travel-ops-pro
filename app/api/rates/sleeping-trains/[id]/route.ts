@@ -4,6 +4,13 @@ import { clientMessage } from '@/lib/api-errors'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { operatorNameForSupplier } from '@/lib/suppliers/operator-name'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
+import { validateRatePayload } from '@/lib/rate-validation'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { validityError } from '@/lib/rates/accommodation-payload'
+import { rateUsage, rateInUseMessage } from '@/lib/rates/rate-in-use'
+import { isForeignKeyViolation } from '@/lib/rates/accommodation-duplicates'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
@@ -13,11 +20,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'sleeping_train_rates', id, orgId))) return notFoundInOrg('Rate')
 
     const { data, error } = await supabaseAdmin
       .from('sleeping_train_rates')
       .select('*')
+      .eq('org_id', orgId)
       .eq('id', id)
       .single()
 
@@ -38,8 +49,41 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'sleeping_train_rates', id, orgId))) return notFoundInOrg('Rate')
     const body = await request.json()
+
+    // The same money checks as the create (a negative fare saved here).
+    const rateCheck = validateRatePayload(body)
+    if (!rateCheck.ok) {
+      return NextResponse.json({ success: false, error: 'Invalid rate values', violations: rateCheck.errors }, { status: 400 })
+    }
+
+    // PUT can patch: the half of the validity, or the supplier, the body
+    // leaves out is read off the row.
+    const { data: current } = await supabaseAdmin
+      .from('sleeping_train_rates')
+      .select('supplier_id, rate_valid_from, rate_valid_to')
+      .eq('org_id', orgId)
+      .eq('id', id)
+      .maybeSingle()
+    const badDates = validityError(
+      body.rate_valid_from !== undefined ? body.rate_valid_from : current?.rate_valid_from,
+      body.rate_valid_to !== undefined ? body.rate_valid_to : current?.rate_valid_to,
+    )
+    if (badDates) return NextResponse.json({ success: false, error: badDates }, { status: 400 })
+
+    // Another company's supplier is refused, never stored.
+    let supplierId: string | null = current?.supplier_id ?? null
+    if (body.supplier_id !== undefined) {
+      const supplierCheck = await validateAndResolveSupplierFields({ supplier_id: body.supplier_id }, supabaseAdmin)
+      if (!supplierCheck.ok) {
+        return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+      }
+      supplierId = supplierCheck.supplier_id
+    }
 
     const updateData: Record<string, any> = {}
 
@@ -70,17 +114,17 @@ export async function PUT(
     if (body.supplier_id !== undefined || body.operator_name !== undefined) {
       updateData.operator_name = await operatorNameForSupplier(
         supabaseAdmin,
-        body.supplier_id,
+        body.supplier_id !== undefined ? supplierId : undefined,
         body.operator_name
       )
     }
-    if (body.supplier_id !== undefined) updateData.supplier_id = body.supplier_id || null
+    if (body.supplier_id !== undefined) updateData.supplier_id = supplierId
     if (body.property_id !== undefined) {
       // Optional explicit train link (Phase 3): explicit null clears it, and
       // a stale id also resolves to null rather than saving a broken link.
       const trainProp = await resolveRateProperty(supabaseAdmin, {
         propertyType: 'train',
-        supplierId: body.supplier_id || null,
+        supplierId,
         name: null,
         propertyId: body.property_id,
       })
@@ -93,6 +137,7 @@ export async function PUT(
     const { data, error } = await supabaseAdmin
       .from('sleeping_train_rates')
       .update(updateData)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select('*')
       .single()
@@ -114,13 +159,25 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'sleeping_train_rates', id, orgId))) return notFoundInOrg('Rate')
+
+    // Refused while a programme's travel leg or a Pricing Grid line still
+    // names this sleeper (lib/rates/rate-in-use).
+    const inUse = rateInUseMessage(await rateUsage(supabaseAdmin, 'sleeping_train_rates', id, orgId))
+    if (inUse) return NextResponse.json({ success: false, error: inUse }, { status: 409 })
 
     const { error } = await supabaseAdmin
       .from('sleeping_train_rates')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
+    if (isForeignKeyViolation(error)) {
+      return NextResponse.json({ success: false, error: 'This rate is still used elsewhere. Switch it off (untick Active) instead of deleting it.' }, { status: 409 })
+    }
     if (error) {
       console.error('DELETE sleeping_train_rate error:', error)
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })

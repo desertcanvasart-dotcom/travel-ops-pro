@@ -19,6 +19,9 @@ const supabaseAdmin = createClient(
 //   { action: 'update_city', id, name?, name_ja?, lat?, lng?, is_active? }
 //   { action: 'delete_city', id }   — only a city no rate references by name
 //
+// Every destination is ONE company's (destinations.org_id); a city is its
+// destination's. Nothing here reads or writes another company's.
+//
 // City DELETE checks rate references by NAME (rates key city as free text):
 // deleting "Luxor" while transportation rates say "Luxor" would strand them
 // behind a vocabulary that no longer offers the word. Deactivate instead.
@@ -37,6 +40,24 @@ export async function POST(request: NextRequest) {
     const body = await request.json().catch(() => null)
     const action = String(body?.action ?? '')
 
+    // A destination of this company's / the destination of a city of this
+    // company's — another company's is "not found", like a missing one.
+    const ownDestination = async (destinationId: string) => {
+      if (!destinationId) return false
+      const { data } = await supabaseAdmin.from('destinations').select('id').eq('id', destinationId).eq('org_id', orgId).maybeSingle()
+      return !!data
+    }
+    const ownCity = async (cityId: string) => {
+      if (!cityId) return null
+      const { data } = await supabaseAdmin
+        .from('destination_cities')
+        .select('id, name, destinations!inner(org_id)')
+        .eq('id', cityId)
+        .eq('destinations.org_id', orgId)
+        .maybeSingle()
+      return (data as { id: string; name: string } | null) ?? null
+    }
+
     if (action === 'create_destination') {
       const country_code = String(body.country_code ?? '').trim().toUpperCase()
       const name = String(body.name ?? '').trim()
@@ -45,7 +66,7 @@ export async function POST(request: NextRequest) {
       }
       const { data, error } = await supabaseAdmin
         .from('destinations')
-        .insert({ country_code, name, name_ja: body.name_ja || null })
+        .insert({ country_code, name, name_ja: body.name_ja || null, org_id: orgId })
         .select()
         .single()
       if (error) {
@@ -57,20 +78,38 @@ export async function POST(request: NextRequest) {
 
     if (action === 'update_destination') {
       const id = String(body.id ?? '')
+      // Checked FIRST: the default used to be cleared before this update ran,
+      // so an id that was not this company's (or a typo) failed .single() and
+      // left the company with no default destination at all.
+      if (!(await ownDestination(id))) {
+        return NextResponse.json({ success: false, error: 'Destination not found' }, { status: 404 })
+      }
       const update: Record<string, unknown> = { updated_at: new Date().toISOString() }
-      if ('name' in body) update.name = String(body.name).trim()
+      if ('name' in body) {
+        const name = String(body.name ?? '').trim()
+        if (!name) return NextResponse.json({ success: false, error: 'A destination needs a name' }, { status: 400 })
+        update.name = name
+      }
       if ('name_ja' in body) update.name_ja = body.name_ja || null
       if ('is_active' in body) update.is_active = body.is_active === true
       // Phase 2 fields — the destination's voice in the generation prompt.
       if ('generation_brief' in body) update.generation_brief = String(body.generation_brief ?? '').trim() || null
       if ('glossary' in body) update.glossary = String(body.glossary ?? '').trim() ? { text: String(body.glossary).trim() } : null
-      if (body.is_default === true) {
-        // Exactly one default: quoting and new itineraries start from it.
-        await supabaseAdmin.from('destinations').update({ is_default: false }).eq('is_default', true)
-        update.is_default = true
-      }
-      const { data, error } = await supabaseAdmin.from('destinations').update(update).eq('id', id).select().single()
+      if (body.is_default === true) update.is_default = true
+      const { data, error } = await supabaseAdmin.from('destinations').update(update).eq('org_id', orgId).eq('id', id).select().single()
       if (error) throw error
+      if (body.is_default === true) {
+        // Exactly one default: quoting and new itineraries start from it. The
+        // others are cleared only AFTER the new one is set, so a failure
+        // leaves two defaults for a moment at worst — never none.
+        const { error: clearError } = await supabaseAdmin
+          .from('destinations')
+          .update({ is_default: false })
+          .eq('org_id', orgId)
+          .eq('is_default', true)
+          .neq('id', id)
+        if (clearError) throw clearError
+      }
       return NextResponse.json({ success: true, data })
     }
 
@@ -80,13 +119,17 @@ export async function POST(request: NextRequest) {
       if (!destination_id || !name) {
         return NextResponse.json({ success: false, error: 'Destination and city name are required' }, { status: 400 })
       }
+      if (!(await ownDestination(destination_id))) {
+        return NextResponse.json({ success: false, error: 'Destination not found' }, { status: 404 })
+      }
 
       // Rates match cities by bare NAME, so the same name in two destinations
       // means both countries' rates answer for it. Allowed — some names are
       // genuinely shared — but never silently.
       const { data: sameName } = await supabaseAdmin
         .from('destination_cities')
-        .select('id, destinations(name)')
+        .select('id, destinations!inner(name, org_id)')
+        .eq('destinations.org_id', orgId)
         .ilike('name', name)
         .neq('destination_id', destination_id)
       const clash = (sameName ?? [])
@@ -139,6 +182,7 @@ export async function POST(request: NextRequest) {
       if (Object.keys(update).length === 0) {
         return NextResponse.json({ success: false, error: 'Nothing to update' }, { status: 400 })
       }
+      if (!(await ownCity(id))) return NextResponse.json({ success: false, error: 'City not found' }, { status: 404 })
       const { data, error } = await supabaseAdmin.from('destination_cities').update(update).eq('id', id).select().single()
       if (error) throw error
       return NextResponse.json({ success: true, data })
@@ -146,13 +190,16 @@ export async function POST(request: NextRequest) {
 
     if (action === 'delete_city') {
       const id = String(body.id ?? '')
-      const { data: city } = await supabaseAdmin.from('destination_cities').select('name').eq('id', id).single()
+      const city = await ownCity(id)
       if (!city) return NextResponse.json({ success: false, error: 'City not found' }, { status: 404 })
 
+      // This company's rates: another company's rates naming the same city
+      // are no reason to keep it, and their count is not ours to show.
       for (const table of CITY_RATE_TABLES) {
         const { count } = await supabaseAdmin
           .from(table)
           .select('id', { count: 'exact', head: true })
+          .eq('org_id', orgId)
           .ilike('city', city.name)
         if ((count ?? 0) > 0) {
           return NextResponse.json(

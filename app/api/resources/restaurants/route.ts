@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // Actor-attributed service-role client (lib/supabase-actor): rate-table
 // writes from here reach fn_rate_audit_trigger, and without the actor
@@ -11,6 +12,8 @@ const supabaseAdmin = createServerClient()
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const supplierId = searchParams.get('supplier_id')
     const city = searchParams.get('city')
@@ -24,6 +27,7 @@ export async function GET(request: NextRequest) {
         *,
         supplier:supplier_id (id, name, city, contact_phone, contact_email, cuisine_types)
       `)
+      .eq('org_id', orgId)
       .order('restaurant_name')
       .order('meal_type')
 
@@ -56,6 +60,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     const newRate = {
@@ -65,7 +71,7 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabaseAdmin
       .from('meal_rates')
-      .insert([newRate])
+      .insert([{ ...newRate, org_id: orgId }])
       .select(`*, supplier:supplier_id (id, name, city)`)
       .single()
 

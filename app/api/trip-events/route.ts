@@ -79,6 +79,8 @@ export async function POST(request: NextRequest) {
         .from('team_members')
         .select('id')
         .eq('user_id', user?.id ?? '')
+        // Their row in THIS trip's company (a person in both has one each).
+        .eq('org_id', org_id)
         .maybeSingle()
       actorTeamMemberId = me?.id ?? null
     } catch { /* team_members shape differs — fall back to actor_name */ }

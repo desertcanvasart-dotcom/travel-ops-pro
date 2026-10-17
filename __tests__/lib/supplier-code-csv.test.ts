@@ -27,14 +27,24 @@ describe('supplier_code is a column on every supplier-bearing rate config', () =
   })
 })
 
-// A fake suppliers table: one with a code, one whose code differs only in case.
+// A fake suppliers table: one with a code, one whose code differs only in
+// case — and another company's supplier holding the SAME code (codes are
+// unique per company since migration 20261205), which must never resolve.
 const SUPPLIERS = [
-  { id: 'aaaa1111-0000-0000-0000-000000000001', name: 'Nile Cruises Co', supplier_code: 'SUP-0001' },
-  { id: 'bbbb2222-0000-0000-0000-000000000002', name: 'Cairo Guides', supplier_code: 'SUP-0002' },
+  { id: 'aaaa1111-0000-0000-0000-000000000001', name: 'Nile Cruises Co', supplier_code: 'SUP-0001', org_id: 'org-1' },
+  { id: 'bbbb2222-0000-0000-0000-000000000002', name: 'Cairo Guides', supplier_code: 'SUP-0002', org_id: 'org-1' },
+  { id: 'cccc3333-0000-0000-0000-000000000003', name: 'Other Company Cruises', supplier_code: 'SUP-0001', org_id: 'org-2' },
 ]
 const fakeSupabase = {
   from() {
-    return { select: async () => ({ data: SUPPLIERS, error: null }) }
+    return {
+      select: () => ({
+        eq: async (column: string, value: string) => ({
+          data: SUPPLIERS.filter(s => (s as Record<string, string>)[column] === value),
+          error: null,
+        }),
+      }),
+    }
   },
 } as any
 
@@ -43,6 +53,7 @@ describe('batchResolveSuppliers — resolve by supplier_code', () => {
     const res = await batchResolveSuppliers(
       [{ supplier_code: 'SUP-0001' }, { supplier_code: 'sup-0002' }],
       fakeSupabase,
+      'org-1',
     )
     expect(res.resolvedIdByCode.get('sup-0001')).toBe(SUPPLIERS[0].id)
     expect(res.resolvedIdByCode.get('sup-0002')).toBe(SUPPLIERS[1].id)
@@ -50,7 +61,7 @@ describe('batchResolveSuppliers — resolve by supplier_code', () => {
   })
 
   it('flags a code that matches no supplier here', async () => {
-    const res = await batchResolveSuppliers([{ supplier_code: 'SIB-999' }], fakeSupabase)
+    const res = await batchResolveSuppliers([{ supplier_code: 'SIB-999' }], fakeSupabase, 'org-1')
     expect(res.unknownCodes.has('sib-999')).toBe(true)
     expect(res.resolvedIdByCode.size).toBe(0)
   })
@@ -59,6 +70,7 @@ describe('batchResolveSuppliers — resolve by supplier_code', () => {
     const res = await batchResolveSuppliers(
       [{ supplier_code: 'SUP-0001', supplier_name: 'A Totally Different Name' }],
       fakeSupabase,
+      'org-1',
     )
     // Resolved by code, and the (unknown) name is never even consulted.
     expect(res.resolvedIdByCode.get('sup-0001')).toBe(SUPPLIERS[0].id)
@@ -66,7 +78,25 @@ describe('batchResolveSuppliers — resolve by supplier_code', () => {
   })
 
   it('still resolves by name when no code is given (unchanged behaviour)', async () => {
-    const res = await batchResolveSuppliers([{ supplier_name: 'Cairo Guides' }], fakeSupabase)
+    const res = await batchResolveSuppliers([{ supplier_name: 'Cairo Guides' }], fakeSupabase, 'org-1')
     expect(res.resolvedIdByName.get('cairo guides')).toBe(SUPPLIERS[1].id)
+  })
+})
+
+describe('batchResolveSuppliers — one company at a time', () => {
+  it("never resolves another company's supplier by code, id or name", async () => {
+    const res = await batchResolveSuppliers(
+      [{ supplier_code: 'SUP-0001' }, { supplier_id: 'aaaa1111-0000-0000-0000-000000000001' }, { supplier_name: 'Nile Cruises Co' }],
+      fakeSupabase,
+      'org-2',
+    )
+    expect(res.resolvedIdByCode.get('sup-0001')).toBe('cccc3333-0000-0000-0000-000000000003')
+    expect(res.unknownIds.has('aaaa1111-0000-0000-0000-000000000001')).toBe(true)
+    expect(res.noMatchNames.has('nile cruises co')).toBe(true)
+  })
+
+  it('with no company, nothing resolves', async () => {
+    const res = await batchResolveSuppliers([{ supplier_code: 'SUP-0001' }], fakeSupabase, null)
+    expect(res.unknownCodes.has('sup-0001')).toBe(true)
   })
 })

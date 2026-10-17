@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import { ChevronRight } from 'lucide-react'
-import { ScreenshotPlaceholder, Tip } from '../layout'
+import { Tip } from '../layout'
 
 export default function WhatsAppAgentDocsPage() {
   return (
@@ -14,77 +14,60 @@ export default function WhatsAppAgentDocsPage() {
 
       <h1 className="text-3xl font-bold text-gray-900 mb-4">WhatsApp AI Agent</h1>
       <p className="text-gray-600 mb-8">
-        The WhatsApp AI Agent composes a <strong>suggested reply</strong> to an incoming WhatsApp message by looking up your real data &mdash; the customer&apos;s trips, a specific itinerary, or live availability. It is <strong>draft-gated</strong>: the suggestion is stored for a human operator to review and send. The agent never sends a message on its own.
+        The WhatsApp AI Agent is a reply-suggestion engine that is built but <strong>not yet shown anywhere in the
+        app</strong>. No screen asks it for a suggestion, no screen shows one, and there is no switch for it in Settings.
+        This page says what exists today, so nobody looks for a button that is not there.
       </p>
 
-      {/* Draft-Gated Safety Model */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Draft-Gated: Human Stays in the Loop</h2>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">What you can use today</h2>
+        <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li>
+            Every incoming WhatsApp message is also added to <Link href="/docs/copilot" className="text-primary-600 hover:underline">AI Copilot</Link>&apos;s
+            inbox. Draft replies for WhatsApp customers come from there.
+          </li>
+          <li>
+            In the <Link href="/docs/communication" className="text-primary-600 hover:underline">Unified Inbox</Link>,
+            <strong> Translation</strong> and <strong>Generate Itinerary</strong> work on WhatsApp conversations.
+          </li>
+        </ul>
+      </section>
+
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">What is built but not connected</h2>
         <p className="text-gray-600 mb-3">
-          Every reply the agent produces is a <strong>draft suggestion</strong>, not an outgoing message. It is saved against the conversation and waits for your approval.
+          The agent writes one suggested reply to the latest customer message, using read-only lookups in your
+          company&apos;s own data:
         </p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li>The agent uses <strong>read-only</strong> tools &mdash; it can look things up but cannot change records or send anything</li>
-          <li>Mutating and sending actions are intentionally left out of the toolset</li>
-          <li>The feature is <strong>off by default</strong> and must be explicitly enabled per organization</li>
+          <li><strong>Search customer trips</strong> &mdash; the linked client&apos;s itineraries and bookings.</li>
+          <li><strong>Look up itinerary</strong> &mdash; one trip&apos;s days and pricing.</li>
+          <li><strong>Check availability</strong> &mdash; capacity for the dates, and group departures in the range.</li>
+          <li><strong>Escalate to human</strong> &mdash; flags complaints, cancellations, refunds, money questions and urgent requests instead of answering them.</li>
+        </ul>
+        <p className="text-gray-600 mt-3 mb-3">
+          A suggestion carries a confidence figure and whether it should be escalated. It is stored on the conversation
+          and never sent: it cannot send anything or change any record.
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>It is off for every company until switched on. The switch exists only as a setting behind the API (admins and managers); there is no screen for it.</li>
+          <li>Each request counts against the same AI draft limit as the other suggestion features: 20 per person every 5 minutes.</li>
+          <li>Separate services that write several reply options for a WhatsApp or email message, in a chosen tone, exist the same way: built, with no screen that uses them.</li>
         </ul>
         <Tip>
-          <strong>No surprise messages.</strong> The operator always reviews and presses send. The agent&apos;s job ends at proposing a well-grounded draft.
+          Until suggestions appear in the inbox, write WhatsApp replies yourself in the Unified Inbox, or start from the
+          AI Copilot&apos;s draft.
         </Tip>
-        <ScreenshotPlaceholder caption="WhatsApp conversation with the agent's suggested reply awaiting operator review" />
       </section>
 
-      {/* What the Agent Can Look Up */}
       <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">What the Agent Can Look Up</h2>
-        <p className="text-gray-600 mb-3">
-          The agent is <strong>tool-calling</strong>: before writing, it can query your organization&apos;s data (scoped to your records only) to ground the reply in fact. Its tools are:
-        </p>
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">What it does not do</h2>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li><strong>Search customer trips</strong> &mdash; The linked client&apos;s itineraries and bookings, with dates and status</li>
-          <li><strong>Look up itinerary</strong> &mdash; The day-by-day details and pricing of one specific trip</li>
-          <li><strong>Check availability</strong> &mdash; Whether you have <strong>capacity</strong> for the travel dates, and optionally any scheduled group <strong>departures</strong> in the range</li>
-          <li><strong>Escalate to human</strong> &mdash; Flag the conversation for an operator on complaints, cancellations, refunds, money questions, or anything urgent</li>
+          <li>It does not show suggestions in the Unified Inbox or the WhatsApp Inbox.</li>
+          <li>It does not reply to customers on its own, and there is no automatic WhatsApp reply.</li>
+          <li>It cannot be switched on from Settings.</li>
         </ul>
-        <p className="text-gray-600 mt-3">
-          Because availability is checked against real capacity and departures, the draft won&apos;t promise dates you can&apos;t actually serve.
-        </p>
       </section>
-
-      {/* Confidence & Escalation */}
-      <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Confidence &amp; Escalation</h2>
-        <p className="text-gray-600 mb-3">
-          Each suggestion comes with a <strong>confidence</strong> signal and the agent&apos;s reasoning, so you can see how sure it is and which tools it used. When a message is sensitive &mdash; a complaint, a refund, a same-day request, or anything financial it&apos;s unsure about &mdash; the agent escalates to a human instead of guessing.
-        </p>
-      </section>
-
-      {/* Multi-Variant Reply Suggestions */}
-      <section className="mb-10">
-        <h2 className="text-xl font-semibold text-gray-900 mb-4">Multi-Variant Reply Suggestions</h2>
-        <p className="text-gray-600 mb-3">
-          Beyond the single tool-using agent, Autoura can generate <strong>several distinct draft options</strong> for a single message across both <strong>WhatsApp and email</strong>, so you can pick the wording that fits. These variants:
-        </p>
-        <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li>Are grounded in your knowledge base via the same semantic retrieval as the Copilot</li>
-          <li>Respect a chosen <strong>tone</strong> and can follow a short instruction you provide</li>
-          <li>Adapt to the recipient&apos;s preferred language</li>
-          <li>Are written as drafts &mdash; like everything here, nothing is sent automatically</li>
-        </ul>
-        <ScreenshotPlaceholder caption="Multiple suggested reply options for one message, ready to pick and edit" />
-      </section>
-
-      {/* Navigation */}
-      <div className="mt-12 pt-6 border-t border-gray-200 flex justify-between">
-        <Link href="/docs" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          <ChevronRight className="w-4 h-4 rotate-180" />
-          All Docs
-        </Link>
-        <Link href="/docs/concierge" className="flex items-center gap-2 text-sm text-gray-600 hover:text-primary-600 transition-colors">
-          Next: Concierge Briefs
-          <ChevronRight className="w-4 h-4" />
-        </Link>
-      </div>
     </div>
   )
 }

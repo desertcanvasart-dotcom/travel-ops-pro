@@ -72,8 +72,10 @@ describe('wide rate CSV: dates and row numbers', () => {
     const p = validateImportData([{ ...required, [firstRequired.name]: '' }, { ...required }], cfg)
     expect(p.parsedValidRowNumbers).toEqual([3])
     const route = src('app/api/rates/bulk/import/route.ts')
-    expect(route).toContain('const rowNum = sheetRowOf.get(row) ?? idx + 2')
-    expect(route).toContain('row: sheetRowOf.get(record) ?? idx + 2')
+    // The supplier check and the per-row checks before the preview (key,
+    // vehicle bands, money values — which used to run at commit) both report
+    // the sheet row.
+    expect(route.split('const rowNum = sheetRowOf.get(row) ?? idx + 2').length - 1).toBeGreaterThanOrEqual(2)
     expect(route).toContain('parsedValidRowNumbers: _rows')
   })
 })
@@ -103,13 +105,14 @@ describe('whole-table reads page past the 1000-row cap', () => {
       from: () => {
         const q: any = {
           select: () => q,
+          eq: () => q, // the company filter (suppliers.org_id, 20261205)
           order: () => q,
           range: async (from: number, to: number) => ({ data: suppliers.slice(from, to + 1), error: null }),
         }
         return q
       },
     }
-    const r = await batchResolveSuppliers([{ supplier_name: 'Supplier 1150' }], db)
+    const r = await batchResolveSuppliers([{ supplier_name: 'Supplier 1150' }], db, 'org-1')
     expect(r.resolvedIdByName.get('supplier 1150')).toBe('id-1150')
   })
 

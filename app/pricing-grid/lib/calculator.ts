@@ -11,10 +11,12 @@ import type {
 } from '../types'
 import { isSupplementItem, isSingleSupplementItem, SLOT_DEFINITIONS } from '../types'
 import { priceAcrossPax } from '@/lib/pricing/pax-range'
-import { computeUplift, seasonForDate, type SeasonWindow } from '@/lib/pricing/season-uplift'
+import { computeUplift, seasonForDate, type SeasonMatch, type SeasonWindow } from '@/lib/pricing/season-uplift'
+import { roundToCurrency } from '@/lib/currency-totals'
 import { dayDate, rateOnDate } from '@/lib/rates/date-window'
 import { soldItems, customAmountSold } from './guide-rule'
 import { soldAccommodationItems } from './sold-lines'
+import { fixedCostPerPerson } from './fixed-cost-lines'
 
 // --- Helpers ---
 
@@ -53,7 +55,7 @@ const GROUP_SLOT_IDS = new Set([
 
 const PP_SLOT_IDS = new Set([
   'accommodation', 'entrance_fees', 'flights', 'experiences',
-  'meals', 'water', 'cruise', 'other_pp'
+  'meals', 'cruise', 'other_pp'
 ])
 
 export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
@@ -94,7 +96,8 @@ export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
     // Airport / hotel services and activities: each item by its own rate's
     // basis — per group, per person or per unit (item-basis.ts).
     if (BASIS_SLOTS.has(slot.slotId) && !(slot.customAmount > 0)) {
-      for (const item of slot.selectedItems) {
+      // Only what is sold: guide off drops the guide's tips (guide-rule.ts).
+      for (const item of soldItems(slot, config.withGuide)) {
         const part = itemCost(slot.slotId, item, getRate(item, passport, on), pax)
         groupTotal += part.group
         perPersonTotal += part.perPerson
@@ -132,20 +135,48 @@ export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
     }
   }
 
+  // Rates › Fixed Costs, on a sightseeing day: per person, with no pick to make
+  // (fixed-cost-lines.ts). The save writes the same lines.
+  perPersonTotal += fixedCostPerPerson(day, config)
+
   const groupPerPerson = pax > 0 ? groupTotal / pax : 0
   const dailyPerPerson = groupPerPerson + perPersonTotal
-  const dailyTotal = dailyPerPerson * pax
+  // The day's whole cost, unrounded and without dividing the group costs:
+  // what the save's lines for this day add up to.
+  const exactTotal = groupTotal + perPersonTotal * pax
 
   return {
     groupTotal: round2(groupTotal),
     perPersonTotal: round2(perPersonTotal),
     groupPerPerson: round2(groupPerPerson),
     dailyPerPerson: round2(dailyPerPerson),
-    dailyTotal: round2(dailyTotal),
+    dailyTotal: round2(exactTotal),
+    exactTotal,
   }
 }
 
 // --- Grand Totals ---
+
+/**
+ * The selling figures from a trip's whole cost — ONE rounding for the screen
+ * and the save. The screen used to round each day's per-person figure and
+ * then multiply by pax, while the save summed its lines: a group cost of 100
+ * for 3 at 25% showed 124.98 and stored 125.00. Now both take the whole cost,
+ * apply the margin once, round once in the rate currency (a yen has no
+ * cents), and add the premium (departure date) on top, rounded the same way.
+ */
+export function sellingFromCost(input: {
+  totalCost: number
+  marginPercent: number
+  season: SeasonMatch | null
+  currency?: string | null
+}): { baseSellingPriceTotal: number; seasonUplift: number; sellingPriceTotal: number } {
+  const round = (n: number) => roundToCurrency(n, input.currency || 'EUR')
+  const margin = Math.max(0, Math.min(isNaN(input.marginPercent) ? 0 : input.marginPercent, MARGIN_CAP))
+  const baseSellingPriceTotal = round(input.totalCost * (1 + margin / 100))
+  const seasonUplift = round(computeUplift({ sellingPrice: baseSellingPriceTotal, season: input.season }).amount)
+  return { baseSellingPriceTotal, seasonUplift, sellingPriceTotal: round(baseSellingPriceTotal + seasonUplift) }
+}
 
 export function calculateGrandTotals(
   days: GridDay[],
@@ -155,35 +186,30 @@ export function calculateGrandTotals(
   // down. No calendar means no premium, which is what an ordinary date is.
   seasonWindows: SeasonWindow[] = [],
 ): GridTotals {
-  const { pax, marginPercent } = config
+  const { pax } = config
 
-  let costPerPerson = 0
+  // The whole cost, unrounded: each day's group costs plus its per-person
+  // costs × pax — the same lines the save writes and sums.
+  let totalCost = 0
   for (const day of days) {
     const calc = calculateDay(day, config)
-    costPerPerson += calc.dailyPerPerson
+    totalCost += calc.exactTotal
   }
-
-  const totalCost = costPerPerson * pax
-  // Clamp margin to reasonable range (0-200%)
-  const safeMargin = Math.max(0, Math.min(isNaN(marginPercent) ? 0 : marginPercent, 200))
-  const marginMultiplier = 1 + safeMargin / 100
-  const basePerPerson = round2(costPerPerson * marginMultiplier)
-  const baseSellingPriceTotal = round2(basePerPerson * pax)
-  const marginAmount = round2(baseSellingPriceTotal - totalCost)
 
   // The premium rides on top of the selling price, on the whole of it, and the
   // DEPARTURE date decides — the same rule the B2B engine follows, so the same
   // trip cannot be quoted two ways depending on which screen produced it.
   const season = seasonForDate(seasonWindows, config.startDate)
-  const uplift = computeUplift({ sellingPrice: baseSellingPriceTotal, season })
-  const seasonUplift = round2(uplift.amount)
-  const sellingPriceTotal = round2(baseSellingPriceTotal + seasonUplift)
+  const { baseSellingPriceTotal, seasonUplift, sellingPriceTotal } = sellingFromCost({
+    totalCost, marginPercent: config.marginPercent, season, currency: config.rateCurrency,
+  })
+  const marginAmount = round2(baseSellingPriceTotal - totalCost)
 
   return {
-    costPerPerson: round2(costPerPerson),
+    costPerPerson: pax > 0 ? round2(totalCost / pax) : 0,
     totalCost: round2(totalCost),
     marginAmount,
-    sellingPricePerPerson: pax > 0 ? round2(sellingPriceTotal / pax) : basePerPerson,
+    sellingPricePerPerson: pax > 0 ? round2(sellingPriceTotal / pax) : sellingPriceTotal,
     sellingPriceTotal,
     baseSellingPriceTotal,
     seasonName: season?.name ?? null,
@@ -200,8 +226,8 @@ export function calculateGrandTotals(
 //
 //     totalCost(pax) = GroupFixed + Transport(pax) + PerPerson × pax
 //
-// where PerPerson (accommodation double-occupancy PPD, entrance, meals, water,
-// cruise, flights) and GroupFixed (guide, tipping, airport/hotel services, boat
+// where PerPerson (accommodation double-occupancy PPD, entrance, meals, fixed
+// costs, cruise, flights) and GroupFixed (guide, tipping, airport/hotel services, boat
 // rides) are pax-invariant, and Transport(pax) is the ONE non-linear term — the
 // vehicle tier (Sedan→Minivan→Van→Minibus→Bus) is re-selected by group size.
 // This mirrors auto-pricing-service's per-pax loop exactly; here the inputs are
@@ -284,6 +310,9 @@ function aggregateNonTransport(days: GridDay[], config: GridConfig) {
     // Each day at its own date, the same rule calculateDay applies — the pax
     // sheet and the day cards must agree about what a night costs.
     const on = dayDate(config.startDate, day.dayNumber)
+    // The day's fixed costs are per person like water was, so the tour
+    // leader pays them too (tourLeaderCost = perPerson + single supplement).
+    perPerson += fixedCostPerPerson(day, config)
     for (const slot of day.slots) {
       if (slot.slotId === 'route') continue // transport is pax-dependent — handled separately
 
@@ -307,7 +336,7 @@ function aggregateNonTransport(days: GridDay[], config: GridConfig) {
       // per person; per unit depends on the group size, so unitCostsForPax
       // adds it at each count.
       if (BASIS_SLOTS.has(slot.slotId) && !(slot.customAmount > 0)) {
-        for (const item of slot.selectedItems) {
+        for (const item of soldItems(slot, withGuide)) {
           const basis = itemBasis(slot.slotId, item)
           const rate = getRate(item, passport, on)
           if (basis === 'per_person') perPerson += rate
@@ -465,9 +494,13 @@ export function countMissingGuideBeds(days: GridDay[], config: GridConfig): numb
 
 // --- Currency Conversion ---
 
-export function convertAmount(eurAmount: number, exchangeRate: number | null): number {
-  if (!exchangeRate) return eurAmount
-  return round2(eurAmount * exchangeRate)
+/** A rate-currency amount in the currency the grid shows. The factor is
+ *  rate currency → shown currency (display-fx.ts); null = no conversion —
+ *  the figure is shown in the rate currency and labelled so, never under
+ *  another currency's sign. */
+export function convertAmount(rateAmount: number, exchangeRate: number | null): number {
+  if (!exchangeRate) return rateAmount
+  return round2(rateAmount * exchangeRate)
 }
 
 // --- Utility ---

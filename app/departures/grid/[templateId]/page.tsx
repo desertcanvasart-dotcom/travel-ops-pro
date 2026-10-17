@@ -8,8 +8,8 @@
 // through the engine. Per date: seats and status (this is where a programme's
 // dates are run), 燃油 and LND, then the three flight classes sold side by side
 // — economy, business, business one way — each with its typed AIR fare, its
-// 合計 and the website rate published for it (rounded up to end in 999 unless
-// typed). See lib/pricing/departure-buckets and
+// 合計 and the website rate published for it (in yen rounded up to end in 999,
+// in any other currency rounded to the cent, unless typed). See lib/pricing/departure-buckets and
 // handover/feature-specs/6-departures-grid-spec.md.
 // ============================================
 
@@ -56,7 +56,13 @@ interface GridBand {
   status: DepartureStatus
   maxPax: number
   minPax: number
+  /** Booked outside the app — typed on the departure's page. */
   bookedPax: number
+  heldConfirmed: number
+  heldPending: number
+  /** bookedPax + confirmed + pending holds (lib/departures/seats). */
+  seatsTaken: number
+  seatsFree: number
   fuelPp: number | null
   landPp: number
   classes: Record<FlightClass, ClassColumn>
@@ -72,6 +78,7 @@ interface GridResponse {
   rate_currency: string
   target_currency: string
   fx: number
+  fx_source: 'same' | 'typed' | 'rates'
   margin_percent: number
   bands: GridBand[]
 }
@@ -130,14 +137,16 @@ function withClasses(band: GridBand, patch: Partial<Record<EditableColumn, numbe
       const prev = band.classes[c]
       const airPp = AIR_COLUMN[c] in patch ? (patch[AIR_COLUMN[c]] ?? null) : prev.airPp
       const websiteTyped = WEB_COLUMN[c] in patch ? (patch[WEB_COLUMN[c]] ?? null) : prev.websiteTyped ? prev.websitePp : null
-      return [c, classColumn({ landPp: band.landPp, fuelPp, airPp, websiteTyped })]
+      return [c, classColumn({ landPp: band.landPp, fuelPp, airPp, websiteTyped, currency: band.currency })]
     }),
   ) as Record<FlightClass, ClassColumn>
+  const maxPax = 'max_pax' in patch && patch.max_pax != null ? patch.max_pax : band.maxPax
   return {
     ...band,
     fuelPp,
     classes,
-    maxPax: 'max_pax' in patch && patch.max_pax != null ? patch.max_pax : band.maxPax,
+    maxPax,
+    seatsFree: Math.max(0, maxPax - band.seatsTaken),
   }
 }
 
@@ -228,7 +237,9 @@ export default function DeparturesGridPage() {
   const [tier, setTier] = useState('standard')
   const [numPax, setNumPax] = useState(2)
   const [isEur, setIsEur] = useState(false) // ATS: JP passports → non-EUR
-  const [fxInput, setFxInput] = useState<string>('') // blank = use org/office default
+  const [fxInput, setFxInput] = useState<string>('') // blank = the app's exchange rates
+  // The currencies the server named when it could not convert (no rate on file).
+  const [fxPair, setFxPair] = useState<{ rate: string; target: string } | null>(null)
   // Guide language auto-selects the first with a rate (Japanese for ATS), so
   // the grid no longer hard-defaults to English. Mode = spot vs throughout.
   const guideLang = useGuideLanguageChoice()
@@ -289,7 +300,12 @@ export default function DeparturesGridPage() {
 
         const res = await fetch(`/api/departures/grid?${qs.toString()}`)
         const json = await res.json()
-        if (!json.success) throw new Error(json.error || 'Failed to load grid')
+        if (!json.success) {
+          if (json.rate_currency && json.target_currency) setFxPair({ rate: json.rate_currency, target: json.target_currency })
+          setGrid(null)
+          throw new Error(json.error || 'Failed to load grid')
+        }
+        setFxPair(null)
         setGrid(json.data)
       } catch (err: unknown) {
         setError(err instanceof Error ? err.message : 'Failed to load grid')
@@ -331,8 +347,8 @@ export default function DeparturesGridPage() {
         setError('Seats must be at least 1')
         return
       }
-      if (value < band.bookedPax) {
-        setError(`This date already has ${band.bookedPax} booked — seats cannot go below that`)
+      if (value < band.seatsTaken) {
+        setError(`This date has ${band.seatsTaken} seat(s) taken (booked and held) — seats cannot go below that`)
         return
       }
     }
@@ -360,6 +376,15 @@ export default function DeparturesGridPage() {
   }
 
   const saveStatus = async (band: GridBand, status: DepartureStatus) => {
+    // Cancelling releases the date's pending web-order holds (migration
+    // 20261215); confirmed ones stay for the office to rehome.
+    if (status === 'cancelled' && (band.heldPending > 0 || band.heldConfirmed > 0)) {
+      const parts = [
+        band.heldPending > 0 ? `its ${band.heldPending} pending held seat(s) are released` : null,
+        band.heldConfirmed > 0 ? `its ${band.heldConfirmed} confirmed seat(s) stay held until you release them on the departure's page` : null,
+      ].filter(Boolean)
+      if (!(await confirmDialog(`Cancel the ${dateBand(band.startDate, band.endDate)} departure? ${parts.join('; ')}.`))) return
+    }
     const cellKey = `${band.departureId}:status`
     setSavingCell(cellKey)
     setError(null)
@@ -371,8 +396,18 @@ export default function DeparturesGridPage() {
       })
       const json = await res.json()
       if (!json.success) throw new Error(json.error || 'Failed to update status')
+      const released = status === 'cancelled' && band.status !== 'cancelled' ? band.heldPending : 0
       setGrid(prev =>
-        prev ? { ...prev, bands: prev.bands.map(b => (b.departureId === band.departureId ? { ...b, status } : b)) } : prev,
+        prev
+          ? {
+              ...prev,
+              bands: prev.bands.map(b =>
+                b.departureId === band.departureId
+                  ? { ...b, status, heldPending: b.heldPending - released, seatsTaken: b.seatsTaken - released, seatsFree: Math.max(0, b.maxPax - (b.seatsTaken - released)) }
+                  : b,
+              ),
+            }
+          : prev,
       )
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : 'Failed to update status')
@@ -383,7 +418,7 @@ export default function DeparturesGridPage() {
 
   const deleteDeparture = async (band: GridBand) => {
     const label = dateBand(band.startDate, band.endDate)
-    const warning = band.bookedPax > 0 ? ` It has ${band.bookedPax} booked.` : ''
+    const warning = band.bookedPax > 0 ? ` It has ${band.bookedPax} booked outside the app.` : ''
     if (!(await confirmDialog(`Delete the ${label} departure?${warning}`))) return
     setDeletingRow(band.departureId)
     setError(null)
@@ -403,7 +438,7 @@ export default function DeparturesGridPage() {
     if (!grid) return
     const cur = grid.target_currency
     const header = [
-      'Departure', 'Status', 'Booked', 'Seats', `Fuel 燃油 (${cur})`, `LND (${cur})`,
+      'Departure', 'Status', 'Booked outside', 'Held confirmed', 'Held pending', 'Seats taken', 'Seats', `Fuel 燃油 (${cur})`, `LND (${cur})`,
       // Every class, whatever the table shows — the export is the full sheet.
       ...FLIGHT_CLASSES.flatMap(c => [`${FLIGHT_CLASS_LABELS[c]} AIR`, `${FLIGHT_CLASS_LABELS[c]} Total`, `${FLIGHT_CLASS_LABELS[c]} Website`]),
       'Complete',
@@ -413,6 +448,9 @@ export default function DeparturesGridPage() {
       dateBand(b.startDate, b.endDate),
       b.status,
       b.bookedPax,
+      b.heldConfirmed,
+      b.heldPending,
+      b.seatsTaken,
       b.maxPax,
       n(b.fuelPp),
       n(b.landPp),
@@ -554,22 +592,25 @@ export default function DeparturesGridPage() {
           </select>
         </label>
         <label className="flex items-center gap-1.5 text-gray-500">
-          FX{grid ? ` 1 ${grid.rate_currency} =` : ''}
+          FX{grid ? ` 1 ${grid.rate_currency} =` : fxPair ? ` 1 ${fxPair.rate} =` : ''}
           <input
             type="number"
             min={0}
-            step="0.01"
-            placeholder={grid ? String(grid.fx) : 'default'}
+            step="0.0001"
+            placeholder={grid ? String(grid.fx) : 'rate'}
+            title="Blank: the app's exchange rates. Type a rate to use your own."
+            disabled={!!grid && grid.rate_currency === grid.target_currency}
             value={fxInput}
             onChange={e => setFxInput(e.target.value)}
             onBlur={() => load(false)}
             className={`${control} !w-20`}
           />
-          {grid ? grid.target_currency : ''}
+          {grid ? grid.target_currency : fxPair ? fxPair.target : ''}
         </label>
         {grid && (
           <span className="ml-auto text-xs text-gray-400">
             margin {grid.margin_percent}% · rates in {grid.rate_currency}
+            {grid.rate_currency !== grid.target_currency && ` · FX ${grid.fx_source === 'typed' ? 'typed' : 'from exchange rates'}`}
           </span>
         )}
       </div>
@@ -589,7 +630,7 @@ export default function DeparturesGridPage() {
             <option value="all">All classes</option>
           </select>
         </label>
-        <span className="ml-auto text-xs text-gray-400">Website = total rounded up to end in 999, unless typed · CSV includes every class</span>
+        <span className="ml-auto text-xs text-gray-400">{currency === 'JPY' ? 'Website = total rounded up to end in 999' : 'Website = total rounded to the cent'}, unless typed · CSV includes every class</span>
       </div>
 
       {anyIncomplete && (
@@ -606,7 +647,10 @@ export default function DeparturesGridPage() {
           <div className="flex items-center justify-center h-64">
             <Loader2 className="w-8 h-8 text-[#647C47] animate-spin" />
           </div>
-        ) : !grid || grid.bands.length === 0 ? (
+        ) : !grid ? (
+          // Not loaded (the error above says why — e.g. no exchange rate).
+          <div className="flex items-center justify-center h-32 text-sm text-gray-500">The grid could not be priced.</div>
+        ) : grid.bands.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-64 text-gray-500">
             <Calendar className="w-12 h-12 mb-3 text-gray-300" />
             <p className="font-medium">No departures for this programme</p>
@@ -625,7 +669,7 @@ export default function DeparturesGridPage() {
               <thead className="sticky top-0 z-20">
                 <tr>
                   <th rowSpan={2} className={`${th} text-left sticky left-0 z-30 border-b border-gray-200`}>Departure</th>
-                  <th rowSpan={2} className={`${th} text-right border-b border-gray-200`}>Seats</th>
+                  <th rowSpan={2} className={`${th} text-right border-b border-gray-200`}>Taken / Seats</th>
                   <th rowSpan={2} className={`${th} text-left border-b border-gray-200`}>Status</th>
                   <th rowSpan={2} className={`${th} text-right border-b border-gray-200 ${groupEdge}`}>燃油 Fuel</th>
                   <th rowSpan={2} className={`${th} text-right border-b border-gray-200`}>LND ランド</th>
@@ -650,7 +694,13 @@ export default function DeparturesGridPage() {
                     <tr key={band.departureId} className={`group hover:bg-gray-50 ${band.status === 'cancelled' ? 'opacity-50' : ''}`}>
                       <td className={`${td} sticky left-0 z-10 bg-white group-hover:bg-gray-50 whitespace-nowrap`}>
                         <div className="flex items-center gap-1.5">
-                          <span className="font-medium text-gray-900">{dateBand(band.startDate, band.endDate)}</span>
+                          <Link
+                            href={`/departures/${band.departureId}`}
+                            className="font-medium text-gray-900 hover:text-[#647C47] hover:underline"
+                            title="Open this departure: seat holds, booked outside the app, notes"
+                          >
+                            {dateBand(band.startDate, band.endDate)}
+                          </Link>
                           {band.incomplete && (
                             <span
                               title={band.holes.length ? `Unpriced: ${band.holes.join(', ')}` : 'Incomplete price'}
@@ -662,9 +712,15 @@ export default function DeparturesGridPage() {
                           )}
                         </div>
                       </td>
-                      <td className={`${td} text-right whitespace-nowrap`} title="Booked / seats — seats are editable">
-                        <span className={`tabular-nums ${band.bookedPax >= band.maxPax ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
-                          {band.bookedPax} /
+                      <td
+                        className={`${td} text-right whitespace-nowrap`}
+                        title={`Taken / seats — ${band.bookedPax} booked outside the app, ${band.heldConfirmed} confirmed and ${band.heldPending} pending in web-order holds. Seats are editable.`}
+                      >
+                        <span className={`tabular-nums ${band.seatsTaken >= band.maxPax ? 'text-red-600 font-medium' : 'text-gray-500'}`}>
+                          {band.heldPending > 0 && (
+                            <span className="mr-1 px-1 py-0.5 text-[10px] rounded bg-amber-100 text-amber-700">{band.heldPending} pending</span>
+                          )}
+                          {band.seatsTaken} /
                         </span>
                         <NumCell
                           value={band.maxPax}
@@ -734,9 +790,10 @@ export default function DeparturesGridPage() {
 
       <p className="mt-2 text-xs text-gray-400">
         AIR is the international fare, typed per class — leave it blank where a class is not sold. LND is priced by the
-        engine per date and includes domestic flights. 燃油 is one amount for every class. Website is the total rounded up
-        to end in 999 (grey); type over it to publish your own (black), clear it to go back. FX is provisional pending
-        operator sign-off.
+        engine per date and includes domestic flights. 燃油 is one amount for every class. Website is the total — in yen rounded up
+        to end in 999, in any other currency rounded to the cent (grey); type over it to publish your own (black), clear it to go back. Prices are in your company&apos;s
+        currency; LND is converted from your rate currency at the app&apos;s exchange rate unless you type an FX rate. Taken
+        counts seats booked outside the app plus confirmed and pending web-order holds — open a date to confirm or release them.
       </p>
 
       {showGenerate && (
@@ -810,7 +867,9 @@ function ClassCells({
             title={
               col.websiteTyped
                 ? `Typed website rate — clear it to go back to ${col.websiteSuggested?.toLocaleString('en-US') ?? 'the suggestion'}`
-                : 'Suggested: the total rounded up to end in 999 — type to publish your own'
+                : currency === 'JPY'
+                  ? 'Suggested: the total rounded up to end in 999 — type to publish your own'
+                  : 'Suggested: the total, rounded to the cent — type to publish your own'
             }
             emphasis={col.websiteTyped}
             saving={savingWeb}

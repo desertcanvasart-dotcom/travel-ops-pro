@@ -6,7 +6,7 @@ import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { CalendarRange, Plus, Trash2, X, Check, Loader2, Info, ChevronLeft, CalendarPlus, Pencil, Copy } from 'lucide-react'
-import { SEASON_COLOURS } from '@/lib/pricing/season-admin'
+import { SEASON_COLOURS, SEASON_LABEL_MAX, SEASON_NAME_MAX } from '@/lib/pricing/season-admin'
 
 // ============================================
 // THE OPERATOR'S OWN HIGH DATES
@@ -289,6 +289,7 @@ export default function PricingSeasonsPage() {
               <input
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
+                maxLength={SEASON_NAME_MAX}
                 placeholder={t('seasonNamePlaceholder')}
                 className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-[#647C47] focus:border-transparent"
               />
@@ -392,6 +393,7 @@ export default function PricingSeasonsPage() {
                       <input
                         value={editName}
                         onChange={(e) => setEditName(e.target.value)}
+                        maxLength={SEASON_NAME_MAX}
                         className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                       />
                     </div>
@@ -556,6 +558,7 @@ export default function PricingSeasonsPage() {
                         <input
                           value={newLabel}
                           onChange={(e) => setNewLabel(e.target.value)}
+                          maxLength={SEASON_LABEL_MAX}
                           placeholder={t('labelPlaceholder')}
                           className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm"
                         />

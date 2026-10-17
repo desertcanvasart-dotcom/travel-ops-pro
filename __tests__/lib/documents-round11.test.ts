@@ -13,7 +13,7 @@ describe('paymentCurrencyFor', () => {
     expect(paymentCurrencyFor('gbp', null)).toEqual({ ok: true, currency: 'GBP' })
   })
   it('every payment write uses it', () => {
-    expect(src('app/api/payments/route.ts')).toContain('paymentCurrencyFor(body.currency, trip.currency)')
+    expect(src('app/api/payments/route.ts')).toContain('paymentCurrencyFor(fields.currency, trip.currency)')
     expect(src('app/api/payments/[id]/route.ts')).toContain('paymentCurrencyFor(safeBody.currency, trip.currency)')
     const inv = src('app/api/invoices/[id]/payments/route.ts')
     expect(inv).toContain('paymentCurrencyFor(body.currency, invoice.currency)')
@@ -46,7 +46,7 @@ describe('recordsInOrg', () => {
     expect(await recordsInOrg(d, 'o1', { client_id: 7 })).toBe(false)
   })
   it('invoice create and edit check them; the receipt WhatsApp sends only to our trip', () => {
-    expect(src('app/api/invoices/route.ts')).toContain('recordsInOrg(supabaseAdmin, orgId, { itinerary_id: body.itinerary_id, client_id: body.client_id })')
+    expect(src('app/api/invoices/route.ts')).toContain('recordsInOrg(supabaseAdmin, orgId, { itinerary_id: body.itinerary_id, client_id: body.client_id, invoice_id: body.parent_invoice_id })')
     expect(src('app/api/invoices/[id]/route.ts')).toContain('recordsInOrg(supabaseAdmin, orgId,')
     expect(src('app/api/whatsapp/send-receipt/route.ts')).toContain('payment.itineraries?.org_id === orgId ? payment.itineraries : null')
   })

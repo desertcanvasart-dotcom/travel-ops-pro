@@ -76,7 +76,9 @@ describe('sanitizeSeasons', () => {
     expect(sanitizeSeasons([{ from: 'not-a-date', to: 'nope' }], 'accommodation')).toBeNull()
   })
 
-  it('fills every rate field for the entity, blank reading as 0', () => {
+  // Blank guide_rate stays ABSENT (null via guideRateOf), never 0: 0 is a
+  // free bed or seat, blank is unpriced / the customer fare.
+  it('fills every rate field for the entity, blank reading as 0 — except the guide rate, left out', () => {
     const out = sanitizeSeasons(
       [{ name: 'Sparse', from: '2026-04-01', to: '2026-04-30', rates: { single_eur: 120 } }],
       'cruise'
@@ -84,7 +86,6 @@ describe('sanitizeSeasons', () => {
     expect(out![0].rates).toEqual({
       single_eur: 120, double_eur: 0, triple_eur: 0, suite_eur: 0,
       single_non_eur: 0, double_non_eur: 0, triple_non_eur: 0, suite_non_eur: 0,
-      guide_rate: 0,
     })
   })
 })

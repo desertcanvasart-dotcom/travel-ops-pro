@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { requireRole } from '@/lib/auth/current-org'
+import { requireRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createServerClient } from '@/lib/supabase-server'
-import { RATE_TABLE_CONFIGS, validateImportData, isExampleRow, transportationConfigFor, vehicleColumnSpecsFor } from '@/lib/bulk-rate-service'
+import { RATE_TABLE_CONFIGS, validateImportData, isExampleRow, transportationConfigFor, vehicleColumnSpecsFor, resolveImportTier, accommodationImportFill } from '@/lib/bulk-rate-service'
 import { stripVehicleFields, vehiclesFromFlatRow } from '@/lib/rates/vehicle-bands'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
 import type { ImportResult, ValidationError } from '@/lib/bulk-rate-service'
@@ -29,6 +29,14 @@ const VALIDITY_REQUIRED_TABLES = new Set(['transportation_rates', 'entrance_fees
  * Validates and upserts CSV data into a rate table.
  * Uses service_code (or cruise_code for nile_cruises) as the unique key for matching.
  * If dryRun is true, validates only without inserting.
+ *
+ * Preview and commit agree. Every check that can fail a row runs BEFORE the
+ * dry-run answer, and the commit imports exactly the rows the preview called
+ * valid, skipping the rest and naming them (`skipped`, `skippedErrors`). It
+ * used to preview "Import 140 Rows" for a sheet with one bad supplier code and
+ * then refuse the whole file on confirm — writing nothing — and two checks
+ * (vehicle bands, money values) ran only after the preview, so a sheet the
+ * preview passed could still be refused.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -37,6 +45,8 @@ export async function POST(request: NextRequest) {
     const denied = await requireRole(['admin', 'manager'])
     if (denied) return denied
 
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
     const { table, csvData, dryRun = false } = body
 
@@ -199,6 +209,18 @@ export async function POST(request: NextRequest) {
       }
     })
 
+    // Hotels: the Tier cell must be one of the agency's tiers (by key or
+    // word) — an unknown one is reported in the preview, not guessed.
+    const tierItems = table === 'accommodation_rates' ? await vocabularyItemsForCurrentOrg('tier') : []
+    if (table === 'accommodation_rates') {
+      parsedRows.forEach((row, idx) => {
+        const r = resolveImportTier(row.tier, tierItems)
+        if (r.ok) { if (r.tier) row.tier = r.tier; return }
+        supplierErrors.push({ row: sheetRowOf.get(row) ?? idx + 2, column: 'tier', message: r.error })
+        indicesToDemote.add(idx)
+      })
+    }
+
     if (supplierErrors.length > 0) {
       const demotedCount = indicesToDemote.size
       preview.errors = [...preview.errors, ...supplierErrors].slice(0, 100)
@@ -206,6 +228,48 @@ export async function POST(request: NextRequest) {
       preview.invalidRows = preview.invalidRows + demotedCount
       preview.parsedValidRows = parsedRows.filter((_, idx) => !indicesToDemote.has(idx))
       preview.sampleData = preview.parsedValidRows.slice(0, 5)
+    }
+
+    // The checks that used to run only at commit, run on every row now, so
+    // the preview reports them: a row with no key, a transport row whose
+    // vehicle band runs backwards, a negative or absurd money value. Each
+    // fails its own row; the others still import.
+    {
+      const keptRows = preview.parsedValidRows ?? []
+      const rowErrors: ValidationError[] = []
+      const dropped = new Set<Record<string, any>>()
+      keptRows.forEach((row, idx) => {
+        const rowNum = sheetRowOf.get(row) ?? idx + 2
+        const key = row[uniqueKeyColumn]
+        if (key === undefined || key === null || String(key).trim() === '') {
+          rowErrors.push({ row: rowNum, column: uniqueKeyColumn, message: `${uniqueKeyColumn} is required` })
+          dropped.add(row)
+          return
+        }
+        let candidate: Record<string, any> = row
+        if (vehicleSpecs) {
+          const list = vehiclesFromFlatRow(row, vehicleSpecs)
+          if (!list) {
+            rowErrors.push({ row: rowNum, column: 'vehicles', message: 'a vehicle capacity band must run from a minimum to a maximum of at least the same size' })
+            dropped.add(row)
+            return
+          }
+          candidate = { ...row, vehicles: list }
+          stripVehicleFields(candidate, vehicleSpecs.map(s => s.key))
+        }
+        const check = validateRatePayload(candidate)
+        if (!check.ok) {
+          rowErrors.push({ row: rowNum, column: '', message: check.errors.join('; ') })
+          dropped.add(row)
+        }
+      })
+      if (rowErrors.length > 0) {
+        preview.errors = [...preview.errors, ...rowErrors].slice(0, 100)
+        preview.validRows = Math.max(0, preview.validRows - dropped.size)
+        preview.invalidRows = preview.invalidRows + dropped.size
+        preview.parsedValidRows = keptRows.filter(r => !dropped.has(r))
+        preview.sampleData = preview.parsedValidRows.slice(0, 5)
+      }
     }
 
     // supplier_code is virtual — no rate table has the column. It has done its
@@ -226,15 +290,10 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // If validation failed, don't proceed
-    if (preview.invalidRows > 0) {
-      const { parsedValidRows: _drop, parsedValidRowNumbers: _rows, ...publicPreview } = preview
-      return NextResponse.json({
-        success: false,
-        error: `${preview.invalidRows} row(s) have validation errors. Fix errors or use dry run to see details.`,
-        ...publicPreview,
-      })
-    }
+    // Rows with errors are skipped, exactly as the preview said — the valid
+    // ones import. (This used to refuse the whole file here, after a preview
+    // that offered to import the valid rows.)
+    const skippedErrors = preview.errors
 
     // L7: reuse the parsed rows from the validator instead of re-parsing
     // the raw strings here. The prior re-parser silently disagreed with
@@ -252,31 +311,16 @@ export async function POST(request: NextRequest) {
     // table has no per-vehicle columns, so none may reach the upsert.
     if (vehicleSpecs) {
       for (const row of rowsToUpsert) {
-        const list = vehiclesFromFlatRow(row, vehicleSpecs)
-        if (!list) {
-          return NextResponse.json(
-            { success: false, error: `Row ${String(row[config.uniqueKey[0]] ?? '')}: a vehicle capacity band must run from a minimum to a maximum of at least the same size` },
-            { status: 400 }
-          )
-        }
+        // Checked per row before the preview; every row here has a list.
+        const list = vehiclesFromFlatRow(row, vehicleSpecs) ?? []
         stripVehicleFields(row, vehicleSpecs.map(s => s.key))
         row.vehicles = list
       }
     }
 
-    // Rate-entry validation (harness Layer 4): reject the import if any row has
-    // a negative / absurd money value, so the engine never reads a bad rate.
-    const rateViolations: any[] = []
-    rowsToUpsert.forEach((record, idx) => {
-      const check = validateRatePayload(record)
-      if (!check.ok) rateViolations.push({ row: sheetRowOf.get(record) ?? idx + 2, errors: check.errors })
-    })
-    if (rateViolations.length > 0) {
-      return NextResponse.json(
-        { success: false, error: 'Invalid rate values in import', violations: rateViolations.slice(0, 20) },
-        { status: 400 }
-      )
-    }
+    // Rate-entry validation (harness Layer 4) ran per row before the preview:
+    // a row with a negative / absurd money value was skipped there, so the
+    // engine never reads a bad rate.
 
     // Upsert in batches of 50
     const BATCH_SIZE = 50
@@ -348,6 +392,7 @@ export async function POST(request: NextRequest) {
     }
 
     const hasValidity = VALIDITY_REQUIRED_TABLES.has(config.tableName)
+    const isHotels = config.tableName === 'accommodation_rates'
     for (let i = 0; i < dedupedRows.length; i += BATCH_SIZE) {
       const batch = dedupedRows.slice(i, i + BATCH_SIZE)
 
@@ -361,7 +406,8 @@ export async function POST(request: NextRequest) {
       if (keyValues.length > 0) {
         const { data: existing } = await supabase
           .from(config.tableName)
-          .select(hasValidity ? `${uniqueKeyColumn}, rate_valid_from, rate_valid_to` : uniqueKeyColumn)
+          .select(hasValidity ? `${uniqueKeyColumn}, rate_valid_from, rate_valid_to` : isHotels ? `${uniqueKeyColumn}, tier, property_type` : uniqueKeyColumn)
+          .eq('org_id', orgId)
           .in(uniqueKeyColumn, keyValues)
 
         if (existing) {
@@ -384,6 +430,13 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Hotels: a blank Tier / Property Type keeps the stored value; a new
+      // row gets the company's default tier and 'hotel' (bulk-rate-service).
+      if (isHotels) {
+        const ladder = tierItems.map(i => i.key)
+        for (const row of batch) accommodationImportFill(row, existingValidity.get(row[uniqueKeyColumn]) as { tier?: string | null; property_type?: string | null } | undefined, ladder)
+      }
+
       // Split into inserts and updates — purely for counting; the upsert
       // call below handles both in one round-trip.
       const toInsert = batch.filter(r => !r[uniqueKeyColumn] || !existingKeys.has(r[uniqueKeyColumn]))
@@ -397,10 +450,16 @@ export async function POST(request: NextRequest) {
       // A single upsert with onConflict on the unique key column handles
       // inserts AND updates in one PostgREST call: PostgreSQL turns it into
       // INSERT ... ON CONFLICT (key) DO UPDATE SET ...
+      //
+      // The key is unique PER COMPANY (org_id, key): two companies may use the
+      // same code, and an import here must never land on — and overwrite —
+      // the other company's row. Every row is stamped with this company,
+      // whatever the sheet says.
       if (batch.length > 0) {
+        for (const row of batch) row.org_id = orgId
         const { error: upsertError } = await supabase
           .from(config.tableName)
-          .upsert(batch, { onConflict: uniqueKeyColumn })
+          .upsert(batch, { onConflict: `org_id,${uniqueKeyColumn}` })
 
         if (upsertError) {
           importErrors.push({
@@ -447,6 +506,9 @@ export async function POST(request: NextRequest) {
               (importErrors.length > 1 ? ` (+${importErrors.length - 1} more)` : ''),
           }),
       ...result,
+      // The rows the preview reported as invalid, left out of the write.
+      skipped: preview.invalidRows,
+      skippedErrors,
     })
   } catch (error: any) {
     console.error('[bulk-import] Error:', error)

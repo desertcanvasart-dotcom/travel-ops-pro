@@ -21,6 +21,18 @@ vi.mock('@/lib/supabase-actor', async () => {
   return { createActorAdminClient: () => mock.createMockClient() }
 })
 
+// The caller's company: every rate route reads and stamps it (20261206).
+vi.mock('@/lib/auth/current-org', async () => {
+  const { NextResponse } = await import('next/server')
+  return {
+    getCurrentOrgId: async () => 'org-1',
+    getCurrentUserId: async () => 'u1',
+    getCurrentUserRole: async () => 'admin',
+    requireRole: async () => null,
+    noOrgResponse: () => NextResponse.json({ success: false }, { status: 403 }),
+  }
+})
+
 // The resolver's propertyId path: a given id is the train, with its name.
 vi.mock('@/lib/suppliers/resolve-property', () => ({
   resolveRateProperty: vi.fn(async (_client: unknown, opts: { propertyId?: string | null }) =>
@@ -80,6 +92,9 @@ beforeEach(() => {
   setMockTables({
     train_rates: [structuredClone(TALGO_QENA)],
     sleeping_train_rates: [structuredClone(WATANIA_SINGLE)],
+    // The suppliers the rates name are the caller's company's: train and
+    // sleeper writes check it (another company's is refused).
+    suppliers: [{ id: WATANIA, org_id: 'org-1', name: 'Watania Sleeping Trains' }, { id: ENR, org_id: 'org-1', name: 'Egyptian National Railways (ENR)' }],
   })
 })
 

@@ -18,6 +18,14 @@
 // way), each with its own total and the website rate published for it: the
 // total rounded UP to end in 999 (¥417,651 → ¥417,999), unless the operator
 // typed their own. Pure, so the grid and the CSV cannot drift apart.
+//
+// The 999 rule is the office's rule for YEN prices. The grid shows the
+// company's own currency (lib/departures/grid-fx.ts), and the rule used to
+// apply whatever that was: a €1,234.56 total was published as €1,999. In any
+// other currency the website rate is the total rounded to the currency's own
+// unit (lib/currency-totals roundToCurrency): €1,234.56, $980.10.
+
+import { roundToCurrency } from '@/lib/currency-totals'
 
 export const FLIGHT_CLASSES = ['economy', 'business', 'oneway_business'] as const
 export type FlightClass = (typeof FLIGHT_CLASSES)[number]
@@ -43,9 +51,14 @@ export const WEB_COLUMN: Record<FlightClass, 'web_price_economy' | 'web_price_bu
   oneway_business: 'web_price_oneway_business',
 }
 
-/** Round UP to the next amount ending in 999: 417,651 → 417,999; 417,999
- *  stays; 418,000 → 418,999. The office's rule for published prices. */
-export function websiteRate(total: number): number {
+/** In yen, round UP to the next amount ending in 999: 417,651 → 417,999;
+ *  417,999 stays; 418,000 → 418,999 — the office's rule for published yen
+ *  prices. Any other currency: the total rounded to that currency's unit. */
+export function websiteRate(total: number, currency: string = 'JPY'): number {
+  if (String(currency || '').trim().toUpperCase() !== 'JPY') {
+    const r = roundToCurrency(total, currency)
+    return r > 0 ? r : 0
+  }
   const n = Math.ceil(Number(total) || 0)
   if (n <= 0) return 0
   return Math.ceil((n + 1) / 1000) * 1000 - 1
@@ -70,10 +83,12 @@ export function classColumn(parts: {
   fuelPp: number | null
   airPp: number | null
   websiteTyped: number | null
+  /** The grid's currency: the 999 rule is for yen only (websiteRate). */
+  currency?: string
 }): ClassColumn {
   const airPp = parts.airPp == null ? null : Number(parts.airPp)
   const totalPp = airPp == null ? null : airPp + (Number(parts.fuelPp) || 0) + (Number(parts.landPp) || 0)
-  const websiteSuggested = totalPp == null ? null : websiteRate(totalPp)
+  const websiteSuggested = totalPp == null ? null : websiteRate(totalPp, parts.currency ?? 'JPY')
   const typed = parts.websiteTyped == null ? null : Number(parts.websiteTyped)
   return {
     airPp,

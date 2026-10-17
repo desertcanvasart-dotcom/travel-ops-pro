@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { resolveTripShapeWrite } from '@/lib/pricing/road-trips'
 import { resolveVehicleWrite } from '@/lib/rates/vehicle-bands-server'
 import { createServerClient } from '@/lib/supabase-server'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { OWN_SUPPLIER_EMBED, ownSupplierOnRow } from '@/lib/rates/own-supplier-embed'
+import { findServiceCodeClash } from '@/lib/rates/transport-natural-key'
+import { rateDeleteBlocked } from '@/lib/rates/rate-delete-guard'
+import { validateRatePayload } from '@/lib/rate-validation'
 
 // Actor-attributed service-role client (lib/supabase-actor): rate-table
 // writes from here reach fn_rate_audit_trigger, and without the actor
@@ -17,11 +24,15 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'transportation_rates', id, orgId))) return notFoundInOrg('Rate')
 
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
-      .select('*')
+      .select(`*, ${OWN_SUPPLIER_EMBED}`)
+      .eq('org_id', orgId)
       .eq('id', id)
       .single()
 
@@ -30,7 +41,7 @@ export async function GET(
       return NextResponse.json({ error: 'Transportation rate not found' }, { status: 404 })
     }
 
-    return NextResponse.json(data)
+    return NextResponse.json(ownSupplierOnRow(data, orgId))
   } catch (error) {
     console.error('Error in transportation rate GET:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
@@ -42,7 +53,10 @@ export async function PUT(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'transportation_rates', id, orgId))) return notFoundInOrg('Rate')
     const body = await request.json()
 
     // Validate required fields
@@ -53,11 +67,23 @@ export async function PUT(
       )
     }
 
+    const rateCheck = validateRatePayload(body)
+    if (!rateCheck.ok) {
+      return NextResponse.json({ error: 'Invalid rate values', violations: rateCheck.errors }, { status: 400 })
+    }
+
+    // This company's supplier, or none ('__none__' = Direct booking) — see the POST route.
+    const supplierCheck = await validateAndResolveSupplierFields(body, supabaseAdmin, orgId)
+    if (!supplierCheck.ok) {
+      return NextResponse.json({ error: supplierCheck.error }, { status: supplierCheck.status })
+    }
+
     // The vehicles this rate offers — merged over the row's own when the
     // client sends legacy fields, so nothing it does not know is dropped.
     const { data: currentRow } = await supabaseAdmin
       .from('transportation_rates')
       .select('*')
+      .eq('org_id', orgId)
       .eq('id', id)
       .single()
     const vehicleWrite = await resolveVehicleWrite(body, currentRow ?? null)
@@ -82,6 +108,8 @@ export async function PUT(
       trip_shape: tripShapeWrite.value,
       duration: body.duration || null,
       area: body.area || null,
+      // The form's Route Name — it was sent and dropped.
+      ...('route_name' in body ? { route_name: body.route_name || null } : {}),
       includes: body.includes || null,
       season: body.season || null,
       rate_valid_from: body.rate_valid_from,
@@ -90,8 +118,8 @@ export async function PUT(
       // rate saved the company's NAME and dropped the link, so the form reported
       // success and the row stayed unlinked. Rate dedup keys are built from
       // supplier_id, so a lost link is not cosmetic.
-      supplier_id: body.supplier_id || null,
-      supplier_name: body.supplier_name || null,
+      supplier_id: supplierCheck.supplier_id,
+      supplier_name: supplierCheck.supplier_name || null,
       notes: body.notes || null,
       is_active: body.is_active !== undefined ? body.is_active : true,
       // Phase B (per-rate currency) named the WRONG route family for this
@@ -103,9 +131,25 @@ export async function PUT(
       ...vehiclePatch
     }
 
+    if (updateData.rate_valid_from && updateData.rate_valid_to && updateData.rate_valid_to < updateData.rate_valid_from) {
+      return NextResponse.json({ error: 'Valid to must be on or after Valid from' }, { status: 400 })
+    }
+    if (updateData.service_code) {
+      const { data: sameCode } = await supabaseAdmin
+        .from('transportation_rates')
+        .select('id, service_code')
+        .eq('org_id', orgId)
+        .ilike('service_code', updateData.service_code)
+      const clash = findServiceCodeClash(updateData.service_code, sameCode ?? [], id)
+      if (clash) {
+        return NextResponse.json({ error: `Service code ${updateData.service_code} is already used by another rate. Change the code.` }, { status: 409 })
+      }
+    }
+
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')
       .update(updateData)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select()
       .single()
@@ -130,11 +174,20 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const { id } = await params
+    if (!(await rowInOrg(supabaseAdmin, 'transportation_rates', id, orgId))) return notFoundInOrg('Rate')
+
+    // A rate a trip, programme, variation or pricing rule uses is not deleted
+    // out from under it (lib/rates/rate-delete-guard) — deactivate it instead.
+    const blocked = await rateDeleteBlocked(supabaseAdmin, orgId, id)
+    if (blocked) return NextResponse.json({ error: blocked }, { status: 409 })
 
     const { error } = await supabaseAdmin
       .from('transportation_rates')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
     if (error) {

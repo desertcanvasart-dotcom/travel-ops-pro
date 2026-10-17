@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentUserId } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId } from '@/lib/auth/current-org'
 import { ownNotificationIds } from '@/lib/notifications-scope'
 
 const supabase = createClient(
@@ -8,13 +8,16 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// Only the addressee may read-mark or delete a notification; anyone else's
-// id simply does not match and comes back 404. The ownership check is a
-// SELECT, the mutation is by id — see ownNotificationIds for why.
+// Only the addressee may read-mark or delete a notification, and only in the
+// organisation they are working in; anyone else's id simply does not match
+// and comes back 404. The ownership check is a SELECT, the mutation is by id
+// — see ownNotificationIds for why.
 async function owned(id: string): Promise<'unauthenticated' | 'not-found' | 'ok'> {
   const userId = await getCurrentUserId()
   if (!userId) return 'unauthenticated'
-  const ids = await ownNotificationIds(supabase, userId, { id })
+  const orgId = await getCurrentOrgId()
+  if (!orgId) return 'not-found'
+  const ids = await ownNotificationIds(supabase, userId, orgId, { id })
   return ids.length ? 'ok' : 'not-found'
 }
 

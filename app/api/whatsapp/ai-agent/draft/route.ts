@@ -12,6 +12,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { WhatsAppAIAgent } from '@/lib/ai/whatsapp-ai-agent'
+import { guardAiRate } from '@/lib/rate-limit/ai-limit'
 
 export async function POST(request: NextRequest) {
   const orgId = await getCurrentOrgId()
@@ -31,6 +32,12 @@ export async function POST(request: NextRequest) {
       { status: 403 }
     )
   }
+
+  // The same per-user generation budget as the other draft endpoints
+  // (/api/ai/suggest-reply, /api/ai/suggest-email-reply): each call is a
+  // paid model run, and this one had no limit at all.
+  const limited = await guardAiRate()
+  if (limited) return limited
 
   const body = await request.json().catch(() => ({}))
   const conversationId: string | undefined = body.conversationId

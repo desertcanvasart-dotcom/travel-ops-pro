@@ -23,11 +23,18 @@ vi.mock('@/lib/supabase-server', () => {
   }
   return { createServerClient: () => client }
 })
-// The route checks the role in-route too (AUDIT C2): a manager.
-vi.mock('@/lib/auth/current-org', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@/lib/auth/current-org')>()),
-  requireRole: async () => null,
-}))
+
+// The caller's company: every rate route reads and stamps it (20261206).
+vi.mock('@/lib/auth/current-org', async () => {
+  const { NextResponse } = await import('next/server')
+  return {
+    getCurrentOrgId: async () => 'org-1',
+    getCurrentUserId: async () => 'u1',
+    getCurrentUserRole: async () => 'admin',
+    requireRole: async () => null,
+    noOrgResponse: () => NextResponse.json({ success: false }, { status: 403 }),
+  }
+})
 vi.mock('@/lib/vocabulary-server', () => ({
   vocabularyItemsForCurrentOrg: vi.fn(async () => []),
   supplierTypesForCurrentOrg: vi.fn(async () => []),

@@ -1,7 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
-import { parseDateOnly } from '@/lib/pricing/season-admin'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
+import { lengthError, parseDateOnly } from '@/lib/pricing/season-admin'
+import { recordChange } from '@/lib/activity-log'
+import { dateRange } from '@/lib/activity-detail'
 
 // One dated window on a season. Real dates, not month-day: Golden Week and
 // Obon move each year, and the operator plans twelve months ahead.
@@ -35,13 +37,16 @@ export async function POST(request: NextRequest) {
     if (endDate < startDate) {
       return NextResponse.json({ success: false, error: 'The last day cannot come before the first' }, { status: 400 })
     }
+    const label = typeof body.label === 'string' && body.label.trim() ? body.label.trim() : null
+    const tooLong = label ? lengthError('label', label) : null
+    if (tooLong) return NextResponse.json({ success: false, error: tooLong }, { status: 400 })
 
     // The window's org is taken from the season, never from the request — and
     // the season is looked up inside the caller's org, so a window cannot be
     // hung on somebody else's season.
     const { data: season, error: seasonError } = await supabaseAdmin
       .from('pricing_seasons')
-      .select('id')
+      .select('id, name')
       .eq('id', seasonId)
       .eq('org_id', orgId)
       .maybeSingle()
@@ -59,7 +64,7 @@ export async function POST(request: NextRequest) {
         season_id: seasonId,
         start_date: startDate,
         end_date: endDate,
-        label: typeof body.label === 'string' && body.label.trim() ? body.label.trim() : null,
+        label,
       })
       .select('id, season_id, start_date, end_date, label')
       .single()
@@ -67,6 +72,15 @@ export async function POST(request: NextRequest) {
     if (error) {
       console.error('Error creating season date window:', error)
       return NextResponse.json({ success: false, error: 'Failed to add dates' }, { status: 500 })
+    }
+
+    // New dates put the season's premium on departures that had none.
+    const userId = await getCurrentUserId()
+    if (userId) {
+      await recordChange({
+        org_id: orgId, user_id: userId, method: 'POST', path: '/api/pricing/season-dates',
+        detail: { target: (season as { name?: string }).name ?? null, changes: [{ field: 'dates', from: null, to: dateRange(startDate, endDate) }] },
+      })
     }
 
     return NextResponse.json({ success: true, data })

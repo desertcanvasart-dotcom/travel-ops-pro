@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
 
     const gmailId = params.get('messageId')
     if (gmailId) {
-      const { data: msg } = await supabase.from('email_messages').select('id').eq('message_id', gmailId).limit(1).maybeSingle()
+      const { data: msg } = await supabase.from('email_messages').select('id').eq('org_id', orgId).eq('message_id', gmailId).limit(1).maybeSingle()
       if (!msg) return NextResponse.json({ success: true, intake: null })
       const { data, error } = await supabase.from('web_order_intakes').select(COLUMNS)
         .eq('org_id', orgId).eq('email_message_id', msg.id).maybeSingle()

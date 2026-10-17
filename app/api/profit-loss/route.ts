@@ -30,9 +30,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { partitionDemoRows } from '@/lib/demo-data'
 import { createClient } from '@supabase/supabase-js'
 import { loadFxIndex, buildFxMeta, emptyFxSummary, type FxHole } from '@/lib/fx-report'
-import { computeTripPnL, type TripPnL, type PnLExtra } from '@/lib/trip-pnl'
+import { computeTripPnL, PNL_EXCLUDED_STATUSES, type TripPnL, type PnLExtra } from '@/lib/trip-pnl'
 import { mergeFxSummary } from '@/lib/fx-conversion'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -85,6 +85,17 @@ function emptySummary() {
   }
 }
 
+/**
+ * A core query that failed must fail the report. Carrying on read the missing
+ * rows as zero cost (a database without migration 20261107 fails the expenses
+ * select), and the page showed a confident, inflated margin with a 200.
+ * Only booking_extras may degrade, below.
+ */
+function coreQueryFailed(what: string, error: unknown) {
+  console.error(`Error fetching ${what} for P&L:`, error)
+  return NextResponse.json({ error: `Failed to load ${what} — the report was not computed.` }, { status: 500 })
+}
+
 export async function GET(request: NextRequest) {
   try {
     // TENANCY GATE. This route reads with the service-role key, which bypasses
@@ -95,6 +106,11 @@ export async function GET(request: NextRequest) {
     // org, and its user's P&L listed the real operator's trips.
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
+
+    // Finance is admin and manager (the middleware prefix list says so too);
+    // checked here as well so the route does not rest on one table alone.
+    const forbidden = await requireRole(['admin', 'manager'])
+    if (forbidden) return forbidden
 
     const searchParams = request.nextUrl.searchParams
     const itineraryId = searchParams.get('itineraryId')
@@ -115,6 +131,11 @@ export async function GET(request: NextRequest) {
 
     if (status) {
       itineraryQuery = itineraryQuery.eq('status', status)
+    } else if (!itineraryId) {
+      // The aggregate is about trips that are business: a draft or cancelled
+      // one would add its quote as revenue and its estimate as cost. Ask for
+      // the status explicitly to see them; one trip by id always answers.
+      itineraryQuery = itineraryQuery.not('status', 'in', `(${PNL_EXCLUDED_STATUSES.join(',')})`)
     }
 
     if (startDate) {
@@ -157,10 +178,10 @@ export async function GET(request: NextRequest) {
     for (const ids of chunk(itineraryIds)) {
       const { data, error } = await supabaseAdmin
         .from('invoices')
-        .select('id, itinerary_id, total_amount, amount_paid, status, currency')
+        .select('id, itinerary_id, total_amount, tax_amount, amount_paid, status, currency')
         .eq('org_id', orgId)
         .in('itinerary_id', ids)
-      if (error) console.error('Error fetching invoices:', error)
+      if (error) return coreQueryFailed('invoices', error)
       if (data) invoices.push(...data)
     }
 
@@ -181,7 +202,7 @@ export async function GET(request: NextRequest) {
         .from('invoice_payments')
         .select('invoice_id, amount, currency, payment_date, transaction_reference')
         .in('invoice_id', ids)
-      if (error) console.error('Error fetching invoice payments:', error)
+      if (error) return coreQueryFailed('invoice payments', error)
       if (data) invoicePayments.push(...data)
     }
 
@@ -194,7 +215,7 @@ export async function GET(request: NextRequest) {
         .select('itinerary_id, commission_type, commission_amount, currency, transaction_date, status, description, category')
         .eq('org_id', orgId)
         .in('itinerary_id', ids)
-      if (error) console.error('Error fetching commissions:', error)
+      if (error) return coreQueryFailed('commissions', error)
       if (data) commissions.push(...data)
     }
 
@@ -207,7 +228,7 @@ export async function GET(request: NextRequest) {
         .select('itinerary_id, amount, category, status, currency, expense_date, expense_number, booking_supplier_status_id')
         .eq('org_id', orgId)
         .in('itinerary_id', ids)
-      if (error) console.error('Error fetching expenses:', error)
+      if (error) return coreQueryFailed('expenses', error)
       if (data) expenses.push(...data)
     }
 
@@ -346,7 +367,9 @@ export async function GET(request: NextRequest) {
       summary,
       // Reported, never silent: a total that quietly changed is how the
       // contradictory-figures problem started.
-      demo_excluded: demoExcluded
+      demo_excluded: demoExcluded,
+      // Which trip statuses this aggregate left out, so the page can say so.
+      excluded_statuses: status || itineraryId ? [] : [...PNL_EXCLUDED_STATUSES],
     })
   } catch (error) {
     console.error('Error in P&L GET:', error)

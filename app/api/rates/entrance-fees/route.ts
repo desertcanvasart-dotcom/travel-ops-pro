@@ -2,6 +2,13 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { whereNullable } from '@/lib/rates/natural-key'
+import { selectAllRows } from '@/lib/db/select-all-rows'
+import { rowsInRateCurrency } from '@/lib/rates/rows-in-rate-currency'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
+import { entranceFeeVersions } from '@/lib/rates/entrance-fee-versions'
 
 // ============================================
 // ENTRANCE FEES API  
@@ -16,6 +23,8 @@ const supabaseAdmin = createActorAdminClient()
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const city = searchParams.get('city')
     const category = searchParams.get('category')
@@ -25,55 +34,49 @@ export async function GET(request: NextRequest) {
     const search = searchParams.get('search')
     const language = searchParams.get('language') || 'en'
 
-    let query = supabaseAdmin
-      .from('entrance_fees')
-      .select('*')
-      .order('city', { ascending: true })
-      .order('attraction_name', { ascending: true })
-
-    // Apply filters
-    if (city) query = query.eq('city', city)
-    if (category) query = query.eq('category', category)
-    if (isAddon === 'true') query = query.eq('is_addon', true)
-    if (isAddon === 'false') query = query.eq('is_addon', false)
-    if (activeOnly === 'true') query = query.neq('is_active', false) // Include NULL (default = active)
-    if (search) query = query.ilike('attraction_name', `%${search}%`)
-    if (limit) query = query.limit(parseInt(limit))
-
-    const { data, error } = await query
+    const build = () => {
+      let query = supabaseAdmin
+        .from('entrance_fees')
+        .select('*')
+        .eq('org_id', orgId)
+      // Apply filters
+      if (city) query = query.eq('city', city)
+      if (category) query = query.eq('category', category)
+      if (isAddon === 'true') query = query.eq('is_addon', true)
+      if (isAddon === 'false') query = query.eq('is_addon', false)
+      if (activeOnly === 'true') query = query.neq('is_active', false) // Include NULL (default = active)
+      if (search) query = query.ilike('attraction_name', `%${search}%`)
+      return query
+    }
+    const order = [{ column: 'city' }, { column: 'attraction_name' }, { column: 'id' }]
+    // A caller's own limit is one page; without one, every row (past the
+    // 1000-row cap).
+    const { data, error } = limit
+      ? await order.reduce((q: any, o) => q.order(o.column, { ascending: true }), build()).limit(parseInt(limit))
+      : await selectAllRows<Record<string, any>>(build, { order })
 
     if (error) {
       console.error('GET entrance_fees error:', error)
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
-    // Merge language versions for non-English
-    let mergedData = data || []
-    if (language !== 'en' && data && data.length > 0) {
-      const ids = data.map((item: any) => item.id)
-      const { data: versions } = await supabaseAdmin
-        .from('entrance_fee_versions')
-        .select('entrance_fee_id, attraction_name, notes')
-        .in('entrance_fee_id', ids)
-        .eq('language', language)
+    // A picker that copies the fee onto a voucher or a trip asks for every
+    // row in the company's rate currency (lib/rates/rows-in-rate-currency).
+    let mergedData: Record<string, any>[] = searchParams.get('in_rate_currency') === 'true'
+      ? await rowsInRateCurrency('entrance_fees', data ?? [], await getOrgRateCurrency(supabaseAdmin, orgId))
+      : (data ?? [])
 
-      if (versions && versions.length > 0) {
-        const versionsMap: Record<string, { attraction_name?: string; notes?: string }> = {}
-        for (const v of versions) {
-          versionsMap[v.entrance_fee_id] = {
-            attraction_name: v.attraction_name,
-            notes: v.notes
-          }
-        }
-        mergedData = data.map((item: any) => {
-          const version = versionsMap[item.id]
-          return version ? {
-            ...item,
-            attraction_name: version.attraction_name || item.attraction_name,
-            notes: version.notes ?? item.notes
-          } : item
-        })
-      }
+    // Merge language versions for non-English (ids in batches)
+    if (language !== 'en' && mergedData.length > 0) {
+      const versionsMap = await entranceFeeVersions(supabaseAdmin, mergedData.map((item: any) => item.id), language)
+      mergedData = mergedData.map((item: any) => {
+        const version = versionsMap[item.id]
+        return version ? {
+          ...item,
+          attraction_name: version.attraction_name || item.attraction_name,
+          notes: version.notes ?? item.notes
+        } : item
+      })
     }
 
     return NextResponse.json({
@@ -89,6 +92,8 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     const _rateCheck = validateRatePayload(body)
@@ -107,6 +112,16 @@ export async function POST(request: NextRequest) {
     }
 
 
+    // The supplier must be this company's (it was stored as sent).
+    let supplierId: string | null = null
+    if (body.supplier_id) {
+      const supplierCheck = await validateAndResolveSupplierFields({ supplier_id: body.supplier_id }, supabaseAdmin)
+      if (!supplierCheck.ok) {
+        return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+      }
+      supplierId = supplierCheck.supplier_id
+    }
+
     const newFee = {
       service_code: body.service_code || `ENT-${Date.now().toString(36).toUpperCase()}`,
       attraction_name: body.attraction_name,
@@ -115,8 +130,10 @@ export async function POST(request: NextRequest) {
       eur_rate: parseFloat(body.eur_rate) || 0,
       non_eur_rate: parseFloat(body.non_eur_rate) || 0,
       egyptian_rate: body.egyptian_rate ? parseFloat(body.egyptian_rate) : null,
-      student_discount_percentage: body.student_discount_percentage || 50,
-      child_discount_percent: body.child_discount_percent || 50,
+      // Stored when sent, never invented: no price reads them (children pay
+      // the engine's fixed child rate), and a default of 50 read as a setting.
+      student_discount_percentage: body.student_discount_percentage ?? null,
+      child_discount_percent: body.child_discount_percent ?? null,
       season: body.season || 'all_year',
       rate_valid_from: body.rate_valid_from || new Date().toISOString().slice(0, 10),
       rate_valid_to: body.rate_valid_to || '2099-12-31',
@@ -126,7 +143,7 @@ export async function POST(request: NextRequest) {
       is_active: body.is_active !== false,
       is_addon: body.is_addon === true,
       addon_note: body.addon_note || null,
-      supplier_id: body.supplier_id || null
+      supplier_id: supplierId
     }
 
     // Check for existing rate with same natural key
@@ -137,21 +154,23 @@ export async function POST(request: NextRequest) {
       const { data } = await supabaseAdmin
         .from('entrance_fees')
         .select('*')
+        .eq('org_id', orgId)
         .eq('service_code', body.service_code)
         .limit(1)
       existing = data
     }
 
     if (!existing?.length) {
-      let existingQuery = supabaseAdmin
+      let existingQuery: any = supabaseAdmin
         .from('entrance_fees')
         .select('id')
+        .eq('org_id', orgId)
         .ilike('attraction_name', newFee.attraction_name)
-      if (newFee.city) {
-        existingQuery = existingQuery.eq('city', newFee.city)
-      } else {
-        existingQuery = existingQuery.is('city', null)
-      }
+      existingQuery = whereNullable(existingQuery, 'city', newFee.city)
+      // The validity period is part of the identity: next year's fee is a
+      // second rate, priced from its own date.
+      existingQuery = whereNullable(existingQuery, 'rate_valid_from', newFee.rate_valid_from)
+      existingQuery = whereNullable(existingQuery, 'rate_valid_to', newFee.rate_valid_to)
       const { data } = await existingQuery.limit(1)
       existing = data
     }
@@ -172,7 +191,7 @@ export async function POST(request: NextRequest) {
       // Insert new record
       const result = await supabaseAdmin
         .from('entrance_fees')
-        .insert(newFee)
+        .insert({ ...newFee, org_id: orgId })
         .select('*')
         .single()
       data = result.data

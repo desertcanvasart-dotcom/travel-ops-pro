@@ -31,3 +31,19 @@ export function parseDateOnly(raw: unknown): string | null {
   // Round-trip so 2026-02-31 is rejected rather than silently becoming March.
   return new Date(t).toISOString().slice(0, 10) === iso ? iso : null
 }
+
+// The columns are varchar(80) and varchar(120). A longer value used to reach
+// Postgres and come back as a bare 500 ("Failed to create season"), with no
+// word about why.
+export const SEASON_NAME_MAX = 80
+export const SEASON_LABEL_MAX = 120
+
+/** A 400 message when a typed name or label is too long, else null. */
+export function lengthError(kind: 'name' | 'label', value: string): string | null {
+  const max = kind === 'name' ? SEASON_NAME_MAX : SEASON_LABEL_MAX
+  // Characters as Postgres counts them (code points), not UTF-16 units.
+  if ([...value].length <= max) return null
+  return kind === 'name'
+    ? `Season name can be at most ${max} characters`
+    : `Label can be at most ${max} characters`
+}

@@ -77,13 +77,16 @@ function bareContext(name: string, cities: string[], defaultCity: string): Desti
  * Load the prompt context for a destination id. NEVER throws and never
  * returns something unusable: no id, an unknown id, or any read failure
  * resolves to the Egypt context — exactly what every generation did before
- * destinations existed.
+ * destinations existed. The destination is this company's (destinations
+ * .org_id): another company's id, or no organisation, is "unknown".
  */
 export async function loadDestinationPromptContext(
   db: Db,
+  orgId: string | null | undefined,
   destinationId: string | null | undefined
 ): Promise<DestinationPromptContext> {
   try {
+    if (!orgId) return egyptPromptContext()
     let row: {
       id: string; country_code: string; name: string;
       generation_brief: string | null; glossary: unknown; is_default: boolean
@@ -92,12 +95,14 @@ export async function loadDestinationPromptContext(
     if (destinationId) {
       const { data } = await db.from('destinations')
         .select('id, country_code, name, generation_brief, glossary, is_default')
+        .eq('org_id', orgId)
         .eq('id', destinationId).maybeSingle()
       row = data
     }
     if (!row) {
       const { data } = await db.from('destinations')
         .select('id, country_code, name, generation_brief, glossary, is_default')
+        .eq('org_id', orgId)
         .eq('is_default', true).maybeSingle()
       row = data
     }

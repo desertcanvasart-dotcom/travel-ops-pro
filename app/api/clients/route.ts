@@ -1,27 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
-import { sanitizeSearchTerm } from '@/lib/db/sanitize-search'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
+import { pickClientFields } from '@/lib/clients/fields'
+import { findClientByEmail } from '@/lib/clients/duplicates'
+import { applyClientFilters, applyClientSort, parseClientListParams } from '@/lib/clients/list'
+import { actorLabel } from '@/lib/clients/scope'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   process.env.SUPABASE_SERVICE_ROLE_KEY!
 )
 
-// GET /api/clients?userId=xxx&search=xxx&limit=100&page=1
+// What a list row carries. The money is per currency (revenue_by_currency =
+// invoiced, collected_by_currency = paid); total_revenue_generated is only the
+// client's largest single-currency figure, kept for sorting.
+const LIST_COLUMNS = 'id, client_code, first_name, last_name, email, phone, status, nationality, preferred_language, internal_notes, client_type, vip_status, lead_source, total_bookings_count, total_revenue_generated, revenue_by_currency, collected_by_currency, last_contacted_at, created_at'
+
+// GET /api/clients?search=&status=&client_type=&lead_source=&vip=1&date_from=&date_to=&sort=&page=&limit=
+//
+// One page of the active company's clients plus the exact number that match
+// (`total`), so a screen can say "21–40 of 312" and page to the end. The
+// filters, the order and the page are decided in lib/clients/list; the limit
+// is clamped there (default 50, max 200) so a huge `?limit=` can't be used to
+// pull the whole table. Callers that need every row walk `?page=`
+// (lib/fetch-all-pages.ts).
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url)
-    const search = sanitizeSearchTerm(searchParams.get('search'))
-    // Clamp the caller-supplied limit to a sane range so a huge `?limit=` can't
-    // be used to extract the whole table / exhaust memory. Default 50, max 200.
-    // Callers that need the full set walk `?page=` (lib/fetch-all-pages.ts).
-    const requestedLimit = parseInt(searchParams.get('limit') || '50')
-    const limit = Number.isFinite(requestedLimit) ? Math.min(Math.max(requestedLimit, 1), 200) : 50
-    const requestedPage = parseInt(searchParams.get('page') || '1')
-    const page = Number.isFinite(requestedPage) ? Math.max(requestedPage, 1) : 1
-    const from = (page - 1) * limit
+    const params = parseClientListParams(searchParams)
+    const from = (params.page - 1) * params.limit
 
     // TENANT BOUNDARY. This route runs on the service-role client, which bypasses
     // RLS, so this filter is the only thing separating one operator's customer
@@ -30,38 +38,33 @@ export async function GET(request: NextRequest) {
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    let query = supabase
-      .from('clients')
-      .select('id, first_name, last_name, email, phone, status, nationality, preferred_language, internal_notes')
-      .eq('org_id', orgId)
-      // Secondary sort on id keeps page boundaries stable when names tie.
-      .order('first_name', { ascending: true })
-      .order('id', { ascending: true })
-      .range(from, from + limit - 1)
+    const base = supabase.from('clients').select(LIST_COLUMNS, { count: 'exact' }).eq('org_id', orgId)
+    const { data: clients, error, count } = await applyClientSort(applyClientFilters(base, params), params.sort)
+      .range(from, from + params.limit - 1)
 
-    if (search) {
-      query = query.or(`first_name.ilike.%${search}%,last_name.ilike.%${search}%,email.ilike.%${search}%`)
+    // A page past the last one: PostgREST refuses the range (PGRST103). That is
+    // an empty page, with the real count.
+    if (error && error.code === 'PGRST103') {
+      const { count: total } = await applyClientFilters(
+        supabase.from('clients').select('id', { count: 'exact', head: true }).eq('org_id', orgId), params)
+      return NextResponse.json({ clients: [], total: total ?? 0, page: params.page, limit: params.limit })
     }
-
-    const { data: clients, error } = await query
-
     if (error) {
       throw error
     }
 
     // Transform to include combined name field
-    const transformedClients = (clients || []).map(client => ({
-      id: client.id,
+    const transformedClients = ((clients || []) as unknown as Array<Record<string, any>>).map(client => ({
+      ...client,
       name: `${client.first_name || ''} ${client.last_name || ''}`.trim(),
-      email: client.email,
-      phone: client.phone,
-      status: client.status,
-      nationality: client.nationality,
-      preferred_language: client.preferred_language,
-      internal_notes: client.internal_notes
     }))
 
-    return NextResponse.json({ clients: transformedClients })
+    return NextResponse.json({
+      clients: transformedClients,
+      total: count ?? transformedClients.length,
+      page: params.page,
+      limit: params.limit,
+    })
 
   } catch (error: any) {
     console.error('Error fetching clients:', error)
@@ -69,42 +72,65 @@ export async function GET(request: NextRequest) {
   }
 }
 
+/** "a, b" or ["a", "b"] as the list a text[] column wants. */
+function toList(value: unknown): string[] | null {
+  const list = Array.isArray(value)
+    ? value.map(v => String(v).trim())
+    : typeof value === 'string' ? value.split(',').map(v => v.trim()) : []
+  const clean = list.filter(Boolean)
+  return clean.length ? clean : null
+}
+
 // POST /api/clients - Create new client
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
 
-    // Validate required fields
-    if (!body.first_name) {
-      return NextResponse.json(
-        { success: false, error: 'First name is required' },
-        { status: 400 }
-      )
+    // The columns the forms write, cleaned (a blank is NULL, not ''). A first
+    // name is required; there is no stand-in for a missing last name.
+    const picked = pickClientFields(body, 'create')
+    if (!picked.ok) {
+      return NextResponse.json({ success: false, error: picked.error }, { status: 400 })
     }
 
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
 
-    // Create client
-    const clientData = {
-      preferred_accommodation_level: body.preferences?.accommodation_type || null,
-      special_interests: body.preferences?.interests || null,
-      accessibility_needs: body.preferences?.special_needs || null,
-      org_id: orgId,
-      first_name: body.first_name,
-      last_name: body.last_name || body.first_name,
-      email: body.email || null,
-      phone: body.phone || null,
-      nationality: body.nationality || 'Unknown',
-      status: body.status || 'prospect',
-      client_type: body.client_type || 'individual',
-      passport_type: body.passport_type || 'other',
-      preferred_language: body.preferred_language || 'English',
-      client_source: body.client_source || 'whatsapp',
-      vip_status: body.vip_status || false
+    // The same address, in the same company, in any capitalisation, is the same
+    // person. Nothing is merged: the caller is told who already holds it and
+    // may create the second record anyway (allow_duplicate).
+    const email = picked.data.email as string | null | undefined
+    if (email && body.allow_duplicate !== true) {
+      const existing = await findClientByEmail(supabase, orgId, email)
+      if (existing) {
+        return NextResponse.json(
+          {
+            success: false,
+            code: 'duplicate_email',
+            error: `A client with this email already exists: ${existing.name} (${existing.client_code}).`,
+            existing,
+          },
+          { status: 409 }
+        )
+      }
     }
 
-    console.log('📝 Creating client:', clientData)
+    // Create client
+    const clientData = {
+      ...picked.data,
+      org_id: orgId,
+      preferred_accommodation_level: picked.data.preferred_accommodation_level ?? body.preferences?.accommodation_type ?? null,
+      special_interests: picked.data.special_interests ?? toList(body.preferences?.interests),
+      accessibility_needs: picked.data.accessibility_needs ?? toList(body.preferences?.special_needs),
+      // Callers that send nothing (a WhatsApp lead, a web order) get these
+      // defaults; a form that sends a blank gets NULL.
+      nationality: 'nationality' in picked.data ? picked.data.nationality : 'Unknown',
+      status: picked.data.status ?? 'prospect',
+      client_type: picked.data.client_type ?? 'individual',
+      passport_type: 'passport_type' in picked.data ? picked.data.passport_type : 'other',
+      preferred_language: 'preferred_language' in picked.data ? picked.data.preferred_language : 'English',
+      client_source: picked.data.client_source ?? (picked.data.lead_source ? null : 'whatsapp'),
+    }
 
     const { data: newClient, error: clientError } = await supabase
       .from('clients')
@@ -160,7 +186,7 @@ export async function POST(request: NextRequest) {
           // and accessibility needs live on the clients row itself (below).
           .insert({
             client_id: newClient.id,
-            preferred_activities: body.preferences.interests || null,
+            preferred_activities: toList(body.preferences.interests),
             health_considerations: body.preferences.special_needs || null,
             typical_budget_range: body.preferences.tier || 'standard'
           })
@@ -168,6 +194,7 @@ export async function POST(request: NextRequest) {
     }
 
     if (body.note) {
+      const author = await actorLabel(supabase, await getCurrentUserId())
       await attempt('note', () =>
         supabase
           .from('client_notes')
@@ -175,7 +202,8 @@ export async function POST(request: NextRequest) {
             client_id: newClient.id,
             // note_text/is_internal are not columns; content is.
             content: body.note,
-            note_type: 'general'
+            note_type: 'general',
+            created_by: author,
           })
       )
     }
@@ -186,7 +214,7 @@ export async function POST(request: NextRequest) {
           .from('whatsapp_conversations')
           .update({
             client_id: newClient.id,
-            client_name: `${clientData.first_name} ${clientData.last_name}`.trim()
+            client_name: `${newClient.first_name} ${newClient.last_name}`.trim()
           })
           // The org's own thread with that number — the same customer may also
           // be writing to another org, whose thread is not ours to relabel.

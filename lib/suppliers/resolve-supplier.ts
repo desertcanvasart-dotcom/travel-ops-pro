@@ -1,5 +1,6 @@
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { selectAllRows } from '@/lib/db/select-all-rows'
+import { supplierOrgId } from './supplier-org'
 
 export type SupplierMatch =
   | { match: 'exact'; supplier_id: string; canonical_name: string }
@@ -8,15 +9,21 @@ export type SupplierMatch =
 
 const norm = (s: string | null | undefined): string => (s ?? '').toLowerCase().trim()
 
+// Resolution is within ONE company's suppliers (suppliers.org_id, 20261205):
+// a name or code never resolves to the other company's supplier. `orgId`
+// omitted = the request's company (lib/suppliers/supplier-org.ts).
 export async function resolveSupplierByName(
   name: string,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  orgId?: string | null
 ): Promise<SupplierMatch> {
   const key = norm(name)
   if (!key) return { match: 'none' }
+  const org = await supplierOrgId(orgId)
+  if (!org) return { match: 'none' }
   // The whole roster, not the first 1000 rows (lib/db/select-all-rows).
   const { data, error } = await selectAllRows<{ id: string; name: string }>(
-    () => supabase.from('suppliers').select('id, name'),
+    () => supabase.from('suppliers').select('id, name').eq('org_id', org),
   )
   if (error || !data) return { match: 'none' }
   const matches = data.filter((r) => norm(r.name) === key)
@@ -31,7 +38,7 @@ export type BatchResolution = {
   unknownIds: Set<string>
   noMatchNames: Set<string>
   /** supplier_code (normalised) → supplier_id, for cross-install linking.
-   *  Codes are UNIQUE, so this is 1:1 and never ambiguous. */
+   *  Codes are UNIQUE within a company, so this is 1:1 and never ambiguous. */
   resolvedIdByCode: Map<string, string>
   /** Codes on rows that match no supplier here — the import errors on these. */
   unknownCodes: Set<string>
@@ -39,7 +46,8 @@ export type BatchResolution = {
 
 export async function batchResolveSuppliers(
   rows: Array<Record<string, any>>,
-  supabase: SupabaseClient
+  supabase: SupabaseClient,
+  orgId?: string | null
 ): Promise<BatchResolution> {
   const result: BatchResolution = {
     resolvedIdByName: new Map(),
@@ -50,11 +58,15 @@ export async function batchResolveSuppliers(
     unknownCodes: new Set(),
   }
 
-  // The whole roster: a supplier past PostgREST's 1000-row cap used to read
-  // as "not found" and fail every rate row naming it.
-  const { data: suppliers, error } = await selectAllRows<{ id: string; name: string; supplier_code: string | null }>(
-    () => supabase.from('suppliers').select('id, name, supplier_code'),
-  )
+  // The company's whole roster: a supplier past PostgREST's 1000-row cap used
+  // to read as "not found" and fail every rate row naming it. With no company,
+  // an empty roster — every id, code and name below then reads as unknown.
+  const org = await supplierOrgId(orgId)
+  const { data: suppliers, error } = org
+    ? await selectAllRows<{ id: string; name: string; supplier_code: string | null }>(
+        () => supabase.from('suppliers').select('id, name, supplier_code').eq('org_id', org),
+      )
+    : { data: [] as { id: string; name: string; supplier_code: string | null }[], error: null }
   if (error || !suppliers) return result
 
   const canonicalById = new Map(suppliers.map((s) => [s.id, s]))

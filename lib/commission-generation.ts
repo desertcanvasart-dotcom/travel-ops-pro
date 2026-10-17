@@ -379,6 +379,31 @@ export function buildCommissions(
   return { pairs, skipped }
 }
 
+const SKIP_SHORT: Record<SkipReason, string> = {
+  already_generated: 'already generated',
+  no_supplier: 'no supplier',
+  no_rate: 'no commission rate',
+  no_base_amount: 'no supplier cost',
+  no_client_price: 'no client price',
+  no_profit: 'no profit',
+  seller_no_rate: 'the seller has no rate',
+  seller_not_payable: 'the seller is set to "We receive"',
+  seller_no_profit: 'no profit for the seller',
+}
+
+/**
+ * One line naming what was skipped and why, for the button's result message
+ * (the page shows only that message). A service already done is not news.
+ * "Hotel Stay (no commission rate); Lunch (no supplier); and 2 more".
+ */
+export function describeSkips(skipped: SkippedService[], max = 4): string {
+  const news = skipped.filter(s => s.reason !== 'already_generated')
+  if (news.length === 0) return ''
+  const shown = news.slice(0, max).map(s => `${s.service_name} (${SKIP_SHORT[s.reason]})`)
+  const more = news.length - shown.length
+  return `Skipped: ${shown.join('; ')}${more > 0 ? `; and ${more} more` : ''}.`
+}
+
 /** Group skip reasons into a short summary for the API response. */
 export function summariseSkips(skipped: SkippedService[]): Record<string, number> {
   const summary: Record<string, number> = {}

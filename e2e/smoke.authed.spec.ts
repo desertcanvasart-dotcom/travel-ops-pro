@@ -227,7 +227,12 @@ test('P&L returns ONLY the caller\'s own org (regression: no org filter)', async
   const codes = body.data.map((t: { itinerary_code: string }) => t.itinerary_code)
   const foreign = codes.filter((c: string) => !isFixtureCode(c))
   expect(foreign, `foreign trips leaked into the P&L: ${JSON.stringify(foreign)}`).toEqual([])
-  expect(codes, 'the seeded itinerary should be in its own P&L').toContain(SEEDED_ITINERARY_CODE)
+  // The seeded trip is a draft, and drafts are not business: the aggregate
+  // leaves them out (lib/trip-pnl PNL_EXCLUDED_STATUSES) unless asked for.
+  const drafts = await (await page.request.get('/api/profit-loss?status=draft')).json()
+  const draftCodes = drafts.data.map((t: { itinerary_code: string }) => t.itinerary_code)
+  expect(draftCodes.filter((c: string) => !isFixtureCode(c)), 'foreign drafts leaked into the P&L').toEqual([])
+  expect(draftCodes, 'the seeded itinerary should be in its own P&L').toContain(SEEDED_ITINERARY_CODE)
 })
 
 test('capacity page renders the month grid', async ({ page }) => {

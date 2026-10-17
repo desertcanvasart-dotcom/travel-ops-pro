@@ -70,7 +70,7 @@ describe('switching tier on the grid', () => {
 describe('the parse route', () => {
   const src = read('app/api/pricing-grid/parse/route.ts')
   it('sees hotels of every tier, priced from their rate periods', () => {
-    expect(src).toContain(".from('accommodation_rates').select('*').eq('is_active', true),")
+    expect(src).toContain(".from('accommodation_rates').select('*').eq('org_id', orgId).eq('is_active', true),")
     expect(src).toContain('hotelPpDouble(r)')
   })
   it('enforces the named hotel and returns notes', () => {

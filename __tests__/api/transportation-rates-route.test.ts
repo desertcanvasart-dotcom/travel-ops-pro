@@ -17,6 +17,18 @@ vi.mock('@supabase/supabase-js', async () => {
   return { createClient: mock.createMockClient }
 })
 
+// The caller's company: every rate route reads and stamps it (20261206).
+vi.mock('@/lib/auth/current-org', async () => {
+  const { NextResponse } = await import('next/server')
+  return {
+    getCurrentOrgId: async () => 'org-1',
+    getCurrentUserId: async () => 'u1',
+    getCurrentUserRole: async () => 'admin',
+    requireRole: async () => null,
+    noOrgResponse: () => NextResponse.json({ success: false }, { status: 403 }),
+  }
+})
+
 // Supplier resolution is exercised elsewhere; here it just passes fields
 // through so the dedup logic under test sees them unchanged.
 vi.mock('@/lib/suppliers/validate-supplier-fields', () => ({

@@ -10,8 +10,9 @@
 // the spreadsheet, import back.
 
 import { NextRequest, NextResponse } from 'next/server'
-import { requireRole } from '@/lib/auth/current-org'
+import { requireRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createServerClient } from '@/lib/supabase-server'
+import { selectAllRows } from '@/lib/db/select-all-rows'
 import Papa from 'papaparse'
 import { PERIOD_SHEETS, periodHeaders, periodsToRows, periodTemplateRows, withSupplementColumns } from '@/lib/rates/period-csv'
 import { seasonsForRow } from '@/lib/rates/rate-seasons'
@@ -26,6 +27,8 @@ export async function GET(request: NextRequest) {
     const denied = await requireRole(['admin', 'manager'])
     if (denied) return denied
 
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const entity = request.nextUrl.searchParams.get('entity')
     if (entity !== 'accommodation' && entity !== 'cruise') {
       return NextResponse.json(
@@ -58,11 +61,12 @@ export async function GET(request: NextRequest) {
     const supabase = createServerClient()
 
     // `*` rather than a column list: the legacy-column fallback reads a dozen
-    // per-season columns that differ by table, and this is a small catalog —
-    // the same plain select the wide export uses.
+    // per-season columns that differ by table — the same plain select the
+    // wide export uses. Every rate, not the first 1000 (lib/db/select-all-rows):
+    // a larger catalog exported only its first thousand.
     const { data, error } = baseConfig.table === 'accommodation_rates'
-      ? await supabase.from('accommodation_rates').select('*').order('property_name')
-      : await supabase.from('nile_cruises').select('*').order('ship_name')
+      ? await selectAllRows(() => supabase.from('accommodation_rates').select('*').eq('org_id', orgId), { order: [{ column: 'property_name' }, { column: 'id' }] })
+      : await selectAllRows(() => supabase.from('nile_cruises').select('*').eq('org_id', orgId), { order: [{ column: 'ship_name' }, { column: 'id' }] })
 
     if (error) {
       console.error('[periods-export] fetch failed:', error.message)

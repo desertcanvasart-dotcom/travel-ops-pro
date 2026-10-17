@@ -86,6 +86,8 @@ export async function sendStaffReply(
     .from('team_members')
     .select('name')
     .eq('user_id', args.userId)
+    // The name they go by in this company (a person in both has a row in each).
+    .eq('org_id', args.orgId)
     .maybeSingle()
 
   const { data: message, error } = await db
@@ -159,8 +161,11 @@ async function notifyTraveller(
     }
     if (!to) return 'no-recipient'
 
-    // Prefer the traveller's own link when the thread is theirs, so the email
-    // lands them on the page that actually holds their conversation.
+    // The link of the page that holds this conversation, and only that one:
+    // a traveller's private thread → their own link, the shared thread → the
+    // booking's shared (passenger_id NULL) link. This fell back to whichever
+    // link came first, so traveller A could be emailed traveller B's PRIVATE
+    // link — B's documents and messages. No matching link: no email.
     const links = db
       .from('booking_portal_links')
       .select('token, passenger_id')
@@ -168,8 +173,8 @@ async function notifyTraveller(
       .is('revoked_at', null)
     const { data: candidates } = await links
     const chosen = (candidates ?? []).find(
-      (l: { passenger_id: string | null }) => l.passenger_id === args.thread.passenger_id
-    ) ?? (candidates ?? [])[0]
+      (l: { passenger_id: string | null }) => (l.passenger_id ?? null) === (args.thread.passenger_id ?? null)
+    )
     if (!chosen?.token) return 'no-link'
 
     const base = (args.appUrl || process.env.NEXT_PUBLIC_APP_URL || '').replace(/\/$/, '')

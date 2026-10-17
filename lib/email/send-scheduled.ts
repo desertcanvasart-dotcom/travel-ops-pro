@@ -32,7 +32,7 @@ export interface ScheduledRow {
 export interface SendScheduledDeps {
   db: Db
   gmailFor: (mailboxUserId: string) => Promise<DraftSender>
-  notify: (input: { user_id: string; title: string; message: string }) => Promise<unknown>
+  notify: (input: { org_id: string; user_id: string; title: string; message: string }) => Promise<unknown>
   now?: Date
 }
 
@@ -94,6 +94,7 @@ export async function sendDueScheduledEmails(deps: SendScheduledDeps): Promise<{
         failed++
         if (row.created_by) {
           await deps.notify({
+            org_id: row.org_id,
             user_id: row.created_by,
             title: 'A scheduled email was not sent',
             message: `"${row.subject || '(no subject)'}"${row.to_summary ? ` to ${row.to_summary}` : ''}: ${reason(err)} It is still in Drafts.`,

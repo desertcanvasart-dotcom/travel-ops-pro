@@ -25,6 +25,12 @@ import { calculateAutoPricing, calculatePricingWithPassengerBreakdown } from '@/
 import { roomingAdjustment } from '@/lib/pricing/rooming'
 import { matchProgramme, type TourUpOrder } from '@/lib/intake/tour-up-order'
 import { clientMessage } from '@/lib/api-errors'
+import { createInitialQuoteRevision } from '@/lib/quotes/initial-revision'
+import { isBookableStatus, seatsFree } from '@/lib/departures/seats'
+
+// The seat rule lives in lib/departures/seats.ts; re-exported for the callers
+// and tests that have always imported it from here.
+export { seatsFree }
 
 /** The order, written down for the quote's notes — everything the 日程表,
  *  contract and passenger list will need and the quote row has no column for. */
@@ -70,6 +76,8 @@ export interface ProcessOrderResult {
     quote?: { id: string; quote_number: string }
     clientCreated?: boolean
     departureBooking?: { id: string; departure_id: string } | null
+    /** Set when the party did not fit the seats left, so no hold was placed. */
+    departureFull?: { free: number; requested: number } | null
   }
 }
 
@@ -79,10 +87,13 @@ export async function processTourUpOrder(
 ): Promise<ProcessOrderResult> {
   const { orgId, userId, order, dryRun } = opts
 
-  // The programme: the website page it was ordered from, else the code.
+  // The programme: the website page it was ordered from, else the code —
+  // among the intake's company's programmes only (tour_templates.org_id,
+  // 20261207; both companies may hold the same code).
   const { data: templates } = await supabase
     .from('tour_templates')
     .select('id, template_code, template_name, duration_days, tour_type, website_url')
+    .eq('org_id', orgId)
     .eq('is_active', true)
   type Tpl = { id: string; template_code: string; template_name: string; duration_days: number; tour_type: string | null; website_url?: string | null }
   const { template: matched, matchedBy } = matchProgramme(order, (templates ?? []) as Tpl[])
@@ -104,7 +115,9 @@ export async function processTourUpOrder(
 
   // The programme's departure on that date, if the office runs it as one
   // (the departures grid): the order holds seats on it.
-  const departure = template ? await findDeparture(supabase, orgId, template.id, order.departureDate1) : null
+  const found = template ? await findDeparture(supabase, orgId, template.id, order.departureDate1) : null
+  // Seats still free on it — the hold below is only placed when the party fits.
+  const departure = found ? { ...found, seats_free: await departureSeatsFree(supabase, orgId, found) } : null
   const clientPreview = existingClient
     ? { id: existingClient.id, name: `${existingClient.last_name ?? ''} ${existingClient.first_name ?? ''}`.trim() }
     : null
@@ -185,10 +198,11 @@ export async function processTourUpOrder(
   let variationId: string | null = null
   {
     const { data: existing } = await supabase
-      .from('tour_variations').select('id').eq('template_id', template.id).eq('tier', 'standard').limit(1).maybeSingle()
+      .from('tour_variations').select('id').eq('org_id', orgId).eq('template_id', template.id).eq('tier', 'standard').limit(1).maybeSingle()
     variationId = existing?.id ?? null
     if (!variationId) {
       const { data: made, error } = await supabase.from('tour_variations').insert({
+        org_id: orgId,
         template_id: template.id,
         variation_code: `${template.template_code}-STANDARD`.toUpperCase().slice(0, 60),
         variation_name: `${template.template_name} - Standard`,
@@ -255,25 +269,64 @@ export async function processTourUpOrder(
   if (qErr || !quote) {
     return { status: 500, body: { ...preview, success: false, error: clientMessage(qErr, 'Could not create the quote') } }
   }
+  // Version 1 of its history, as for a quote saved from the calculator — by
+  // the operator who confirmed it, or nobody for the website's own doors.
+  await createInitialQuoteRevision(supabase, quote.id, userId)
 
   // 4. Seats held on the date's departure, pending until the office confirms.
   // Never fails the order: the quote is the record, the hold a convenience.
+  // A party larger than the seats left gets no hold (the departure was held
+  // past max_pax before), and the result says so for the office to sort out.
+  // The count and the insert are ONE database call under the departure's row
+  // lock (hold_departure_seats, migrations 20261213 and 20261215): counted
+  // here and inserted after, two orders for the last seats at the same
+  // moment were both held. Only an Open, Limited or Guaranteed date takes a
+  // hold; the office confirms or releases it on the departure's page.
   let departureBooking: { id: string; departure_id: string } | null = null
+  let departureFull: { free: number; requested: number } | null = null
   if (departure) {
-    const { data: hold, error: holdErr } = await supabase.from('departure_bookings').insert({
-      org_id: orgId,
-      departure_id: departure.id,
-      client_id: clientId,
-      client_name: clientName,
-      pax: numPax,
-      status: 'pending',
-      notes: `ウェブ注文 ${quote.quote_number}${order.infants ? `（幼児 ${order.infants}名 別）` : ''}`,
-    }).select('id, departure_id').single()
-    if (holdErr) console.error('[intake] departure hold failed:', holdErr)
-    else departureBooking = hold as { id: string; departure_id: string }
+    const { data: hold, error: holdErr } = await supabase.rpc('hold_departure_seats', {
+      p_org_id: orgId,
+      p_departure_id: departure.id,
+      p_pax: numPax,
+      p_client_id: clientId,
+      p_client_name: clientName,
+      p_notes: `ウェブ注文 ${quote.quote_number}${order.infants ? `（幼児 ${order.infants}名 別）` : ''}`,
+    })
+    const result = hold as { held?: boolean; free?: number; id?: string | null } | null
+    if (holdErr || !result) console.error('[intake] departure hold failed:', holdErr ?? 'no answer')
+    else if (result.held && result.id) {
+      departureBooking = { id: result.id, departure_id: departure.id }
+      // The hold follows its quote: rejecting or deleting the quote releases
+      // it (migration 20261215). Best-effort — the hold stands either way.
+      const { error: linkErr } = await supabase
+        .from('departure_bookings')
+        .update({ quote_id: quote.id })
+        .eq('id', result.id)
+        .eq('org_id', orgId)
+      if (linkErr) console.error('[intake] could not link the hold to its quote:', linkErr.message)
+    }
+    else departureFull = { free: Number(result.free) || 0, requested: numPax }
   }
 
-  return { status: 200, body: { ...preview, client: { id: clientId, name: clientName }, clientCreated, quote: quote as { id: string; quote_number: string }, departureBooking } }
+  return { status: 200, body: { ...preview, client: { id: clientId, name: clientName }, clientCreated, quote: quote as { id: string; quote_number: string }, departureBooking, departureFull } }
+}
+
+/** Seats left on the departure (lib/departures/seats: booked_pax, which the
+ *  office enters on the departure page for bookings made outside the app,
+ *  plus confirmed and pending holds). A date that is not Open, Limited or
+ *  Guaranteed has none: hold_departure_seats refuses it. */
+async function departureSeatsFree(
+  supabase: SupabaseClient, orgId: string, departure: { id: string; status: string; max_pax: number; booked_pax: number },
+): Promise<number> {
+  if (!isBookableStatus(departure.status)) return 0
+  const { data } = await supabase
+    .from('departure_bookings')
+    .select('pax, status')
+    .eq('org_id', orgId)
+    .eq('departure_id', departure.id)
+    .in('status', ['pending', 'confirmed'])
+  return seatsFree(departure, (data ?? []) as Array<{ pax: number | null; status: string | null }>)
 }
 
 /** The programme's departure starting on the date — not cancelled; the

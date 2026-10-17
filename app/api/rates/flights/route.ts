@@ -1,9 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
-import { sanitizeSeasons, legacyColumnMirror, datedPeriodCount, tooManyPeriodsMessage } from '@/lib/rates/rate-seasons'
+import { flightPeriodsPatch } from '@/lib/rates/flight-write'
+import { whereNullable } from '@/lib/rates/natural-key'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { OWN_SUPPLIER_EMBED, ownSupplierOnRows } from '@/lib/rates/own-supplier-embed'
+import { rateDeleteBlocked } from '@/lib/rates/rate-delete-guard'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { AIRLINE_CODES, knownAirlineCode } from '@/lib/airline-codes'
+import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 // ============================================
 // FLIGHT RATES API - Full CRUD
@@ -32,6 +38,8 @@ const FREQUENCIES = [
 // GET - List flight rates with filters
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const routeFrom = searchParams.get('route_from')
     const routeTo = searchParams.get('route_to')
@@ -43,10 +51,9 @@ export async function GET(request: NextRequest) {
 
     let query = supabaseAdmin
       .from('flight_rates')
-      .select(`
-        *,
-        supplier:suppliers(id, name, city, contact_phone, contact_email)
-      `)
+      // The supplier only when it is this company's (lib/rates/own-supplier-embed).
+      .select(`*, ${OWN_SUPPLIER_EMBED}`)
+      .eq('org_id', orgId)
       .order('route_from')
       .order('route_to')
       .order('airline')
@@ -58,7 +65,8 @@ export async function GET(request: NextRequest) {
     if (airline) query = query.ilike('airline', `%${airline}%`)
     if (flightType) query = query.eq('flight_type', flightType)
     if (cabinClass) query = query.eq('cabin_class', cabinClass)
-    if (supplierId) query = query.eq('supplier_id', supplierId)
+    // Only one of the caller's company's suppliers (lib/suppliers/supplier-org).
+    if (supplierId) query = query.eq('supplier_id', await ownSupplierFilterId(supabaseAdmin, supplierId))
     if (activeOnly) query = query.eq('is_active', true)
 
     const { data, error } = await query
@@ -69,9 +77,9 @@ export async function GET(request: NextRequest) {
     }
 
     // Also return enum options for UI dropdowns
-    return NextResponse.json({ 
-      success: true, 
-      data: data || [],
+    return NextResponse.json({
+      success: true,
+      data: ownSupplierOnRows(data, orgId),
       options: {
         flightTypes: FLIGHT_TYPES,
         cabinClasses: CABIN_CLASSES,
@@ -88,18 +96,25 @@ export async function GET(request: NextRequest) {
 // POST - Create new flight rate
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
     // A malformed periods payload reads as "no periods" and the row keeps
     // pricing off its base columns — never a 500 on a rate save. Over the
     // limit is REFUSED rather than truncated: silently cutting a contract's
     // last periods off would un-price them.
-    const periodLimit = tooManyPeriodsMessage(datedPeriodCount(body.seasons))
-    if (periodLimit) return NextResponse.json({ success: false, error: periodLimit }, { status: 400 })
-    const flightSeasons = sanitizeSeasons(body.seasons, 'flight')
+    const periods = flightPeriodsPatch(body.seasons)
+    if (!periods.ok) return NextResponse.json({ success: false, error: periods.error }, { status: 400 })
 
     const _rateCheck = validateRatePayload(body)
     if (!_rateCheck.ok) {
       return NextResponse.json({ error: 'Invalid rate values', violations: _rateCheck.errors }, { status: 400 })
+    }
+
+    // The airline supplier must be one of this company's ('__none__' = none).
+    const supplierCheck = await validateAndResolveSupplierFields(body, supabaseAdmin, orgId)
+    if (!supplierCheck.ok) {
+      return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
     }
 
     // Generate service code if not provided
@@ -134,8 +149,8 @@ export async function POST(request: NextRequest) {
       season: body.season || null,
       rate_valid_from: body.rate_valid_from || null,
       rate_valid_to: body.rate_valid_to || null,
-      supplier_id: body.supplier_id || null,
-      supplier_name: body.supplier_name || null,
+      supplier_id: supplierCheck.supplier_id,
+      supplier_name: supplierCheck.supplier_name || null,
       notes: body.notes || null,
       ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       // Throughout-guide fare (migration 20260904_guide_fares): NULL = the
@@ -147,7 +162,8 @@ export async function POST(request: NextRequest) {
       is_active: body.is_active !== false,
       // The periods are the authority; the columns above are the FIRST
       // period's copy, for the date-less readers (the grid, the CSV export).
-      ...(flightSeasons ? { seasons: flightSeasons, ...legacyColumnMirror(flightSeasons, 'flight') } : {}),
+      // A blank guide fare stays NULL (lib/rates/flight-write).
+      ...(periods.patch.seasons ? periods.patch : {}),
     }
 
     // Validate required fields
@@ -164,14 +180,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'route_from and route_to must be different' }, { status: 400 })
     }
 
-    // Check for existing rate with same natural key
-    const existingQuery = supabaseAdmin
+    // The natural key (lib/rates/natural-key): route, airline, cabin — and the
+    // FLIGHT NUMBER and the SUPPLIER. Without them MS 0101 and MS 0103 (same
+    // route and cabin, different times and prices) could not both be entered,
+    // though pricing expects several flights per route and asks which one.
+    let existingQuery = supabaseAdmin
       .from('flight_rates')
       .select('*')
+      .eq('org_id', orgId)
       .ilike('route_from', newRate.route_from)
       .ilike('route_to', newRate.route_to)
       .ilike('airline', newRate.airline)
       .eq('cabin_class', newRate.cabin_class)
+    existingQuery = whereNullable(existingQuery, 'flight_number', newRate.flight_number, { ilike: true })
+    existingQuery = whereNullable(existingQuery, 'supplier_id', newRate.supplier_id)
     const { data: existing } = await existingQuery.limit(1)
 
     // A create never updates. The natural-key match used to be UPDATED in
@@ -181,7 +203,7 @@ export async function POST(request: NextRequest) {
     if (existing?.length) {
       return NextResponse.json({
         success: false,
-        error: 'A rate with these details already exists. Edit that rate, or change what makes this one different (supplier, period, class, city) before saving.',
+        error: 'A fare for this route, airline, cabin, flight number and supplier already exists. Edit that fare (add a period to it for another season) instead of creating a second one.',
         existing: existing[0],
       }, { status: 409 })
     }
@@ -190,7 +212,7 @@ export async function POST(request: NextRequest) {
       // Insert new record
       const result = await supabaseAdmin
         .from('flight_rates')
-        .insert(newRate)
+        .insert({ ...newRate, org_id: orgId })
         .select('*')
         .single()
       data = result.data
@@ -212,21 +234,41 @@ export async function POST(request: NextRequest) {
 // PUT - Update flight rate (by ID in body)
 export async function PUT(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
+    // A rate stays in its company: org_id is never the client's to set.
     const { id, ...updates } = body
+    delete updates.org_id
 
     if (!id) {
       return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     }
 
+    const _rateCheck = validateRatePayload(updates)
+    if (!_rateCheck.ok) {
+      return NextResponse.json({ error: 'Invalid rate values', violations: _rateCheck.errors }, { status: 400 })
+    }
+
+    // A supplier in the patch must be this company's ('__none__' = none).
+    if ('supplier_id' in updates || 'supplier_name' in updates) {
+      const supplierCheck = await validateAndResolveSupplierFields(updates, supabaseAdmin, orgId)
+      if (!supplierCheck.ok) {
+        return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+      }
+      updates.supplier_id = supplierCheck.supplier_id
+      updates.supplier_name = supplierCheck.supplier_name
+    }
+
+    // Keep the date-less readers on the FIRST period, the way a hotel save
+    // does. A copy, never a fallback: a date no period covers is a hole.
+    // Applied after the numeric parsing below, so the periods win.
+    let periodPatch: Record<string, unknown> = {}
     if ('seasons' in updates) {
-      const periodLimit = tooManyPeriodsMessage(datedPeriodCount(updates.seasons))
-      if (periodLimit) return NextResponse.json({ success: false, error: periodLimit }, { status: 400 })
-      const edited = sanitizeSeasons(updates.seasons, 'flight')
-      updates.seasons = edited
-      // Keep the date-less readers on the FIRST period, the way a hotel save
-      // does. A copy, never a fallback: a date no period covers is a hole.
-      Object.assign(updates, legacyColumnMirror(edited, 'flight'))
+      const periods = flightPeriodsPatch(updates.seasons)
+      if (!periods.ok) return NextResponse.json({ success: false, error: periods.error }, { status: 400 })
+      periodPatch = periods.patch
+      delete updates.seasons
     }
 
     // Regenerate route_name if route fields changed
@@ -234,6 +276,7 @@ export async function PUT(request: NextRequest) {
       const { data: current } = await supabaseAdmin
         .from('flight_rates')
         .select('*')
+        .eq('org_id', orgId)
         .eq('id', id)
         .single()
 
@@ -270,12 +313,18 @@ export async function PUT(request: NextRequest) {
     if (updates.carry_on_kg !== undefined) {
       updates.carry_on_kg = updates.carry_on_kg ? parseInt(updates.carry_on_kg) : null
     }
+    // Throughout-guide fare: blank clears back to NULL = pays the customer rate.
+    if (updates.guide_rate !== undefined) {
+      updates.guide_rate = updates.guide_rate === '' || updates.guide_rate === null ? null : parseFloat(updates.guide_rate)
+    }
+    Object.assign(updates, periodPatch)
 
     updates.updated_at = new Date().toISOString()
 
     const { data, error } = await supabaseAdmin
       .from('flight_rates')
       .update(updates)
+      .eq('org_id', orgId)
       .eq('id', id)
       .select('*')
       .single()
@@ -295,6 +344,8 @@ export async function PUT(request: NextRequest) {
 // DELETE - Delete flight rate (by query param)
 export async function DELETE(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const id = searchParams.get('id')
 
@@ -302,9 +353,17 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ success: false, error: 'id is required' }, { status: 400 })
     }
 
+    // In use → refused with what uses it (lib/rates/rate-delete-guard).
+    const { data: own } = await supabaseAdmin.from('flight_rates').select('id').eq('org_id', orgId).eq('id', id).maybeSingle()
+    if (own) {
+      const blocked = await rateDeleteBlocked(supabaseAdmin, orgId, id)
+      if (blocked) return NextResponse.json({ success: false, error: blocked }, { status: 409 })
+    }
+
     const { error } = await supabaseAdmin
       .from('flight_rates')
       .delete()
+      .eq('org_id', orgId)
       .eq('id', id)
 
     if (error) {

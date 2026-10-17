@@ -53,12 +53,15 @@ export async function GET(request: NextRequest) {
     if (messageId) {
       const { data, error } = await supabase
         .from('email_client_links')
+        // The link is the user's; the client must be this workspace's — a
+        // person in both companies linked the same Gmail message in each.
         .select(`
           *,
-          client:clients(id, first_name, last_name, email, phone, status)
+          client:clients!inner(id, first_name, last_name, email, phone, status, org_id)
         `)
         .eq('user_id', userId)
         .eq('message_id', messageId)
+        .eq('client.org_id', orgId)
         .single()
 
       if (error && error.code !== 'PGRST116') { // PGRST116 = no rows

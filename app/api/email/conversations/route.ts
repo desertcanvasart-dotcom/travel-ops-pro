@@ -6,8 +6,10 @@ import { getCurrentOrgId, getCurrentUserId, noOrgResponse, requireRole } from '@
 import { recordsInOrg } from '@/lib/org-refs'
 import { teamMemberInOrg } from '@/lib/whatsapp-org'
 import { pickConversationUpdates } from '@/lib/email/conversation-updates'
-import { moveThreadInGmail } from '@/lib/email/conversation-trash'
+import { moveThreadInGmail, labelThreadInGmail, type ThreadLabelAction } from '@/lib/email/conversation-trash'
 import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
+import { emailConversationInOrg } from '@/lib/email/conversation-access'
+import { notifyEmailAssignee } from '@/lib/email/assignment-notice'
 import type { EmailConversation } from '@/types/unified'
 
 // Use service role for API routes to bypass RLS
@@ -25,6 +27,8 @@ export async function GET(request: NextRequest) {
   try {
     const forbidden = await requireRole(['admin', 'manager', 'agent'])
     if (forbidden) return forbidden
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
 
     const { searchParams } = new URL(request.url)
     const status = searchParams.get('status') || 'active'
@@ -56,6 +60,7 @@ export async function GET(request: NextRequest) {
           max_conversations
         )
       `)
+      .eq('org_id', orgId)
       .eq('status', status)
       .order('last_message_at', { ascending: false, nullsFirst: false })
 
@@ -100,9 +105,9 @@ export async function GET(request: NextRequest) {
       query = query.or(`client_email.ilike.%${search}%,client_name.ilike.%${search}%,subject.ilike.%${search}%`)
     }
 
-    // Only mail of the Gmail addresses connected now (lib/email/connected-mailboxes).
-    const { data, error } = await scopedToConnectedMailboxes(supabase, (mailboxFilter) =>
-      (mailboxFilter ? query.or(mailboxFilter) : query).limit(50)
+    // Only mail of the org's Gmail addresses connected now (lib/email/connected-mailboxes).
+    const { data, error } = await scopedToConnectedMailboxes(supabase, orgId, (mailboxFilter) =>
+      query.or(mailboxFilter).limit(50)
     )
 
     if (error) throw error
@@ -123,113 +128,17 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST /api/email/conversations - Create or update email conversation
-export async function POST(request: NextRequest) {
-  try {
-    const body = await request.json()
-    const {
-      thread_id,
-      user_id,
-      client_email,
-      subject,
-      last_message_snippet,
-      last_message_at,
-      gmail_history_id
-    } = body
+// POST (create or update a conversation for any caller-chosen user_id) was
+// removed: nothing called it — conversations are created by the Gmail sync
+// (lib/email/sync-mailbox.ts, /api/gmail/poll) — and it let any signed-in
+// account file a thread into any company's mailbox.
 
-    if (!thread_id) {
-      return NextResponse.json({ error: 'Thread ID required', success: false }, { status: 400 })
-    }
-
-    if (!user_id) {
-      return NextResponse.json({ error: 'User ID required', success: false }, { status: 400 })
-    }
-
-    // Check if conversation exists — including hidden ones, which STAY hidden.
-    const { data: existing } = await supabase
-      .from('email_conversations')
-      .select('*')
-      .eq('thread_id', thread_id)
-      .single()
-
-    if (existing) {
-      // Update existing conversation
-      const updates: any = {
-        updated_at: new Date().toISOString()
-      }
-
-      // Deliberately NOT un-hiding on activity. Hiding is how personal mail
-      // is kept personal (hidden threads are owner-only), so a new message
-      // arriving must not resurface the thread for the whole team — a 2FA
-      // sender writes again every time the operator logs into something.
-      // Un-hiding is an explicit action (PATCH action: 'unhide'), a decision,
-      // not a side effect. The removed block was also broken in fact: it
-      // wrote hidden_at/hidden_by, columns email_conversations does not have,
-      // so PostgREST rejected the WHOLE update with PGRST204 — the same bug
-      // class as the delete fix (#193), on the opposite path.
-
-      if (subject && subject !== existing.subject) updates.subject = subject
-      if (last_message_snippet) updates.last_message_snippet = last_message_snippet
-      if (last_message_at) updates.last_message_at = last_message_at
-      if (gmail_history_id) updates.gmail_history_id = gmail_history_id
-      updates.last_sync_at = new Date().toISOString()
-
-      const { data: updated, error } = await supabase
-        .from('email_conversations')
-        .update(updates)
-        .eq('id', existing.id)
-        .select(`
-          *,
-          client:clients (
-            id,
-            first_name,
-            last_name,
-            email,
-            client_code
-          ),
-          assigned_agent:team_members!email_conversations_assigned_team_member_id_fkey (*)
-        `)
-        .single()
-
-      if (error) throw error
-      return NextResponse.json({ conversation: updated, created: false, success: true })
-    }
-
-    // Create new conversation - client linking happens via trigger
-    const { data: newConversation, error } = await supabase
-      .from('email_conversations')
-      .insert({
-        thread_id,
-        user_id,
-        client_email: client_email || null,
-        subject: subject || null,
-        last_message_snippet: last_message_snippet || null,
-        last_message_at: last_message_at || null,
-        gmail_history_id: gmail_history_id || null,
-        is_hidden: false,
-        status: 'active',
-        last_sync_at: new Date().toISOString()
-      })
-      .select(`
-        *,
-        client:clients (
-          id,
-          first_name,
-          last_name,
-          email,
-          client_code
-        ),
-        assigned_agent:team_members!email_conversations_assigned_team_member_id_fkey (*)
-      `)
-      .single()
-
-    if (error) throw error
-
-    return NextResponse.json({ conversation: newConversation, created: true, success: true })
-  } catch (error: any) {
-    console.error('Error creating/updating email conversation:', error)
-    return NextResponse.json({ error: clientMessage(error, 'Internal server error'), success: false }, { status: 500 })
-  }
+// The PATCH actions that are also a label change on the Gmail thread.
+const GMAIL_LABEL_ACTIONS: Record<string, ThreadLabelAction | undefined> = {
+  archive: 'archive',
+  unarchive: 'unarchive',
+  mark_read: 'markRead',
+  mark_unread: 'markUnread',
 }
 
 // PATCH /api/email/conversations - Update conversation status, assignment, etc.
@@ -242,6 +151,21 @@ export async function PATCH(request: NextRequest) {
 
     if (!conversation_id) {
       return NextResponse.json({ error: 'Conversation ID required', success: false }, { status: 400 })
+    }
+
+    // Only this organisation's conversation (lib/email/conversation-access):
+    // any id was updated — and restored in its owner's real Gmail — whichever
+    // company it belonged to.
+    const existing = await emailConversationInOrg(supabase, orgId, String(conversation_id))
+    if (!existing) {
+      return NextResponse.json({ error: 'Conversation not found', success: false }, { status: 404 })
+    }
+    // Restore is for Communicate's Trash only (status 'trashed', see DELETE).
+    // is_hidden alone is how personal and machine mail is kept out of the
+    // shared inbox (scripts/scope-inbox); 'unhide' put that back in front of
+    // the whole team and pulled it out of Gmail's Trash.
+    if (action === 'unhide' && existing.status !== 'trashed') {
+      return NextResponse.json({ error: 'Conversation is not in Trash', success: false }, { status: 404 })
     }
 
     // A client or team member set here must be this organisation's own: the
@@ -258,10 +182,14 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
+    // Who held it before, read before the update (for the assignment notice).
+    const previousAssigneeId = existing.assigned_team_member_id ?? null
     let updateData: any = { updated_at: new Date().toISOString() }
 
     if (action === 'mark_read') {
       updateData.unread_count = 0
+    } else if (action === 'mark_unread') {
+      updateData.unread_count = 1
     } else if (action === 'archive') {
       updateData.status = 'archived'
     } else if (action === 'unarchive') {
@@ -293,10 +221,13 @@ export async function PATCH(request: NextRequest) {
       }
     }
 
-    const { data, error } = await supabase
+    let updateQuery = supabase
       .from('email_conversations')
       .update(updateData)
-      .eq('id', conversation_id)
+      .eq('id', existing.id)
+      .eq('org_id', orgId)
+    if (action === 'unhide') updateQuery = updateQuery.eq('status', 'trashed')
+    const { data, error } = await updateQuery
       .select(`
         *,
         client:clients (
@@ -315,22 +246,41 @@ export async function PATCH(request: NextRequest) {
     // Restored from Trash: back out of Gmail's Trash too (see DELETE).
     let warning: string | undefined
     if (action === 'unhide' && data) {
-      const gmail = await moveThreadInGmail(data.user_id, data.thread_id, 'untrash')
+      const gmail = await moveThreadInGmail(data.user_id, data.thread_id, 'untrash', orgId)
       if (!gmail.ok) warning = 'Restored here, but the email could not be taken out of Trash in Gmail. Reconnect Gmail in Settings and try again.'
     }
-
-    // Log activity if agent provided
-    if (agent_id && action) {
-      await supabase
-        .from('conversation_activity')
-        .insert({
-          conversation_id,
-          agent_id,
-          team_member_id: agent_id,
-          action_type: action === 'mark_read' ? 'viewed' : 'status_changed',
-          action_details: { action, updates, channel: 'email' }
-        })
+    // Archive and read state follow into the conversation's own mailbox
+    // (lib/email/conversation-trash labelThreadInGmail). Changed here
+    // regardless: a mailbox that needs reconnecting must not stop it.
+    const labelAction = typeof action === 'string' && Object.hasOwn(GMAIL_LABEL_ACTIONS, action) ? GMAIL_LABEL_ACTIONS[action] : undefined
+    if (labelAction && data) {
+      const gmail = await labelThreadInGmail(data.user_id, data.thread_id, labelAction, orgId)
+      if (!gmail.ok) warning = 'Done here, but Gmail could not be updated. An admin or manager can reconnect Gmail in Settings › Email.'
     }
+
+    // The new assignee hears about it, as for WhatsApp (lib/email/
+    // assignment-notice). A failed notice never fails the assignment.
+    if (data && 'assigned_team_member_id' in updateData) {
+      try {
+        await notifyEmailAssignee(supabase, {
+          orgId,
+          conversationId: existing.id,
+          previousAssigneeId,
+          newAssigneeId: updateData.assigned_team_member_id,
+          actorUserId: await getCurrentUserId(),
+          clientName: data.client_name,
+          clientEmail: data.client_email,
+          subject: data.subject,
+        })
+      } catch (e) {
+        console.error('Email assignment notification failed:', e)
+      }
+    }
+
+    // No conversation_activity row: that log belongs to WhatsApp
+    // conversations (its conversation_id references whatsapp_conversations),
+    // so writing an email conversation's id there always failed the foreign
+    // key.
 
     return NextResponse.json({ conversation: data, success: true, ...(warning ? { warning } : {}) })
   } catch (error: any) {
@@ -355,6 +305,15 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Conversation ID required', success: false }, { status: 400 })
     }
 
+    // Only this organisation's conversation: any id was trashed here AND in
+    // its owner's real Gmail, whichever company's.
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
+    const existing = await emailConversationInOrg(supabase, orgId, conversationId)
+    if (!existing) {
+      return NextResponse.json({ error: 'Conversation not found', success: false }, { status: 404 })
+    }
+
     // NOTE: email_conversations has only an is_hidden column (no
     // hidden_at/hidden_by, unlike whatsapp_conversations). Writing those
     // non-existent columns made PostgREST reject the whole UPDATE with
@@ -369,7 +328,8 @@ export async function DELETE(request: NextRequest) {
         status: 'trashed',
         updated_at: new Date().toISOString()
       })
-      .eq('id', conversationId)
+      .eq('id', existing.id)
+      .eq('org_id', orgId)
       .select()
       .maybeSingle()
 
@@ -380,7 +340,7 @@ export async function DELETE(request: NextRequest) {
 
     // The thread follows it into Gmail's Trash. Moved here regardless: a
     // mailbox that needs reconnecting must not stop the delete — it says so.
-    const gmail = await moveThreadInGmail(data.user_id, data.thread_id, 'trash')
+    const gmail = await moveThreadInGmail(data.user_id, data.thread_id, 'trash', orgId)
 
     return NextResponse.json({
       success: true,

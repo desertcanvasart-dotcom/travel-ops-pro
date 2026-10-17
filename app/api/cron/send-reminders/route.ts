@@ -100,6 +100,13 @@ function generateReminderEmail(invoice: any, reminderType: string, identity: Org
   return { subject, html }
 }
 
+// Each organisation's batch is capped on its own: one shared cap let the
+// company with the most (or longest-waiting) due invoices use every slot, so
+// the other company's customers were never reminded on a busy day.
+const REMINDERS_PER_ORG = 50
+
+type OrgOutcome = { org_id: string; due: number; sent: number; failed: number; skipped: number; error?: string }
+
 async function getHandler(request: NextRequest) {
   // Fails closed: see lib/cron/auth.
   if (!cronAuthorized(request)) {
@@ -112,26 +119,24 @@ async function getHandler(request: NextRequest) {
 
     console.log('🔔 Starting automated reminder processing...')
 
-    // Get invoices due for reminders today
-    const { data: invoices, error } = await supabase
-      .from('invoices')
-      .select('*')
-      .in('status', [...REMINDABLE_INVOICE_STATUSES])
-      .not('due_date', 'is', null)
-      .gt('balance_due', 0)
-      .eq('reminder_paused', false)
-      .lte('next_reminder_date', today)
-      .not('client_email', 'is', null)
-      // Longest-waiting first. With no order, the same 50 rows came back every
-      // run — and a failed send left its row due — so 50 invoices of an
-      // organization with no mailbox connected starved every other one.
-      .order('next_reminder_date', { ascending: true })
-      .order('id', { ascending: true })
-      .limit(50) // Process max 50 per run
+    // One organisation at a time (invoices.org_id): each batch is that
+    // organisation's invoices, signed with its identity (Settings) and sent
+    // from its own mailbox (lib/email-send) — never mixed with another's.
+    const { data: orgs, error: orgsError } = await supabase.from('organizations').select('id')
+    if (orgsError) throw orgsError
 
-    if (error) throw error
+    const outcomes: OrgOutcome[] = []
+    for (const { id: orgId } of (orgs ?? []) as Array<{ id: string }>) {
+      outcomes.push(await processOrganisation(supabase, orgId, today))
+    }
 
-    if (!invoices || invoices.length === 0) {
+    const sent = outcomes.reduce((n, o) => n + o.sent, 0)
+    const failed = outcomes.reduce((n, o) => n + o.failed, 0)
+    const skipped = outcomes.reduce((n, o) => n + o.skipped, 0)
+    const processed = outcomes.reduce((n, o) => n + o.due, 0)
+    const orgErrors = outcomes.filter(o => o.error).length
+
+    if (processed === 0 && orgErrors === 0) {
       console.log('✅ No reminders to send today')
       return NextResponse.json({
         success: true,
@@ -140,93 +145,23 @@ async function getHandler(request: NextRequest) {
       })
     }
 
-    console.log(`📧 Processing ${invoices.length} reminders...`)
-
-    let sent = 0
-    let failed = 0
-    let skipped = 0
-    const identities = new Map<string, OrgIdentity>()
-
-    for (const invoice of invoices) {
-      const reminderType = reminderStage(daysUntilDue(invoice.due_date, today))
-      if (!reminderType) {
-        // Too early for any reminder: look at it again 7 days before it falls due.
-        await supabase
-          .from('invoices')
-          .update({ next_reminder_date: firstReminderDate(invoice.due_date) })
-          .eq('id', invoice.id)
-        skipped++
-        continue
-      }
-
-      // Signed by the invoice's own organization (Settings), read once per org.
-      if (!identities.has(invoice.org_id)) identities.set(invoice.org_id, await orgIdentity(invoice.org_id))
-      const { subject, html } = generateReminderEmail(invoice, reminderType, identities.get(invoice.org_id))
-
-      const result = await sendReminderEmail({
-        to: invoice.client_email,
-        subject,
-        html,
-        orgId: invoice.org_id,
-      })
-
-      if (result.success) {
-        await supabase
-          .from('invoices')
-          .update({
-            last_reminder_sent: new Date().toISOString(),
-            reminder_count: (invoice.reminder_count || 0) + 1,
-            next_reminder_date: addDaysISO(today, 7)
-          })
-          .eq('id', invoice.id)
-
-        await supabase
-          .from('invoice_reminders')
-          .insert({
-            invoice_id: invoice.id,
-            reminder_type: reminderType,
-            recipient_email: invoice.client_email,
-            subject,
-            status: 'sent'
-          })
-
-        sent++
-        console.log(`✅ Sent reminder for ${invoice.invoice_number}`)
-      } else {
-        // Retried tomorrow, behind everything that has waited longer.
-        await supabase
-          .from('invoices')
-          .update({ next_reminder_date: addDaysISO(today, 1) })
-          .eq('id', invoice.id)
-
-        await supabase
-          .from('invoice_reminders')
-          .insert({
-            invoice_id: invoice.id,
-            reminder_type: reminderType,
-            recipient_email: invoice.client_email,
-            subject,
-            status: 'failed',
-            error_message: result.error
-          })
-
-        failed++
-        console.log(`❌ Failed to send reminder for ${invoice.invoice_number}: ${result.error}`)
-      }
-    }
-
     console.log(`🔔 Reminder processing complete: ${sent} sent, ${failed} failed, ${skipped} not yet due`)
 
     return NextResponse.json({
       success: true,
-      message: `Processed ${invoices.length} reminders`,
+      message: `Processed ${processed} reminders`,
       sent,
       failed,
       skipped,
+      organizations: outcomes,
       timestamp: new Date().toISOString()
     }, {
-      // Every send failing (a lapsed mailbox) is a failed run, not an "ok" one.
-      headers: jobRunHeaders(failed > 0 && sent === 0 ? 'failed' : 'ok', `${sent} sent, ${failed} failed, ${skipped} not yet due`),
+      // Every send failing (a lapsed mailbox), or an organisation's batch not
+      // loading at all, is a failed run, not an "ok" one.
+      headers: jobRunHeaders(
+        (failed > 0 && sent === 0) || orgErrors > 0 ? 'failed' : 'ok',
+        `${sent} sent, ${failed} failed, ${skipped} not yet due${orgErrors ? `, ${orgErrors} organisation(s) not loaded` : ''}`
+      ),
     })
 
   } catch (error: any) {
@@ -236,6 +171,122 @@ async function getHandler(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+/** One organisation's due reminders, up to REMINDERS_PER_ORG. */
+async function processOrganisation(
+  supabase: ReturnType<typeof createServerClient>,
+  orgId: string,
+  today: string
+): Promise<OrgOutcome> {
+  const outcome: OrgOutcome = { org_id: orgId, due: 0, sent: 0, failed: 0, skipped: 0 }
+
+  // This organisation's invoices due for reminders today
+  const { data: invoices, error } = await supabase
+    .from('invoices')
+    .select('*')
+    .eq('org_id', orgId)
+    .in('status', [...REMINDABLE_INVOICE_STATUSES])
+    .not('due_date', 'is', null)
+    .gt('balance_due', 0)
+    .eq('reminder_paused', false)
+    // Due today or earlier, or never scheduled: a new invoice has no
+    // next_reminder_date, and `lte` skips NULL, so the cron never reminded an
+    // invoice nobody had reminded by hand. The loop below sets the date from
+    // the due date (firstReminderDate) when it is too early to remind.
+    .or(`next_reminder_date.lte.${today},next_reminder_date.is.null`)
+    .not('client_email', 'is', null)
+    // Longest-waiting first. With no order, the same rows came back every
+    // run — and a failed send left its row due — so invoices of an
+    // organization with no mailbox connected starved every other one.
+    .order('next_reminder_date', { ascending: true })
+    .order('id', { ascending: true })
+    .limit(REMINDERS_PER_ORG)
+
+  if (error) {
+    // One organisation's batch failing does not stop the others'.
+    console.error(`❌ Reminders for organisation ${orgId} not loaded:`, error.message)
+    return { ...outcome, error: clientMessage(error, 'Could not load invoices') }
+  }
+  if (!invoices || invoices.length === 0) return outcome
+
+  outcome.due = invoices.length
+  console.log(`📧 Processing ${invoices.length} reminders for organisation ${orgId}...`)
+
+  // Signed by this organization (Settings), read once.
+  let identity: OrgIdentity | null = null
+
+  for (const invoice of invoices) {
+    const reminderType = reminderStage(daysUntilDue(invoice.due_date, today))
+    if (!reminderType) {
+      // Too early for any reminder: look at it again 7 days before it falls due.
+      await supabase
+        .from('invoices')
+        .update({ next_reminder_date: firstReminderDate(invoice.due_date) })
+        .eq('id', invoice.id)
+        .eq('org_id', orgId)
+      outcome.skipped++
+      continue
+    }
+
+    if (!identity) identity = await orgIdentity(orgId)
+    const { subject, html } = generateReminderEmail(invoice, reminderType, identity)
+
+    const result = await sendReminderEmail({
+      to: invoice.client_email,
+      subject,
+      html,
+      orgId,
+    })
+
+    if (result.success) {
+      await supabase
+        .from('invoices')
+        .update({
+          last_reminder_sent: new Date().toISOString(),
+          reminder_count: (invoice.reminder_count || 0) + 1,
+          next_reminder_date: addDaysISO(today, 7)
+        })
+        .eq('id', invoice.id)
+        .eq('org_id', orgId)
+
+      await supabase
+        .from('invoice_reminders')
+        .insert({
+          invoice_id: invoice.id,
+          reminder_type: reminderType,
+          recipient_email: invoice.client_email,
+          subject,
+          status: 'sent'
+        })
+
+      outcome.sent++
+      console.log(`✅ Sent reminder for ${invoice.invoice_number}`)
+    } else {
+      // Retried tomorrow, behind everything that has waited longer.
+      await supabase
+        .from('invoices')
+        .update({ next_reminder_date: addDaysISO(today, 1) })
+        .eq('id', invoice.id)
+        .eq('org_id', orgId)
+
+      await supabase
+        .from('invoice_reminders')
+        .insert({
+          invoice_id: invoice.id,
+          reminder_type: reminderType,
+          recipient_email: invoice.client_email,
+          subject,
+          status: 'failed',
+          error_message: result.error
+        })
+
+      outcome.failed++
+      console.log(`❌ Failed to send reminder for ${invoice.invoice_number}: ${result.error}`)
+    }
+  }
+
+  return outcome
 }
 
 // Recorded in job_runs so the support bundle can answer "has this job ever run

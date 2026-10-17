@@ -16,7 +16,7 @@ vi.mock('@supabase/supabase-js', async () => {
 
 import { calculateAutoPricing } from '@/lib/auto-pricing-service'
 
-const BASE = {
+const BASE = { orgId: 'org-1',
   templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false,
   language: 'English', marginPercent: 0, numPax: 2, travelDate: '2026-11-03',
 }
@@ -31,7 +31,8 @@ const gradedGuideRates = () => [
   { id: 'g-senior-t', guide_language: 'English', guide_type: 'senior', tour_duration: 'full_day', guide_mode: 'throughout', is_active: true, base_rate_eur: 120, rate_eur: 120 },
 ]
 
-const seasonedHotel = (guideRate: number) => {
+// null = the period's guide box left blank (the key is absent, as stored).
+const seasonedHotel = (guideRate: number | null) => {
   const t = fullRateTables() as any
   t.guide_rates = gradedGuideRates()
   t.accommodation_rates[0].seasons = [{
@@ -39,7 +40,7 @@ const seasonedHotel = (guideRate: number) => {
     rates: {
       pp_double_eur: 85, single_supp_eur: 45, triple_red_eur: 0,
       pp_double_non_eur: 95, single_supp_non_eur: 50, triple_red_non_eur: 0,
-      guide_rate: guideRate,
+      ...(guideRate === null ? {} : { guide_rate: guideRate }),
     },
   }]
   return t
@@ -100,8 +101,18 @@ describe('throughout mode ("+1")', () => {
     expect(guideHoles(r)).toEqual([])
   })
 
-  it('a property with no guide_rate on its period is a HOLE, never a free bed', async () => {
+  // Blank is not 0 (rate-seasons RATE_FIELDS): a blank guide bed is a hole,
+  // and 0 is the supplier giving it free — the form's hint, now true.
+  it('0 on the period is a free bed: a 0 line, no hole', async () => {
     setMockTables(seasonedHotel(0))
+    const r = await calculateAutoPricing({ ...BASE, guideMode: 'throughout' })
+    expect(line(r, 'day1-guide-bed')).toMatchObject({ unitCost: 0, lineTotal: 0 })
+    expect(line(r, 'day1-guide-bed')?.unpriced).toBeFalsy()
+    expect(guideHoles(r).some((h: any) => /guide bed/i.test(h.message))).toBe(false)
+  })
+
+  it('a property with no guide_rate on its period is a HOLE, never a free bed', async () => {
+    setMockTables(seasonedHotel(null))
     const r = await calculateAutoPricing({ ...BASE, guideMode: 'throughout' })
     expect(line(r, 'day1-guide-bed')).toMatchObject({ unpriced: true, unitCost: 0, lineTotal: 0 })
     const holes = guideHoles(r)

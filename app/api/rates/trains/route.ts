@@ -5,12 +5,18 @@ import { clientMessage } from '@/lib/api-errors'
 import { whereNullable, describeValidity } from '@/lib/rates/natural-key'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { createActorAdminClient } from '@/lib/supabase-actor'
+import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
+import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
+import { enteredFare } from '@/lib/rates/ticket-guide-fare'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
 
 export async function GET(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const searchParams = request.nextUrl.searchParams
     const supplierId = searchParams.get('supplier_id')
     const originCity = searchParams.get('origin_city')
@@ -21,9 +27,11 @@ export async function GET(request: NextRequest) {
     let query = supabaseAdmin
       .from('train_rates')
       .select('*, supplier_properties(name)')
+      .eq('org_id', orgId)
       .order('origin_city')
 
-    if (supplierId) query = query.eq('supplier_id', supplierId)
+    // Only one of the caller's company's suppliers (lib/suppliers/supplier-org).
+    if (supplierId) query = query.eq('supplier_id', await ownSupplierFilterId(supabaseAdmin, supplierId))
     if (originCity) query = query.eq('origin_city', originCity)
     if (destinationCity) query = query.eq('destination_city', destinationCity)
     if (classType) query = query.eq('class_type', classType)
@@ -45,15 +53,24 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
+    const orgId = await getCurrentOrgId()
+    if (!orgId) return noOrgResponse()
     const body = await request.json()
 
     const _rateCheck = validateRatePayload(body)
     if (!_rateCheck.ok) {
       return NextResponse.json({ error: 'Invalid rate values', violations: _rateCheck.errors }, { status: 400 })
     }
+    // The operator must be one of this company's suppliers ('__none__' = none).
+    const supplierCheck = await validateAndResolveSupplierFields({ supplier_id: body.supplier_id }, supabaseAdmin, orgId)
+    if (!supplierCheck.ok) {
+      return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
+    }
+    const supplierId = supplierCheck.supplier_id
+
     const trainProp = await resolveRateProperty(supabaseAdmin, {
       propertyType: 'train',
-      supplierId: body.supplier_id || null,
+      supplierId,
       name: null,
       propertyId: body.property_id,
     })
@@ -64,13 +81,15 @@ export async function POST(request: NextRequest) {
       origin_city: body.origin_city || null,
       destination_city: body.destination_city || null,
       class_type: body.class_type || null,
-      rate_eur: parseFloat(body.rate_eur) || 0,
+      // Blank is "not priced yet" (NULL) — pricing treats it, and 0, as a
+      // hole, never a free ticket.
+      rate_eur: enteredFare(body.rate_eur),
       duration_hours: body.duration_hours ? parseFloat(body.duration_hours) : null,
       rate_valid_from: body.rate_valid_from || null,
       rate_valid_to: body.rate_valid_to || null,
       // The supplier IS the operator (lib/suppliers/operator-name.ts).
-      operator_name: await operatorNameForSupplier(supabaseAdmin, body.supplier_id, body.operator_name),
-      supplier_id: body.supplier_id || null,
+      operator_name: await operatorNameForSupplier(supabaseAdmin, supplierId, body.operator_name),
+      supplier_id: supplierId,
       // Optional explicit link to one of the supplier's trains (Phase 3).
       // Validated through the resolver's propertyId path — a stale id yields
       // null — and omitted when absent so an unmigrated database still saves.
@@ -95,6 +114,7 @@ export async function POST(request: NextRequest) {
     let existingQuery = supabaseAdmin
       .from('train_rates')
       .select('*')
+      .eq('org_id', orgId)
     existingQuery = whereNullable(existingQuery, 'origin_city', newRate.origin_city, { ilike: true })
     existingQuery = whereNullable(existingQuery, 'destination_city', newRate.destination_city, { ilike: true })
     existingQuery = whereNullable(existingQuery, 'class_type', newRate.class_type)
@@ -123,7 +143,7 @@ export async function POST(request: NextRequest) {
 
     const { data, error } = await supabaseAdmin
       .from('train_rates')
-      .insert(newRate)
+      .insert({ ...newRate, org_id: orgId })
       .select('*')
       .single()
 

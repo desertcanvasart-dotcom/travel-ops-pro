@@ -1,16 +1,22 @@
 // ============================================
 // B2C QUOTES API — single offer
 // GET    /api/b2c/quotes/[id]
-// PUT    /api/b2c/quotes/[id]   (re-prices margin/travelers if supplied; snapshots a revision)
-// DELETE /api/b2c/quotes/[id]
+// PUT    /api/b2c/quotes/[id]   margin_percent (re-prices from the itinerary),
+//                               status, client_notes, internal_notes, valid_until;
+//                               snapshots a revision. Notes only once booked.
+// DELETE /api/b2c/quotes/[id]   manager+; never a booked offer
 // ============================================
 
 import { createClient } from '@supabase/supabase-js'
 import { clientMessage } from '@/lib/api-errors'
-import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
-import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
-import { recordsInOrg } from '@/lib/org-refs'
+import { getCurrentOrgId, getCurrentUserId, getCurrentUserRole, noOrgResponse } from '@/lib/auth/current-org'
+import { notFoundInOrg } from '@/lib/api/org-scope'
 import { priceB2cQuote } from '@/lib/b2c/quote-price'
+import { itineraryPax, offerCostBase, OFFER_ITINERARY_COLUMNS, pickB2cQuoteUpdates, resolveTravellers } from '@/lib/b2c/quote-updates'
+import { bookingsFromQuote, MANAGER_ROLES, quoteLockReason } from '@/lib/quotes/lock'
+import { deleteQuote } from '@/lib/quotes/delete-quote'
+import { withEffectiveStatus } from '@/lib/quotes/validity'
+import { getOrgVatRate, loadTripVatExtras, offerVatExcluded, vatColumns, vatUpdateColumns } from '@/lib/vat'
 import { NextRequest, NextResponse } from 'next/server'
 
 const supabaseAdmin = createClient(
@@ -35,7 +41,10 @@ export async function GET(
       .single()
 
     if (error) return NextResponse.json({ success: false, error: 'Quote not found' }, { status: 404 })
-    return NextResponse.json({ success: true, data })
+    // locked: 'booked' once a booking was made from it — the page then offers
+    // only the notes (the PUT refuses the rest).
+    const locked = quoteLockReason(data, await bookingsFromQuote(supabaseAdmin, 'b2c', id))
+    return NextResponse.json({ success: true, data: { ...withEffectiveStatus(data), locked } })
   } catch (error: any) {
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
@@ -49,46 +58,81 @@ export async function PUT(
     const { id } = await params
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
-    if (!(await rowInOrg(supabaseAdmin, 'b2c_quotes', id, orgId))) return notFoundInOrg('Quote')
 
-    const body = await request.json()
-    // `org_id` is stripped: a caller must not be able to move their quote to
-    // another organisation. `changed_by` is IGNORED — the audit actor is the
-    // signed-in user, not a client-supplied field (forgeable authorship).
-    const { id: _drop, org_id: _dropOrg, change_reason, changed_by: _dropActor, ...updates } = body
-    const actor = await getCurrentUserId()
+    const { data: current } = await supabaseAdmin
+      .from('b2c_quotes')
+      // '*': the VAT columns too, when the database has them (migration 20261214).
+      .select('*')
+      .eq('id', id)
+      .eq('org_id', orgId)
+      .maybeSingle()
+    if (!current) return notFoundInOrg('Quote')
 
-    // A trip or client of another org on the quote put that org's client
-    // contact and trip cost in our quote (the GET joins them) and sent our
-    // offer to their client.
-    if (!(await recordsInOrg(supabaseAdmin, orgId, { itinerary_id: updates.itinerary_id, client_id: updates.client_id }))) {
-      return NextResponse.json({ success: false, error: 'Itinerary or client not found' }, { status: 404 })
+    const body = await request.json().catch(() => ({}))
+    // Only what a person edits (lib/b2c/quote-updates.ts); the cost, the
+    // derived prices, the currency, the number and the authorship are never
+    // taken from the body. A booked offer keeps all but its notes.
+    const lock = quoteLockReason(current, await bookingsFromQuote(supabaseAdmin, 'b2c', id))
+    const picked = pickB2cQuoteUpdates(body, { valid_until: current.valid_until, lock })
+    if (!picked.ok) return NextResponse.json({ success: false, error: picked.error }, { status: picked.status })
+    const { vat_applied: vatWanted, ...editable } = picked.updates
+    const updates: Record<string, unknown> = { ...editable }
+    // Changing a margin is manager and above (owner decision, 2026-10-13).
+    if (picked.updates.margin_percent !== undefined && !MANAGER_ROLES.includes((await getCurrentUserRole()) ?? '')) {
+      return NextResponse.json({ success: false, error: 'Insufficient permissions. Changing the margin requires manager role or higher.' }, { status: 403 })
     }
-    // Derived prices are computed here, never taken from the body.
-    delete updates.margin_amount
-    delete updates.selling_price
-    delete updates.price_per_person
-    delete updates.season_uplift_amount
 
-    // If margin/travelers/total_cost change, recompute the derived prices so the
-    // offer stays internally consistent — season premium included, as on create.
-    if (updates.total_cost != null || updates.margin_percent != null || updates.num_travelers != null) {
-      const { data: existing } = await supabaseAdmin
-        .from('b2c_quotes')
-        .select('total_cost, margin_percent, num_travelers, season_uplift_percent, currency')
-        .eq('id', id)
+    // Re-price (the margin, or the traveller count, was sent): from the
+    // itinerary as it stands now — its supplier cost, its party and its
+    // currency — with the offer's season premium, as on create.
+    if (body.margin_percent !== undefined || body.num_travelers !== undefined) {
+      const { data: itinerary } = await supabaseAdmin
+        .from('itineraries')
+        .select(OFFER_ITINERARY_COLUMNS)
+        .eq('id', current.itinerary_id)
         .eq('org_id', orgId)
-        .single()
-      Object.assign(updates, priceB2cQuote({
-        totalCost: Number(updates.total_cost ?? existing?.total_cost ?? 0),
-        marginPercent: Number(updates.margin_percent ?? existing?.margin_percent ?? 0),
-        travelers: Number(updates.num_travelers ?? existing?.num_travelers ?? 1),
-        seasonUpliftPercent: Number(updates.season_uplift_percent ?? existing?.season_uplift_percent ?? 0),
-        currency: updates.currency ?? existing?.currency,
+        .maybeSingle()
+      if (!itinerary) return NextResponse.json({ success: false, error: 'Itinerary not found' }, { status: 404 })
+      const party = resolveTravellers(body.num_travelers, itineraryPax(itinerary))
+      if ('error' in party) return NextResponse.json({ success: false, error: party.error }, { status: 422 })
+      const currency = (itinerary.currency || current.currency || 'EUR').toUpperCase()
+      const totalCost = offerCostBase(itinerary)
+      const marginPercent = picked.updates.margin_percent ?? (Number(current.margin_percent) || 0)
+      Object.assign(updates, { total_cost: totalCost, margin_percent: marginPercent, num_travelers: party.travellers, currency }, priceB2cQuote({
+        totalCost,
+        marginPercent,
+        travelers: party.travellers,
+        seasonUpliftPercent: Number(current.season_uplift_percent ?? 0),
+        currency,
       }))
     }
 
+    // VAT (lib/vat.ts). Switched on or off: recorded on the offer's net at the
+    // company's rate today. Re-priced while on: the new net at the rate the
+    // offer recorded. Sent unchanged with nothing else: left as it is. Either
+    // way the trip's extras' share of the price is not taxed (owner, 2026-10-13).
+    const vatWas = current.vat_applied === true
+    const vatOn = vatWanted ?? vatWas
+    if (vatOn !== vatWas || (vatOn && updates.selling_price !== undefined)) {
+      const net = updates.selling_price ?? current.selling_price
+      const currency = (updates.currency as string | undefined) ?? current.currency
+      Object.assign(updates, vatUpdateColumns(vatColumns({
+        applied: vatOn,
+        net,
+        rate: vatOn !== vatWas ? await getOrgVatRate(supabaseAdmin, orgId) : current.vat_rate,
+        currency,
+        excluded: vatOn
+          ? offerVatExcluded({ sellingPrice: net, cost: updates.total_cost ?? current.total_cost, extrasCost: (await loadTripVatExtras(supabaseAdmin, current.itinerary_id)).excluded_cost, currency })
+          : 0,
+      }), current))
+    }
+
+    if (Object.keys(updates).length === 0) {
+      return NextResponse.json({ success: false, error: 'Nothing to change: an offer\'s margin, status, notes, valid-until date and VAT can be edited.' }, { status: 400 })
+    }
+    const actor = await getCurrentUserId()
     updates.updated_at = new Date().toISOString()
+    updates.last_modified_by = actor
 
     const { data, error } = await supabaseAdmin
       .from('b2c_quotes')
@@ -104,18 +148,19 @@ export async function PUT(
       await supabaseAdmin.rpc('create_b2c_quote_revision', {
         p_quote_id: id,
         p_changed_by: actor,
-        p_change_reason: change_reason ?? 'Quote updated',
+        p_change_reason: typeof body.change_reason === 'string' && body.change_reason ? body.change_reason : 'Quote updated',
       })
     } catch (revErr) {
       console.warn('create_b2c_quote_revision failed (non-fatal):', revErr)
     }
 
-    return NextResponse.json({ success: true, data })
+    return NextResponse.json({ success: true, data: withEffectiveStatus(data) })
   } catch (error: any) {
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }
 }
 
+// Manager and above, and never a booked offer (lib/quotes/delete-quote.ts).
 export async function DELETE(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -124,16 +169,7 @@ export async function DELETE(
     const { id } = await params
     const orgId = await getCurrentOrgId()
     if (!orgId) return noOrgResponse()
-
-    const { data, error } = await supabaseAdmin
-      .from('b2c_quotes')
-      .delete()
-      .eq('id', id)
-      .eq('org_id', orgId)
-      .select('id')
-    if (error) return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
-    if (!data?.length) return notFoundInOrg('Quote')
-    return NextResponse.json({ success: true })
+    return await deleteQuote(supabaseAdmin, { kind: 'b2c', orgId, id, role: await getCurrentUserRole() })
   } catch (error: any) {
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }

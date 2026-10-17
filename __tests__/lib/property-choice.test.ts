@@ -94,7 +94,7 @@ describe('one choice covers the whole stay', () => {
 })
 
 describe('pricing follows the choice', () => {
-  const BASE = { templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0, numPax: 2 }
+  const BASE = { orgId: 'org-1', templateId: TEMPLATE_ID, tier: 'standard' as const, isEurPassport: false, language: 'Japanese', marginPercent: 0, numPax: 2 }
   const withSecondHotel = (choice?: Record<string, string>, secondActive = true) => {
     const t = fullRateTables() as any
     // Newer, so the AUTOMATIC pick is this one.
@@ -196,12 +196,13 @@ describe('pricing follows the choice', () => {
 describe('the editor and the engine read the same list', () => {
   it('the engine picks through lib/pricing/property-candidates, not its own query', () => {
     const src = readFileSync('lib/auto-pricing-service.ts', 'utf8')
-    expect(src).toContain('hotelCandidates(supabaseAdmin, city, tier)')
-    expect(src).toContain('cruiseCandidates(supabaseAdmin, tier, embarkCity, nights)')
+    // The engine passes the travel date: a rate sheet valid on it ranks first.
+    expect(src).toContain('hotelCandidates(supabaseAdmin, orgId, city, tier, travelDate)')
+    expect(src).toContain('cruiseCandidates(supabaseAdmin, orgId, tier, embarkCity, nights, travelDate)')
     expect(src).not.toMatch(/from\('accommodation_rates'\)\s*\.select\('\*'\)\s*\.eq\('tier'/)
     const route = readFileSync('app/api/b2b/accommodation-options/route.ts', 'utf8')
-    expect(route).toContain('hotelCandidates(db, city, tier)')
-    expect(route).toContain('cruiseCandidates(db, tier')
+    expect(route).toContain('hotelCandidates(db, orgId, city, tier)')
+    expect(route).toContain('cruiseCandidates(db, orgId, tier')
   })
 })
 
@@ -217,7 +218,7 @@ describe('the automatic ship prefers a sailing as long as the programme\'s cruis
     setMockTables(t)
     const { createClient } = await import('@supabase/supabase-js')
     const db = createClient('http://localhost', 'k')
-    expect((await cruiseCandidates(db, 'standard', 'Nile Cruise', 4)).map(r => r.id)[0]).toBe('farida-4n')
-    expect((await cruiseCandidates(db, 'standard', 'Nile Cruise', 3)).map(r => r.id)[0]).toBe('farida-3n')
+    expect((await cruiseCandidates(db, 'org-1', 'standard', 'Nile Cruise', 4)).map(r => r.id)[0]).toBe('farida-4n')
+    expect((await cruiseCandidates(db, 'org-1', 'standard', 'Nile Cruise', 3)).map(r => r.id)[0]).toBe('farida-3n')
   })
 })

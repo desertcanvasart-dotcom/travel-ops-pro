@@ -7,6 +7,7 @@ import { sendWhatsAppMessage } from '@/lib/twilio-whatsapp'
 import { createServiceClient } from '@/lib/supabase/service-client'
 import { generateInvoicePDF } from '@/lib/invoice-pdf-generator'
 import { formatMoney } from '@/lib/currency-totals'
+import { readInvoiceVat, vatMarker } from '@/lib/vat'
 import { toCompanyInfo } from '@/lib/company-info-client'
 import { inlineImage } from '@/lib/documents/inline-image'
 import { loadJapaneseFont } from '@/lib/pdf-fonts-node'
@@ -159,7 +160,9 @@ export async function POST(request: NextRequest) {
       `━━━━━━━━━━━━━━━━━━━━\n` +
       `📋 *Invoice:* ${invoice.invoice_number}\n` +
       `📅 *Issue Date:* ${issueDate}\n` +
-      `⏰ *Due Date:* ${dueDate}\n\n` +
+      `⏰ *Due Date:* ${dueDate}\n` +
+      // VAT, always stated (lib/vat.ts): the invoice's recorded rate and amount.
+      `🧾 ${vatMarker(readInvoiceVat(invoice), invoice.currency)}\n\n` +
       // The currency's own decimals (JPY has none): formatMoney, as the PDF.
       `💰 *Balance Due: ${formatMoney(Number(invoice.balance_due), invoice.currency)}*\n\n` +
       (businessEmail ? `For questions, contact us:\n📧 ${businessEmail}\n\n` : '') +

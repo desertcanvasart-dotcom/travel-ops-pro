@@ -7,12 +7,18 @@ import { z } from 'zod'
 // VALIDATION SCHEMA
 // ============================================
 
+// What a person may change about themselves here: their name and phone. The
+// avatar has its own upload route and the interface language is a cookie
+// (LanguageSelector). Strict, so anything else is a 400 rather than silently
+// dropped behind a "Saved": the form used to send its Email and Role inputs,
+// zod stripped them, and the page said "Saved successfully". Email is the
+// sign-in identity and role is the company's to grant (organization_members);
+// timezone and company_name were stored and read by nothing — company identity
+// is Settings › Organization › Company Profile.
 const ProfileUpdateSchema = z.object({
   full_name: z.string().min(1).max(255).trim().optional(),
   phone: z.string().max(50).trim().optional().nullable(),
-  timezone: z.string().max(100).optional(),
-  company_name: z.string().max(255).trim().optional().nullable(),
-})
+}).strict()
 
 // ============================================
 // SECURE SUPABASE CLIENT

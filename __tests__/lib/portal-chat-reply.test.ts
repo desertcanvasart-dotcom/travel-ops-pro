@@ -14,13 +14,15 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 // made vitest attribute the 'failed' test's caught rejection to the test as
 // unhandled (empirically — the SUT's warn fires and its result is correct).
 // A plain holder has no lifecycle to trip over.
-const mail: { impl: (...args: unknown[]) => Promise<unknown>; calls: number } = {
+const mail: { impl: (...args: unknown[]) => Promise<unknown>; calls: number; last: unknown } = {
   impl: async () => ({ success: true }),
   calls: 0,
+  last: null,
 }
 vi.mock('@/lib/email-send', () => ({
   sendEmailInternal: (...args: unknown[]) => {
     mail.calls++
+    mail.last = args[0]
     return mail.impl(...args)
   },
 }))
@@ -57,6 +59,7 @@ const BASE_ROWS = {
 beforeEach(() => {
   mail.impl = async () => ({ success: true })
   mail.calls = 0
+  mail.last = null
 })
 
 describe('sendStaffReply notification outcome', () => {
@@ -107,5 +110,45 @@ describe('sendStaffReply notification outcome', () => {
   it("'no-booking' when the thread points at a booking that is gone", async () => {
     const r = await sendStaffReply(fakeDb({ ...BASE_ROWS, bookings: null }), ARGS)
     expect(r.notified).toBe('no-booking')
+  })
+})
+
+describe('which portal link the notification carries', () => {
+  // Traveller A's private thread on a booking where only traveller B (and
+  // nobody else) has a private link: B's link must never be mailed to A.
+  const PRIVATE_A = { ...ARGS, thread: { ...THREAD, passenger_id: 'pax-a' } }
+  const rows = (links: Array<{ token: string; passenger_id: string | null }>) =>
+    fakeDb({ ...BASE_ROWS, booking_passengers: { email: 'a@example.com' }, booking_portal_links: links })
+  const html = () => String((mail.last as { html?: string } | null)?.html ?? '')
+
+  it("a private thread with no link of its own: 'no-link', never another traveller's private link", async () => {
+    const r = await sendStaffReply(rows([{ token: 'tok-b', passenger_id: 'pax-b' }]), PRIVATE_A)
+    expect(r.notified).toBe('no-link')
+    expect(mail.calls).toBe(0)
+  })
+
+  it("a private thread is not sent the shared link either — that page does not hold it", async () => {
+    const r = await sendStaffReply(rows([{ token: 'tok-shared', passenger_id: null }]), PRIVATE_A)
+    expect(r.notified).toBe('no-link')
+  })
+
+  it('a private thread gets its own traveller\'s link', async () => {
+    const r = await sendStaffReply(rows([
+      { token: 'tok-b', passenger_id: 'pax-b' },
+      { token: 'tok-a', passenger_id: 'pax-a' },
+    ]), PRIVATE_A)
+    expect(r.notified).toBe('sent')
+    expect(html()).toContain('https://x.test/portal/tok-a')
+    expect(html()).not.toContain('tok-b')
+  })
+
+  it("the shared thread gets the shared link, never a traveller's private one", async () => {
+    expect((await sendStaffReply(rows([{ token: 'tok-b', passenger_id: 'pax-b' }]), ARGS)).notified).toBe('no-link')
+    const r = await sendStaffReply(rows([
+      { token: 'tok-b', passenger_id: 'pax-b' },
+      { token: 'tok-shared', passenger_id: null },
+    ]), ARGS)
+    expect(r.notified).toBe('sent')
+    expect(html()).toContain('/portal/tok-shared')
   })
 })

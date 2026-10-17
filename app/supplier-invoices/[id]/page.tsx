@@ -154,6 +154,36 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
     }
   }
 
+  // A disputed bill was a dead end; this puts it back to matched / received.
+  const handleResolveDispute = async () => {
+    if (!(await confirmDialog('Resolve this dispute? The bill goes back to matched or received and has to be approved again.'))) return
+    setActionLoading('resolve')
+    try {
+      const res = await fetch(`/api/supplier-invoices/${id}/dispute`, { method: 'DELETE' })
+      if (!(await reportFailure(res, 'Resolving the dispute'))) fetchInvoice()
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  // Approved and disputed bills are a record of something decided, so they are
+  // cancelled (kept, but no longer owed) rather than deleted.
+  const handleCancel = async () => {
+    const reason = prompt('Why is this bill being cancelled? (optional)')
+    if (reason === null) return
+    setActionLoading('cancel')
+    try {
+      const res = await fetch(`/api/supplier-invoices/${id}/cancel`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reason }),
+      })
+      if (!(await reportFailure(res, 'Cancelling'))) fetchInvoice()
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
   const handleDelete = async () => {
     if (!(await confirmDialog('Delete this supplier invoice?'))) return
     const res = await fetch(`/api/supplier-invoices/${id}`, { method: 'DELETE' })
@@ -193,25 +223,20 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
     setShowMatchModal(true)
     setLoadingExpenses(true)
     try {
-      const res = await fetch('/api/expenses?status=pending')
-      const data = await res.json()
-      // Only expenses in the invoice's currency can match it; supplier's first.
-      const supplierName = invoice?.supplier_name as string
+      // Pending AND approved: Payables lists approved ones as "Approved to Pay",
+      // and the match route accepts both (a paid or rejected expense is refused).
+      const [pending, approved] = await Promise.all(
+        ['pending', 'approved'].map(status => fetch(`/api/expenses?status=${status}`).then(r => r.json()))
+      )
+      const all = [...(Array.isArray(pending) ? pending : []), ...(Array.isArray(approved) ? approved : [])]
+      // Only this supplier's expenses in the invoice's currency can match it.
       const invoiceCurrency = String(invoice?.currency || 'EUR').toUpperCase()
-      const filtered = (Array.isArray(data) ? data : []).filter((e: Record<string, unknown>) =>
-        String(e.currency || 'EUR').toUpperCase() === invoiceCurrency
-      )
-      setAvailableExpenses(
-        supplierName
-          ? filtered.filter((e: Record<string, unknown>) =>
-              String(e.supplier_name || '').toLowerCase().includes(supplierName.toLowerCase())
-            ).concat(
-              filtered.filter((e: Record<string, unknown>) =>
-                !String(e.supplier_name || '').toLowerCase().includes(supplierName.toLowerCase())
-              )
-            )
-          : filtered
-      )
+      const norm = (v: unknown) => String(v ?? '').trim().toLowerCase()
+      setAvailableExpenses(all.filter((e: Record<string, unknown>) => {
+        if (String(e.currency || 'EUR').toUpperCase() !== invoiceCurrency) return false
+        if (invoice?.supplier_id && e.supplier_id) return invoice.supplier_id === e.supplier_id
+        return !!norm(e.supplier_name) && norm(e.supplier_name) === norm(invoice?.supplier_name)
+      }))
     } finally {
       setLoadingExpenses(false)
     }
@@ -303,7 +328,17 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
               Mark Paid
             </button>
           )}
-          {invoice.status !== 'paid' && invoice.status !== 'cancelled' && (
+          {invoice.status === 'disputed' && (
+            <button
+              onClick={handleResolveDispute}
+              disabled={actionLoading === 'resolve'}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-white bg-blue-600 rounded-lg hover:bg-blue-700 disabled:opacity-50"
+            >
+              {actionLoading === 'resolve' ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+              Resolve dispute
+            </button>
+          )}
+          {invoice.status !== 'paid' && invoice.status !== 'cancelled' && invoice.status !== 'disputed' && (
             <button
               onClick={handleDispute}
               className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-red-600 bg-red-50 rounded-lg hover:bg-red-100"
@@ -312,9 +347,21 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
               Dispute
             </button>
           )}
-          <button onClick={handleDelete} className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
-            <Trash2 className="w-4 h-4" />
-          </button>
+          {(invoice.status === 'approved' || invoice.status === 'disputed') && (
+            <button
+              onClick={handleCancel}
+              disabled={actionLoading === 'cancel'}
+              className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-gray-600 bg-gray-100 rounded-lg hover:bg-gray-200 disabled:opacity-50"
+            >
+              <XCircle className="w-4 h-4" />
+              Cancel bill
+            </button>
+          )}
+          {invoice.status !== 'paid' && invoice.status !== 'approved' && invoice.status !== 'disputed' && (
+            <button onClick={handleDelete} title="Delete" className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-lg">
+              <Trash2 className="w-4 h-4" />
+            </button>
+          )}
         </div>
       </div>
 

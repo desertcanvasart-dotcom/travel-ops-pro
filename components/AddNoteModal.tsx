@@ -1,11 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { createClient } from '@/lib/supabase'
 import { X, FileText, AlertCircle, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
-
-const supabase = createClient()
 
 interface AddNoteModalProps {
   isOpen: boolean
@@ -67,31 +64,25 @@ export default function AddNoteModal({
         throw new Error(t('enterNote'))
       }
 
-      if (isEditMode) {
-        // Update existing note
-        const { error: updateError } = await supabase
-          .from('client_notes')
-          .update({
-            content: formData.note_text,
-            note_type: formData.note_type,
-            is_important: formData.is_internal
-          })
-          .eq('id', editNote.id)
-
-        if (updateError) throw updateError
-      } else {
-        // Create new note
-        const { error: insertError } = await supabase
-          .from('client_notes')
-          .insert({
-            client_id: clientId,
-            content: formData.note_text,
-            note_type: formData.note_type,
-            is_important: formData.is_internal
-          })
-
-        if (insertError) throw insertError
+      // Through the server, which checks the client belongs to the active
+      // company, stamps the author on a new note, and answers with the reason
+      // when it cannot save.
+      const payload = {
+        content: formData.note_text,
+        note_type: formData.note_type,
+        is_important: formData.is_internal
       }
+      const res = await fetch(
+        isEditMode
+          ? `/api/clients/${clientId}/notes/${editNote.id}`
+          : `/api/clients/${clientId}/notes`,
+        {
+          method: isEditMode ? 'PATCH' : 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }
+      )
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || t('failedToSave'))
 
       // Reset form
       setFormData({
@@ -117,12 +108,8 @@ export default function AddNoteModal({
     setError(null)
 
     try {
-      const { error: deleteError } = await supabase
-        .from('client_notes')
-        .delete()
-        .eq('id', editNote.id)
-
-      if (deleteError) throw deleteError
+      const res = await fetch(`/api/clients/${clientId}/notes/${editNote.id}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error((await res.json().catch(() => null))?.error || t('failedToDelete'))
 
       // Success
       onSuccess()

@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react'
 import Link from 'next/link'
 import { FileText, Loader2, Plus, Eye, Trash2, X, Users, Clock, Send, CheckCircle2, XCircle } from 'lucide-react'
 import { useConfirm } from '@/components/ConfirmDialog'
+import { formatMoney } from '@/lib/currency-totals'
+import { readVat } from '@/lib/vat'
+import { VatToken, VatToggle } from '@/app/components/Vat'
 
 interface B2CQuote {
   id: string
@@ -15,10 +18,13 @@ interface B2CQuote {
   status: string
   valid_until: string | null
   created_at: string
+  vat_applied?: boolean
+  vat_rate?: number | null
+  vat_amount?: number
   itineraries?: { id: string; trip_name: string | null; itinerary_code: string | null; client_name: string | null } | null
 }
 
-interface ItineraryLite { id: string; trip_name: string | null; itinerary_code: string | null; total_cost: number | null }
+interface ItineraryLite { id: string; trip_name: string | null; itinerary_code: string | null; client_name: string | null; start_date: string | null; num_adults: number | null; num_children: number | null; currency: string | null }
 
 const STATUS: Record<string, { bg: string; text: string; icon: any; label: string }> = {
   draft: { bg: 'bg-gray-100', text: 'text-gray-700', icon: Clock, label: 'Draft' },
@@ -56,7 +62,10 @@ export default function B2CQuotesPage() {
     setDeleting(id)
     try {
       const res = await fetch(`/api/b2c/quotes/${id}`, { method: 'DELETE' })
-      if ((await res.json()).success) setQuotes((qs) => qs.filter((q) => q.id !== id))
+      const data = await res.json()
+      // A booked offer is kept, and says why.
+      if (data.success) setQuotes((qs) => qs.filter((q) => q.id !== id))
+      else alert(data.error || 'Delete failed')
     } finally {
       setDeleting(null)
     }
@@ -128,8 +137,9 @@ export default function B2CQuotesPage() {
                   </td>
                   <td className="px-4 py-3 text-center text-sm"><span className="inline-flex items-center gap-1"><Users className="w-3 h-3 text-gray-400" />{q.num_travelers}</span></td>
                   <td className="px-4 py-3 text-right">
-                    <p className="text-sm font-bold text-[#647C47]">{q.currency} {Number(q.selling_price).toFixed(2)}</p>
-                    <p className="text-xs text-gray-500">{q.currency} {Number(q.price_per_person).toFixed(2)} pp</p>
+                    <p className="text-sm font-bold text-[#647C47]">{formatMoney(Number(q.selling_price) || 0, q.currency || 'EUR')}</p>
+                    <p className="text-xs text-gray-500">{formatMoney(Number(q.price_per_person) || 0, q.currency || 'EUR')} pp</p>
+                    <VatToken vat={readVat(q)} currency={q.currency} className="mt-1" />
                   </td>
                   <td className="px-4 py-3 text-center text-sm">{q.valid_until || '—'}</td>
                   <td className="px-4 py-3 text-center">{badge(q.status)}</td>
@@ -156,14 +166,18 @@ export default function B2CQuotesPage() {
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
   const [itineraries, setItineraries] = useState<ItineraryLite[]>([])
   const [itineraryId, setItineraryId] = useState('')
-  const [numTravelers, setNumTravelers] = useState(2)
-  const [marginPercent, setMarginPercent] = useState(25)
+  const [search, setSearch] = useState('')
+  // Empty means the company's default margin (Settings); the server applies it.
+  const [marginPercent, setMarginPercent] = useState('')
   const [validDays, setValidDays] = useState(30)
+  // Off unless chosen; the server records the company's rate and the amount.
+  const [vatApplied, setVatApplied] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    fetch('/api/itineraries?limit=100')
+    // The newest 1,000 trips (the list API's ceiling), narrowed by the search box.
+    fetch('/api/itineraries?limit=1000')
       .then((r) => r.json())
       .then((d) => { if (d.success || d.data) setItineraries(d.data || d.itineraries || []) })
       .catch(() => {})
@@ -178,7 +192,8 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
       const res = await fetch('/api/b2c/quotes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ itinerary_id: itineraryId, num_travelers: numTravelers, margin_percent: marginPercent, valid_days: validDays }),
+        // Travellers and currency are the itinerary's own; the server reads them.
+        body: JSON.stringify({ itinerary_id: itineraryId, ...(marginPercent.trim() !== '' ? { margin_percent: Number(marginPercent) } : {}), valid_days: validDays, vat_applied: vatApplied }),
       })
       const json = await res.json()
       if (!json.success) { setError(json.error || 'Failed to create offer'); return }
@@ -189,6 +204,12 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
   }
 
   const input = 'w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-[#647C47]'
+  const pax = (it: ItineraryLite) => (Number(it.num_adults) || 0) + (Number(it.num_children) || 0)
+  const needle = search.trim().toLowerCase()
+  const shown = needle
+    ? itineraries.filter((it) => [it.trip_name, it.itinerary_code, it.client_name].some((v) => v?.toLowerCase().includes(needle)))
+    : itineraries
+  const chosen = itineraries.find((it) => it.id === itineraryId)
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={(e) => { if (e.target === e.currentTarget) onClose() }}>
@@ -200,18 +221,24 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
         <div className="p-5 space-y-3">
           <div>
             <label className="block text-xs text-gray-500 mb-1">Itinerary</label>
+            <input className={`${input} mb-2`} placeholder="Search trip, code or client…" value={search} onChange={(e) => setSearch(e.target.value)} />
             <select className={input} value={itineraryId} onChange={(e) => setItineraryId(e.target.value)}>
               <option value="">Select an itinerary…</option>
-              {itineraries.map((it) => (
-                <option key={it.id} value={it.id}>{it.trip_name || it.itinerary_code || it.id}{it.total_cost != null ? ` — cost ${it.total_cost}` : ''}</option>
+              {shown.map((it) => (
+                <option key={it.id} value={it.id}>{it.trip_name || it.itinerary_code || it.id}{it.client_name ? ` — ${it.client_name}` : ''}{it.start_date ? ` · ${it.start_date}` : ''}</option>
               ))}
             </select>
+            {chosen && (
+              <p className="text-xs text-gray-500 mt-1">
+                Priced for the itinerary's party: {pax(chosen) || '—'} traveller(s), in {chosen.currency || 'EUR'}. For another party size, re-price the itinerary first.
+              </p>
+            )}
           </div>
-          <div className="grid grid-cols-3 gap-3">
-            <div><label className="block text-xs text-gray-500 mb-1">Travellers</label><input type="number" min={1} className={input} value={numTravelers} onChange={(e) => setNumTravelers(Number(e.target.value))} /></div>
-            <div><label className="block text-xs text-gray-500 mb-1">Margin %</label><input type="number" min={0} className={input} value={marginPercent} onChange={(e) => setMarginPercent(Number(e.target.value))} /></div>
+          <div className="grid grid-cols-2 gap-3">
+            <div><label className="block text-xs text-gray-500 mb-1">Margin %</label><input type="number" min={0} max={100} step="0.01" className={input} placeholder="Company default" value={marginPercent} onChange={(e) => setMarginPercent(e.target.value)} /></div>
             <div><label className="block text-xs text-gray-500 mb-1">Valid (days)</label><input type="number" min={1} className={input} value={validDays} onChange={(e) => setValidDays(Number(e.target.value))} /></div>
           </div>
+          <VatToggle checked={vatApplied} onChange={setVatApplied} />
           {error && <p className="text-sm text-red-600">{error}</p>}
         </div>
         <div className="flex justify-end gap-2 px-5 py-4 border-t">

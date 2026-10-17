@@ -6,6 +6,8 @@ import { useTranslations } from 'next-intl'
 import { Search, Plus, FileText, Eye, Edit2, Trash2, CheckCircle2, AlertCircle, X } from 'lucide-react'
 import { LanguageIndicator } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
+import CancelTripDialog from '@/components/itineraries/CancelTripDialog'
 
 interface Itinerary {
   id: string
@@ -44,10 +46,16 @@ export default function ItinerariesPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [page, setPage] = useState(1)
   const [searchQuery, setSearchQuery] = useState('')
+  const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
-  const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState<string | null>(null)
+  // Whole-company counts per status, from the server (not the loaded page).
+  const [statusCounts, setStatusCounts] = useState<Record<string, number>>({})
+  // Cancel goes through the same dialog as the itinerary page: a reason, and
+  // the booking cancelled with the trip.
+  const [cancelling, setCancelling] = useState<{ itinerary: Itinerary; booking: { id: string; booking_code: string } | null } | null>(null)
   const router = useRouter()
+  const dialog = useConfirmDialog()
 
   const [toasts, setToasts] = useState<Toast[]>([])
 
@@ -57,26 +65,33 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
   setTimeout(() => setToasts(prev => prev.filter(t => t.id !== id)), 4000)
 }
 
+  // The search runs on the server a moment after typing stops, so it finds
+  // trips that are not among the rows loaded so far.
   useEffect(() => {
-    fetchItineraries()
-  }, [])
-  interface Toast {
-  id: string
-  type: 'success' | 'error' | 'info'
-  message: string
-}
+    const timer = setTimeout(() => setSearch(searchQuery.trim()), 300)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
 
   useEffect(() => {
-    filterItineraries()
-  }, [itineraries, searchQuery, statusFilter])
+    fetchItineraries(1)
+  }, [search, statusFilter])
+
+  useEffect(() => {
+    setFilteredItineraries(itineraries)
+  }, [itineraries])
 
   const fetchItineraries = async (pageToLoad = 1) => {
     if (pageToLoad > 1) setLoadingMore(true)
     try {
-      const response = await fetch(`/api/itineraries?page=${pageToLoad}&limit=${PAGE_SIZE}`)
+      const params = new URLSearchParams({ page: String(pageToLoad), limit: String(PAGE_SIZE) })
+      if (statusFilter !== 'all') params.set('status', statusFilter)
+      if (search) params.set('search', search)
+      if (pageToLoad === 1) params.set('counts', 'true')
+      const response = await fetch(`/api/itineraries?${params.toString()}`)
       const data = await response.json()
       if (data.success) {
         setTotalCount(data.count ?? data.data.length)
+        if (data.status_counts) setStatusCounts(data.status_counts)
         setPage(pageToLoad)
         if (pageToLoad === 1) {
           setItineraries(data.data)
@@ -97,44 +112,40 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
     }
   }
 
-  const filterItineraries = () => {
-    let filtered = itineraries
+  // A status moved on one row: the cards follow without a reload.
+  const moveCount = (from: string, to: string | null) => setStatusCounts(prev => {
+    const next = { ...prev }
+    if (from in next) next[from] = Math.max(0, next[from] - 1)
+    if (to) next[to] = (next[to] ?? 0) + 1
+    else next.total = Math.max(0, (next.total ?? 0) - 1)
+    return next
+  })
 
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(it => it.status === statusFilter)
-    }
-
-    if (searchQuery) {
-      filtered = filtered.filter(it =>
-        it.client_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        it.trip_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        it.itinerary_code?.toLowerCase().includes(searchQuery.toLowerCase())
-      )
-    }
-
-    setFilteredItineraries(filtered)
-  }
-
-  const deleteItinerary = async (id: string) => {
-    if (deleteConfirm !== id) {
-      setDeleteConfirm(id)
-      setTimeout(() => setDeleteConfirm(null), 3000)
-      return
-    }
+  // A confirmation dialog, never a second click on the same bin: the trip and
+  // everything recorded on it go. The server refuses a trip with a booking,
+  // payments, invoices or sent documents and says why.
+  const deleteItinerary = async (itinerary: Itinerary) => {
+    const ok = await dialog.confirm({
+      title: t('deleteConfirmTitle'),
+      message: t('deleteConfirmMessage', { code: itinerary.itinerary_code, trip: itinerary.trip_name || '' }),
+      confirmText: t('delete'),
+      variant: 'danger',
+    })
+    if (!ok) return
 
     try {
-      const response = await fetch(`/api/itineraries/${id}`, {
+      const response = await fetch(`/api/itineraries/${itinerary.id}`, {
         method: 'DELETE'
       })
 
       const data = await response.json()
 
       if (data.success) {
-        setItineraries(itineraries.filter(it => it.id !== id))
+        setItineraries(prev => prev.filter(it => it.id !== itinerary.id))
         setTotalCount(prev => Math.max(0, prev - 1))
-        setDeleteConfirm(null)
+        moveCount(itinerary.status, null)
       } else {
-        showToast('error', data.error || t('errorDeleteFailed'))
+        await dialog.alert(t('errorDeleteFailed'), data.error || t('errorDeleteFailed'), 'warning')
       }
     } catch (error) {
       console.error('Error deleting itinerary:', error)
@@ -142,7 +153,26 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
     }
   }
 
+  // Cancelled goes through the Cancel trip dialog (reason, booking with it).
+  const openCancel = async (itinerary: Itinerary) => {
+    let booking: { id: string; booking_code: string } | null = null
+    try {
+      const res = await fetch(`/api/bookings?itinerary_id=${encodeURIComponent(itinerary.id)}&limit=1`)
+      const data = res.ok ? await res.json() : null
+      const found = data?.success ? (data.data || []).find((b: { itinerary_id?: string }) => b.itinerary_id === itinerary.id) : null
+      booking = found ? { id: found.id, booking_code: found.booking_code } : null
+    } catch {
+      // No booking found is the same as none: the dialog cancels the trip.
+    }
+    setCancelling({ itinerary, booking })
+  }
+
   const updateStatus = async (id: string, newStatus: string) => {
+    const row = itineraries.find(it => it.id === id)
+    if (newStatus === 'cancelled' && row) {
+      await openCancel(row)
+      return
+    }
     setUpdatingStatus(id)
     try {
       const response = await fetch(`/api/itineraries/${id}`, {
@@ -154,9 +184,11 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
       const data = await response.json()
 
       if (data.success) {
-        setItineraries(itineraries.map(it =>
+        setItineraries(prev => prev.map(it =>
           it.id === id ? { ...it, status: newStatus } : it
         ))
+        if (row) moveCount(row.status, newStatus)
+        if (data.booking_error) showToast('error', data.booking_error)
       } else {
         showToast('error', data.error || t('errorUpdateFailed'))
       }
@@ -179,14 +211,6 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
     return colors[status] || 'bg-gray-50 text-gray-600 border-gray-200'
   }
 
-  const statusCounts = {
-    total: itineraries.length,
-    draft: itineraries.filter(i => i.status === 'draft').length,
-    sent: itineraries.filter(i => i.status === 'sent').length,
-    confirmed: itineraries.filter(i => i.status === 'confirmed').length,
-    completed: itineraries.filter(i => i.status === 'completed').length,
-    cancelled: itineraries.filter(i => i.status === 'cancelled').length
-  }
 
   if (loading) {
     return (
@@ -231,7 +255,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
             <span className="text-xs font-medium text-gray-600">{t('total')}</span>
             <FileText className="w-4 h-4 text-gray-400" />
           </div>
-          <div className="text-2xl font-bold text-gray-900">{statusCounts.total}</div>
+          <div className="text-2xl font-bold text-gray-900">{statusCounts.total ?? 0}</div>
         </button>
 
         {/* Draft */}
@@ -247,7 +271,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
             <span className="text-xs font-medium text-gray-600">{t('draft')}</span>
             <div className="w-2 h-2 rounded-full bg-gray-400"></div>
           </div>
-          <div className="text-2xl font-bold text-gray-900">{statusCounts.draft}</div>
+          <div className="text-2xl font-bold text-gray-900">{statusCounts.draft ?? 0}</div>
         </button>
 
         {/* Sent */}
@@ -263,7 +287,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
             <span className="text-xs font-medium text-gray-600">{t('sent')}</span>
             <div className="w-2 h-2 rounded-full bg-primary-500"></div>
           </div>
-          <div className="text-2xl font-bold text-gray-900">{statusCounts.sent}</div>
+          <div className="text-2xl font-bold text-gray-900">{statusCounts.sent ?? 0}</div>
         </button>
 
         {/* Confirmed */}
@@ -279,7 +303,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
             <span className="text-xs font-medium text-gray-600">{t('confirmed')}</span>
             <div className="w-2 h-2 rounded-full bg-green-500"></div>
           </div>
-          <div className="text-2xl font-bold text-gray-900">{statusCounts.confirmed}</div>
+          <div className="text-2xl font-bold text-gray-900">{statusCounts.confirmed ?? 0}</div>
         </button>
 
         {/* Completed */}
@@ -295,7 +319,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
             <span className="text-xs font-medium text-gray-600">{t('completed')}</span>
             <div className="w-2 h-2 rounded-full bg-purple-500"></div>
           </div>
-          <div className="text-2xl font-bold text-gray-900">{statusCounts.completed}</div>
+          <div className="text-2xl font-bold text-gray-900">{statusCounts.completed ?? 0}</div>
         </button>
 
         {/* Cancelled */}
@@ -311,7 +335,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
             <span className="text-xs font-medium text-gray-600">{t('cancelled')}</span>
             <div className="w-2 h-2 rounded-full bg-red-500"></div>
           </div>
-          <div className="text-2xl font-bold text-gray-900">{statusCounts.cancelled}</div>
+          <div className="text-2xl font-bold text-gray-900">{statusCounts.cancelled ?? 0}</div>
         </button>
       </div>
 
@@ -327,7 +351,7 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
       </div>
 
       <div className="text-xs text-gray-500">
-        {t('showingOf', { count: filteredItineraries.length, total: itineraries.length })}
+        {t('showingOf', { count: filteredItineraries.length, total: totalCount })}
       </div>
 
       {/* ⭐ COMPACT TABLE - Linear Style */}
@@ -439,13 +463,9 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
-                        onClick={() => deleteItinerary(itinerary.id)}
-                        className={`p-1.5 rounded transition-colors ${
-                          deleteConfirm === itinerary.id
-                            ? 'bg-red-500 text-white hover:bg-red-600'
-                            : 'text-gray-600 hover:bg-red-50 hover:text-red-600'
-                        }`}
-                        title={deleteConfirm === itinerary.id ? t('clickToConfirm') : t('delete')}
+                        onClick={() => deleteItinerary(itinerary)}
+                        className="p-1.5 rounded transition-colors text-gray-600 hover:bg-red-50 hover:text-red-600"
+                        title={t('delete')}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -478,6 +498,22 @@ const showToast = (type: 'success' | 'error' | 'info', message: string) => {
               : `${t('loadMore')} (${itineraries.length}/${totalCount})`}
           </button>
         </div>
+      )}
+      {cancelling && (
+        <CancelTripDialog
+          itineraryId={cancelling.itinerary.id}
+          tripName={cancelling.itinerary.trip_name}
+          booking={cancelling.booking}
+          paid={null}
+          currency={cancelling.itinerary.currency}
+          onClose={() => setCancelling(null)}
+          onCancelled={() => {
+            const { itinerary } = cancelling
+            setItineraries(prev => prev.map(it => (it.id === itinerary.id ? { ...it, status: 'cancelled' } : it)))
+            moveCount(itinerary.status, 'cancelled')
+            setCancelling(null)
+          }}
+        />
       )}
 {/* Toast Notifications */}
 {toasts.length > 0 && (

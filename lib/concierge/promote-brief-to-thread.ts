@@ -19,7 +19,6 @@
 // ============================================
 
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { getDefaultOrgId } from '@/lib/auth/default-org'
 
 const PG_UNIQUE_VIOLATION = '23505'
 
@@ -34,6 +33,7 @@ export interface PromoteResult {
 
 interface BriefRow {
   id: string
+  org_id: string
   client_id: string | null
   visitor_name: string | null
   visitor_email: string | null
@@ -68,7 +68,7 @@ export async function promoteBriefToThread(
   const { data: brief, error: briefErr } = await supabase
     .from('concierge_briefs')
     .select(
-      'id, client_id, visitor_name, visitor_email, visitor_phone, preferred_contact, brief_summary, brief_revision, submitted_at, received_at'
+      'id, org_id, client_id, visitor_name, visitor_email, visitor_phone, preferred_contact, brief_summary, brief_revision, submitted_at, received_at'
     )
     .eq('id', briefId)
     .maybeSingle()
@@ -86,9 +86,10 @@ export async function promoteBriefToThread(
   const lastMessageAt = briefRow.submitted_at || briefRow.received_at || nowIso
   const revision = briefRow.brief_revision ?? 1
 
-  // Phase 2 — intake-side org stamping. See DEFERRED_GATES.md → G1 for the
-  // gated authority flip; today this is a default-org placeholder.
-  const orgId = await getDefaultOrgId(supabase)
+  // The thread is the brief's company's (concierge_briefs.org_id, NOT NULL
+  // since 20261204) — the intake stamped it; a second "default org" lookup
+  // here could disagree with it.
+  const orgId = briefRow.org_id
 
   // 2. Find-or-create thread keyed on brief_id.
   let threadId: string

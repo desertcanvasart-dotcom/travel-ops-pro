@@ -2,7 +2,8 @@
 // Rate-change digest — every 15 minutes (railway.toml)
 // ============================================
 // Reads rate_audit_log since the last run, groups by actor × table, and
-// tells each org's owners/admins/managers ONCE per group (the actor is not
+// tells the owners/admins/managers of the company whose rates changed ONCE
+// per group (the actor is not
 // told about their own edit). A bulk import of 79 entrance fees is one
 import { cronAuthorized } from '@/lib/cron/auth'
 // notification, not 79. The org chooses in-app / in-app + e-mail / off on
@@ -42,7 +43,7 @@ async function getHandler(request: NextRequest) {
 
   const { data: rows, error } = await supabase
     .from('rate_audit_log')
-    .select('id, table_name, record_id, action, changed_fields, full_old_record, full_new_record, changed_by, changed_at')
+    .select('id, table_name, record_id, action, changed_fields, full_old_record, full_new_record, changed_by, changed_at, org_id')
     .gt('changed_at', since)
     .lte('changed_at', until)
     .order('changed_at', { ascending: true })
@@ -70,9 +71,9 @@ async function getHandler(request: NextRequest) {
         names.set(p.id, p.full_name?.trim() || p.email || p.id.slice(0, 8))
       }
     }
-    // Every org hears about every change: the rate tables carry no org_id —
-    // they are the whole installation's cost base, and every org prices from
-    // them (org-scoped rates are the deferred multi-org work).
+    // Each company hears only about its OWN rates (rate_audit_log.org_id, the
+    // rate's company): rates are private per company since 20261206. Every
+    // company used to be told about every company's changes.
     //
     // Each org's managers are looked up ONCE and all of this run's
     // notifications are created together (in parallel, each still honouring
@@ -80,8 +81,10 @@ async function getHandler(request: NextRequest) {
     // then the inserts per org × group, strictly in sequence — a 30-group bulk
     // import meant 30 membership queries and 30 waits per org.
     const { data: orgs } = await supabase.from('organizations').select('id, rate_change_alerts').neq('rate_change_alerts', 'off')
-    const notices = groups.map(g => ({ g, n: describeGroup(g, g.actorId ? names.get(g.actorId) ?? null : null) }))
     for (const org of (orgs ?? []) as Array<{ id: string; rate_change_alerts: string }>) {
+      const own = groupChanges(audit.filter(r => r.org_id === org.id))
+      if (!own.length) continue
+      const notices = own.map(g => ({ g, n: describeGroup(g, g.actorId ? names.get(g.actorId) ?? null : null) }))
       stats.orgs++
       try {
         const managers = await orgManagerUserIds(supabase, org.id)
@@ -90,6 +93,8 @@ async function getHandler(request: NextRequest) {
             // The person who made the change does not need telling.
             .filter(user_id => user_id !== g.actorId)
             .map(user_id => ({
+              // This organisation's bell and mailbox, not the recipient's other company's.
+              org_id: org.id,
               user_id,
               type: 'rate_changed',
               title: n.title,

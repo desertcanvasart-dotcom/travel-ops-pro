@@ -9,6 +9,7 @@ import { getCurrentOrgId, getCurrentUserId } from '@/lib/auth/current-org'
 import { lookupServerMessage } from '@/lib/i18n/server-messages'
 import { resolveClientLocaleByEmail, type RecipientLocale } from '@/lib/i18n/recipient-locale'
 import { sendEmailInternal } from '@/lib/email-send'
+import { loadTripVatExtras } from '@/lib/vat'
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -101,7 +102,16 @@ export async function POST(request: Request) {
         )
       }
       emailSubject = lookupServerMessage(recipientLocale, 'email.itinerary.subject', { tripName, itineraryCode })
-      emailBody = generateEmailTemplate(clientName, itineraryCode, tripName, totalCost, currency, recipientLocale, await orgIdentity(await getCurrentOrgId()))
+      // The trip's VAT (lib/vat.ts), read from the trip — never from the body.
+      const { data: trip } = await supabase
+        .from('itineraries')
+        .select('*')
+        .eq('id', String(itineraryId))
+        .eq('org_id', await getCurrentOrgId())
+        .maybeSingle()
+      // Its extras lines are not taxed (owner, 2026-10-13).
+      const tripVat = trip?.vat_applied === true ? { ...trip, ...(await loadTripVatExtras(supabase, trip.id)) } : trip
+      emailBody = generateEmailTemplate(clientName, itineraryCode, tripName, totalCost, currency, recipientLocale, await orgIdentity(await getCurrentOrgId()), tripVat)
     } else {
       return NextResponse.json(
         { success: false, error: 'Missing email content parameters' },

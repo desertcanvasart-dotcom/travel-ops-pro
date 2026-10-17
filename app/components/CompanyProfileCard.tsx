@@ -16,6 +16,7 @@ import { useTranslations } from 'next-intl'
 import { Building2, Loader2, Check, Upload } from 'lucide-react'
 import { isPlaceholderOrgName } from '@/lib/org-name'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
+import { useRole } from '@/hooks/useRole'
 
 interface Office {
   label: string
@@ -40,6 +41,8 @@ interface Profile {
   default_currency: string
   rate_currency: string
   default_margin_percent: string
+  /** VAT rate in percent (migration 20261214, default 14). */
+  vat_rate: string
   rate_change_alerts: string
   /** What travel contracts name (migration 20261115). */
   operating_country: string
@@ -56,6 +59,14 @@ const CONTACT_SLOTS = ['emergency_japan', 'cairo_office'] as const
 
 export default function CompanyProfileCard() {
   const t = useTranslations('settings.companyProfile')
+  const ts = useTranslations('settings')
+  // The server refuses every save and upload from anyone but an admin (owner
+  // included), and a changed company NAME from anyone but the owner — the
+  // same rule as renaming on the Organization page. The form says so up
+  // front instead of letting a manager fill it in to be told "Forbidden".
+  const { role, isAdmin } = useRole()
+  const readOnly = !isAdmin
+  const isOwner = role === 'owner'
   const [form, setForm] = useState<Profile>({
     name: '',
     tagline: '',
@@ -69,6 +80,7 @@ export default function CompanyProfileCard() {
     default_currency: '',
     rate_currency: 'EUR',
     default_margin_percent: '',
+    vat_rate: '14',
     rate_change_alerts: 'in_app',
     operating_country: '',
     contract_governing_law: '',
@@ -99,6 +111,7 @@ export default function CompanyProfileCard() {
         default_currency: data.data.default_currency ?? '',
         rate_currency: data.data.rate_currency ?? 'EUR',
         default_margin_percent: data.data.default_margin_percent == null ? '' : String(data.data.default_margin_percent),
+        vat_rate: data.data.vat_rate == null ? '14' : String(data.data.vat_rate),
         rate_change_alerts: data.data.rate_change_alerts ?? 'in_app',
         operating_country: data.data.operating_country ?? '',
         contract_governing_law: data.data.contract_governing_law ?? '',
@@ -198,6 +211,14 @@ export default function CompanyProfileCard() {
       </div>
       <p className="text-sm text-gray-500 mb-5">{t('subtitle')}</p>
 
+      {readOnly && (
+        <div className="mb-5 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">
+          {ts('readOnlyAdmin')}
+        </div>
+      )}
+
+      <fieldset disabled={readOnly} className="min-w-0">
+
       {/* Logo */}
       <div className="flex items-center gap-4 mb-5">
         {form.logo_url ? (
@@ -215,7 +236,7 @@ export default function CompanyProfileCard() {
         <input
           ref={fileRef}
           type="file"
-          accept="image/png,image/jpeg,image/svg+xml,image/webp"
+          accept="image/png,image/jpeg,image/webp"
           className="hidden"
           onChange={e => {
             const f = e.target.files?.[0]
@@ -223,21 +244,23 @@ export default function CompanyProfileCard() {
             e.target.value = ''
           }}
         />
-        <button
+        {!readOnly && <button
           onClick={() => fileRef.current?.click()}
           disabled={uploading}
           className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-50"
         >
           {uploading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Upload className="w-3.5 h-3.5" />}
           {t('uploadLogo')}
-        </button>
+        </button>}
       </div>
 
       {/* Identity */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">{t('companyName')}</label>
-          <input className={inputClass} value={form.name} onChange={e => set('name', e.target.value)} />
+          <input className={`${inputClass} disabled:bg-gray-50 disabled:text-gray-600`} value={form.name}
+            disabled={!isOwner} onChange={e => set('name', e.target.value)} />
+          {!isOwner && !readOnly && <p className="text-xs text-gray-500 mt-1">{t('nameOwnerOnly')}</p>}
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">{t('tagline')}</label>
@@ -307,6 +330,19 @@ export default function CompanyProfileCard() {
             placeholder={t('defaultMarginUnset')}
           />
           <p className="text-xs text-gray-500 mt-1">{t('defaultMarginHint')}</p>
+        </div>
+        <div>
+          <label className="block text-xs font-medium text-gray-600 mb-1">{t('vatRate')}</label>
+          <input
+            className={inputClass}
+            type="number"
+            min={0}
+            max={100}
+            step={0.5}
+            value={form.vat_rate}
+            onChange={e => set('vat_rate', e.target.value)}
+          />
+          <p className="text-xs text-gray-500 mt-1">{t('vatRateHint')}</p>
         </div>
         <div>
           <label className="block text-xs font-medium text-gray-600 mb-1">{t('rateChangeAlerts')}</label>
@@ -384,9 +420,11 @@ export default function CompanyProfileCard() {
         ))}
       </div>
 
+      </fieldset>
+
       {error && <p className="text-sm text-red-600 mt-4">{error}</p>}
 
-      <div className="flex items-center gap-3 mt-5">
+      {!readOnly && <div className="flex items-center gap-3 mt-5">
         <button
           onClick={save}
           disabled={saving}
@@ -395,7 +433,7 @@ export default function CompanyProfileCard() {
           {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : saved ? <Check className="w-4 h-4" /> : null}
           {saved ? t('saved') : t('save')}
         </button>
-      </div>
+      </div>}
     </div>
   )
 }

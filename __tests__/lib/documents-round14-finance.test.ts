@@ -121,8 +121,11 @@ describe('trip P&L', () => {
 describe('financial reports', () => {
   it('cancelled invoices and rejected/cancelled expenses are dropped; receivables are converted', () => {
     const r = src('app/api/financial-reports/route.ts')
-    expect(r).toContain("total_amount, amount_paid, balance_due, currency, status')")
-    expect(r).toContain(".filter(inv => inv.status !== 'cancelled')")
+    // tax_amount since VAT (20261214): the VAT figure is the recorded one.
+    expect(r).toContain("total_amount, amount_paid, balance_due, currency, status, itinerary_id, tax_amount')")
+    // Draft invoices are now dropped too (invoiceCountsAsRevenue); the
+    // behaviour is pinned in __tests__/api/financial-reports.test.ts.
+    expect(r).toContain('.filter(inv => invoiceCountsAsRevenue(inv.status))')
     expect(r).toContain(".filter(exp => exp.status !== 'rejected' && exp.status !== 'cancelled')")
     expect(r).not.toContain('Number(inv.balance_due')
     expect(r).toContain('Number(inv.total_amount || 0) - Number(inv.amount_paid || 0)')
@@ -143,9 +146,13 @@ describe('financial reports', () => {
 
 describe('commissions', () => {
   it('the summary is per currency and rendered with formatTotals', () => {
+    // The summary moved to lib/commission-fields (summariseCommissions) so it
+    // can be tested; the route calls it.
     const api = src('app/api/commissions/route.ts')
-    expect(api).toContain('total_receivable: sumByCurrency(receivable, amount, cur)')
-    expect(api).not.toMatch(/reduce\(\(sum, c\) => sum \+ Number\(c\.commission_amount\)/)
+    expect(api).toContain('summariseCommissions(data || [])')
+    const lib = src('lib/commission-fields.ts')
+    expect(lib).toContain('total_receivable: sumByCurrency(receivable, amount, cur)')
+    expect(lib).not.toMatch(/reduce\(\(sum, c\) => sum \+ Number\(c\.commission_amount\)/)
     const page = src('app/commissions/page.tsx')
     expect(page).toContain('formatTotals(summary.total_receivable)')
     expect(page).toContain('formatTotals(summary.net_commission)')
@@ -156,11 +163,13 @@ describe('commissions', () => {
     const gen = src('app/api/itineraries/[id]/generate-commissions/route.ts')
     expect(gen).toContain("if (itinerary.status === 'cancelled')")
     expect(gen).toContain('{ status: 409 }')
+    // The PUT used to strip org_id and client_id from a spread body; it now
+    // applies a whitelist (COMMISSION_EDITABLE_FIELDS) that names neither.
     const put = src('app/api/commissions/[id]/route.ts')
-    // An allow-list since AUDIT H20: org_id and client_id are not on it.
-    const editable = put.slice(put.indexOf('const EDITABLE = ['), put.indexOf('] as const'))
-    expect(editable).not.toContain("'org_id'")
-    expect(editable).not.toContain("'client_id'")
+    expect(put).toContain('buildCommissionUpdate(body, existing)')
+    const lib = src('lib/commission-fields.ts')
+    const list = lib.slice(lib.indexOf('COMMISSION_EDITABLE_FIELDS = ['), lib.indexOf('] as const', lib.indexOf('COMMISSION_EDITABLE_FIELDS = [')))
+    expect(list).not.toMatch(/org_id|client_id|itinerary_id|supplier_id/)
   })
 })
 

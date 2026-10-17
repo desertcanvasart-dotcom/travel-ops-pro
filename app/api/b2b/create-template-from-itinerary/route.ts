@@ -2,7 +2,9 @@ import { createClient } from '@supabase/supabase-js'
 import { normalizeServiceType } from '@/lib/service-types'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
-import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { getCurrentOrgId, getCurrentUserRole, noOrgResponse } from '@/lib/auth/current-org'
+import { roleAllows } from '@/lib/auth/roles'
+import { insertWithTemplateCode } from '@/lib/tours/template-code'
 
 // ============================================
 // B2B: Create Tour Template + Variation from WhatsApp Itinerary
@@ -180,70 +182,50 @@ export async function POST(request: NextRequest) {
     const totalDays = itinerary.total_days || days.length
     const tourType = totalDays <= 1 ? 'day_tour' : 'multi_day'
 
-    // 7. Generate template code
-    const cityPrefix = (cities[0] || 'EGY').substring(0, 3).toUpperCase()
-    const random = Math.floor(Math.random() * 1000).toString().padStart(3, '0')
-    const templateCode = `${cityPrefix}-MUL-${random}`
-
     const tripName = itinerary.trip_name || 'Custom Tour'
 
-    // 8. Create tour template
-    const { data: template, error: templateError } = await supabaseAdmin
-      .from('tour_templates')
-      .insert({
-        template_code: templateCode,
-        template_name: tripName,
-        tour_type: tourType,
-        duration_days: itinerary.total_days || days.length,
-        duration_nights: (itinerary.total_days || days.length) - 1,
-        cities_covered: cities,
-        short_description: `Custom tour created from WhatsApp inquiry`,
-        itinerary: templateItinerary,
-        is_active: true,
-        is_featured: false,
-      })
-      .select()
-      .single()
+    // Agents reach this route (/api/b2b is agent-and-above) from the WhatsApp
+    // parser's B2B mode and the Pricing Grid, but the catalogue is the
+    // managers' (Tours › Tour Templates). Owner decision: an agent's template
+    // is created INACTIVE — it prices on the calculator straight away, and
+    // stays out of the catalogue, the inventory and the pickers until a
+    // manager reviews it and switches it on. A manager's (or admin's, or the
+    // owner's) is active, as before.
+    const role = await getCurrentUserRole()
+    const needsReview = !roleAllows(role, ['admin', 'manager'])
 
-    if (templateError) {
-      console.error('Failed to create template:', templateError)
-      // If source_itinerary_id column doesn't exist, retry without it
-      if (templateError.message?.includes('source_itinerary_id')) {
-        const { data: template2, error: templateError2 } = await supabaseAdmin
-          .from('tour_templates')
-          .insert({
-            template_code: templateCode,
-            template_name: tripName,
-            tour_type: tourType,
-            duration_days: itinerary.total_days || days.length,
-            duration_nights: (itinerary.total_days || days.length) - 1,
-            cities_covered: cities,
-            short_description: `Custom tour created from WhatsApp inquiry`,
-            itinerary: templateItinerary,
-            is_active: true,
-            is_featured: false,
-          })
-          .select()
-          .single()
+    // 7 + 8. The template, under a generated code that is drawn again when it
+    // clashes with one of the company's codes (lib/tours/template-code).
+    const inserted = await insertWithTemplateCode<Record<string, any>>(
+      (template_code) => supabaseAdmin
+        .from('tour_templates')
+        .insert({
+          org_id: orgId,
+          template_code,
+          template_name: tripName,
+          tour_type: tourType,
+          duration_days: itinerary.total_days || days.length,
+          duration_nights: (itinerary.total_days || days.length) - 1,
+          cities_covered: cities,
+          short_description: `Custom tour created from WhatsApp inquiry`,
+          itinerary: templateItinerary,
+          is_active: !needsReview,
+          is_featured: false,
+        })
+        .select()
+        .single(),
+      { cities, tourType }
+    )
 
-        if (templateError2 || !template2) {
-          return NextResponse.json(
-            { success: false, error: templateError2?.message || 'Failed to create template' },
-            { status: 500 }
-          )
-        }
-
-        // Continue with template2
-        return await createVariationAndRespond(template2, tripName, tier, itinerary_id)
-      }
-
+    if (inserted.error || !inserted.data) {
+      console.error('Failed to create template:', inserted.error)
       return NextResponse.json(
-        { success: false, error: clientMessage(templateError, 'Internal server error') },
-        { status: 500 }
+        { success: false, error: clientMessage(inserted.error, 'Internal server error') },
+        { status: inserted.clash ? 409 : 500 }
       )
     }
 
-    return await createVariationAndRespond(template!, tripName, tier, itinerary_id)
+    return await createVariationAndRespond(inserted.data, tripName, tier, itinerary_id, needsReview)
 
   } catch (error: any) {
     console.error('Error creating template from itinerary:', error)
@@ -258,10 +240,56 @@ async function createVariationAndRespond(
   template: any,
   tripName: string,
   tier: string,
-  itineraryId: string
+  itineraryId: string,
+  needsReview: boolean
 ) {
-  // Create English version
-  await supabaseAdmin
+  // The variation first: the template and its variation are made together or
+  // not at all. inclusions / exclusions are text[] NOT NULL with no default
+  // (baseline tour_variations) — leaving them out failed EVERY call with
+  // `null value in column "inclusions"`, after the template had been
+  // inserted, so each attempt left another variation-less template in the
+  // catalogue. The trip's own days carry what is included; the lists start
+  // empty and are filled in Tour Manager.
+  const variationName = `${tripName} - ${tier.charAt(0).toUpperCase() + tier.slice(1)}`
+  const variationCode = `${template.template_code}-${tier.toUpperCase()}`
+
+  const { data: variation, error: varError } = await supabaseAdmin
+    .from('tour_variations')
+    .insert({
+      // A variation lives in its template's company.
+      org_id: template.org_id,
+      template_id: template.id,
+      variation_code: variationCode,
+      variation_name: variationName,
+      tier,
+      group_type: 'private',
+      min_pax: 1,
+      max_pax: 40,
+      inclusions: [],
+      exclusions: [],
+      is_active: true,
+    })
+    .select()
+    .single()
+
+  if (varError || !variation) {
+    console.error('Failed to create variation:', varError)
+    // No half-made programme: the template just created goes again (nothing
+    // can refer to it yet; its version rows cascade).
+    const { error: undoError } = await supabaseAdmin
+      .from('tour_templates')
+      .delete()
+      .eq('id', template.id)
+      .eq('org_id', template.org_id)
+    if (undoError) console.error('Failed to remove the template after the variation failed:', undoError)
+    return NextResponse.json(
+      { success: false, error: clientMessage(varError, 'Failed to create variation') },
+      { status: 500 }
+    )
+  }
+
+  // English version — best-effort, as in /api/tours/templates POST.
+  const { error: versionError } = await supabaseAdmin
     .from('tour_template_versions')
     .insert({
       template_id: template.id,
@@ -270,33 +298,7 @@ async function createVariationAndRespond(
       short_description: template.short_description,
       itinerary: template.itinerary
     })
-
-  // Create variation
-  const variationName = `${tripName} - ${tier.charAt(0).toUpperCase() + tier.slice(1)}`
-  const variationCode = `${template.template_code}-${tier.toUpperCase()}`
-
-  const { data: variation, error: varError } = await supabaseAdmin
-    .from('tour_variations')
-    .insert({
-      template_id: template.id,
-      variation_code: variationCode,
-      variation_name: variationName,
-      tier,
-      group_type: 'private',
-      min_pax: 1,
-      max_pax: 40,
-      is_active: true,
-    })
-    .select()
-    .single()
-
-  if (varError || !variation) {
-    console.error('Failed to create variation:', varError)
-    return NextResponse.json(
-      { success: false, error: varError?.message || 'Failed to create variation' },
-      { status: 500 }
-    )
-  }
+  if (versionError) console.warn('Warning: Could not create English version:', versionError)
 
   console.log('✅ Template + Variation created from itinerary:', {
     templateId: template.id,
@@ -304,6 +306,7 @@ async function createVariationAndRespond(
     variationId: variation.id,
     variationName,
     itineraryId,
+    needsReview,
   })
 
   return NextResponse.json({
@@ -316,6 +319,11 @@ async function createVariationAndRespond(
       variation_code: variation.variation_code,
       variation_name: variationName,
       itinerary_id: itineraryId,
-    }
+      is_active: !needsReview,
+      pending_review: needsReview,
+    },
+    ...(needsReview
+      ? { message: 'Template created inactive: a manager reviews it in Tours › Tour Templates and switches it on. It can be priced now.' }
+      : {}),
   }, { status: 201 })
 }

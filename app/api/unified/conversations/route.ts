@@ -7,6 +7,7 @@ import type { UnifiedConversation, UnifiedConversationFilters } from '@/types/un
 import { waitingSince } from '@/lib/email/automated-senders'
 import { tripThreads } from '@/lib/unified/trip-threads'
 import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
+import { bookingThreadsPassFilters, channelCounts } from '@/lib/unified/inbox-filters'
 
 // Use service role for API routes to bypass RLS
 const supabase = createClient(
@@ -36,15 +37,28 @@ export async function GET(request: NextRequest) {
     const search = sanitizeSearchTerm(searchParams.get('search')) || ''
     // Communicate's Trash: the deleted email conversations only (is_hidden).
     const trash = searchParams.get('trash') === 'true'
+    // One conversation by id, whichever channel and however old: a
+    // notification's link (/communications?conversation=<id>) opens it even
+    // when it is not among the newest loaded. Still this company's only.
+    const conversationId = searchParams.get('conversation_id')
+    if (conversationId !== null && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(conversationId)) {
+      return NextResponse.json({ conversations: [], total: 0, counts: channelCounts([]), success: true })
+    }
     const limit = parseInt(searchParams.get('limit') || '50')
     const offset = parseInt(searchParams.get('offset') || '0')
 
     // We'll query both tables separately and merge, since views can be tricky with Supabase
     const conversations: UnifiedConversation[] = []
+    // Every channel is read whichever tab is chosen, so each tab's count is
+    // real (lib/unified/inbox-filters channelCounts); the tab narrows the
+    // list after counting, below.
+    // Portal and trip conversations have no status or assignee: they are
+    // left out of Archived / Spam / Unassigned (bookingThreadsPassFilters).
+    const bookingThreadsWanted = bookingThreadsPassFilters({ status, unassignedOnly })
 
     // Query WhatsApp conversations
     const whatsappTask = (async () => {
-    if (!trash && (channel === 'all' || channel === 'whatsapp')) {
+    if (!trash) {
       // The org's own threads — the ones that came to its WhatsApp number
       // (migration 20261125). This listed every org's.
       const orgId = await getCurrentOrgId()
@@ -80,6 +94,7 @@ export async function GET(request: NextRequest) {
         waQuery = waQuery.eq('status', status)
       }
 
+      if (conversationId) waQuery = waQuery.eq('id', conversationId)
       if (clientId) waQuery = waQuery.eq('client_id', clientId)
       if (agentId) waQuery = waQuery.eq('assigned_team_member_id', agentId)
       if (unassignedOnly) waQuery = waQuery.is('assigned_team_member_id', null)
@@ -131,7 +146,11 @@ export async function GET(request: NextRequest) {
     // than a phone number or an address, so the same person's portal thread and
     // WhatsApp chat stay separate. That is deliberate: one is tied to a trip.
     const portalTask = (async () => {
-    if (!trash && (channel === 'all' || channel === 'portal')) {
+    if (!trash && bookingThreadsWanted) {
+      // The org's own threads (portal_message_threads.org_id, NOT NULL). This
+      // listed every company's travellers' messages.
+      const orgId = await getCurrentOrgId()
+      if (!orgId) return
       let portalQuery = supabase
         .from('portal_message_threads')
         .select(`
@@ -158,6 +177,7 @@ export async function GET(request: NextRequest) {
             given_name_kanji
           )
         `)
+        .eq('org_id', orgId)
         .order('last_message_at', { ascending: false, nullsFirst: false })
 
       // No client filter: bookings carry the client's details inline and have
@@ -165,6 +185,7 @@ export async function GET(request: NextRequest) {
       // way a WhatsApp or email conversation can. Filtering by client simply
       // returns no portal rows rather than the wrong ones.
       if (clientId) portalQuery = portalQuery.limit(0)
+      if (conversationId) portalQuery = portalQuery.eq('id', conversationId)
 
       const { data: portalData, error: portalError } = await portalQuery.limit(limit)
       if (portalError) throw portalError
@@ -233,16 +254,18 @@ export async function GET(request: NextRequest) {
     // has written in among the latest TRIP_WINDOW messages is old enough to
     // drop off the list (it is still on its trip page).
     const tripTask = (async () => {
-    if (!trash && (channel === 'all' || channel === 'trip')) {
+    if (!trash && bookingThreadsWanted) {
       // Like portal threads, a trip thread has no client_id to filter on.
       if (clientId) return
       const orgId = await getCurrentOrgId()
       if (!orgId) return
       const TRIP_WINDOW = 1000
-      const { data: rows, error: tripError } = await supabase
+      let tripQuery = supabase
         .from('trip_messages')
         .select('itinerary_id, direction, content, sender_name, is_read, created_at')
         .eq('org_id', orgId)
+      if (conversationId) tripQuery = tripQuery.eq('itinerary_id', conversationId)
+      const { data: rows, error: tripError } = await tripQuery
         .order('created_at', { ascending: false })
         .limit(TRIP_WINDOW)
       // One channel failing must not take the inbox down with it: before the
@@ -298,11 +321,14 @@ export async function GET(request: NextRequest) {
 
     // Query Email conversations
     const emailTask = (async () => {
-    if (channel === 'all' || channel === 'email') {
-      // Only mail of the Gmail addresses connected now: a disconnected
-      // address's conversations stay stored but out of the inbox until it is
-      // connected again (lib/email/connected-mailboxes).
-      const buildEmailQuery = (mailboxFilter: string | null) => {
+    {
+      const orgId = await getCurrentOrgId()
+      if (!orgId) return
+      // The org's own conversations (org_id), and only those of its Gmail
+      // addresses connected now: a disconnected address's conversations stay
+      // stored but out of the inbox until it is connected again
+      // (lib/email/connected-mailboxes).
+      const buildEmailQuery = (mailboxFilter: string) => {
         let emailQuery = supabase
           .from('email_conversations')
           .select(`
@@ -327,6 +353,7 @@ export async function GET(request: NextRequest) {
               max_conversations
             )
           `)
+          .eq('org_id', orgId)
           .order('last_message_at', { ascending: false, nullsFirst: false })
         // Trash: conversations deleted in Communicate (status 'trashed'),
         // never mail hidden to keep it private (is_hidden alone).
@@ -339,6 +366,7 @@ export async function GET(request: NextRequest) {
           emailQuery = emailQuery.eq('status', status)
         }
 
+        if (conversationId) emailQuery = emailQuery.eq('id', conversationId)
         if (clientId) emailQuery = emailQuery.eq('client_id', clientId)
         if (agentId) emailQuery = emailQuery.eq('assigned_team_member_id', agentId)
         if (unassignedOnly) emailQuery = emailQuery.is('assigned_team_member_id', null)
@@ -347,10 +375,10 @@ export async function GET(request: NextRequest) {
         if (search) {
           emailQuery = emailQuery.or(`client_email.ilike.%${search}%,client_name.ilike.%${search}%,subject.ilike.%${search}%`)
         }
-        if (mailboxFilter) emailQuery = emailQuery.or(mailboxFilter)
+        emailQuery = emailQuery.or(mailboxFilter)
         return emailQuery.limit(limit)
       }
-      const { data: emailData, error: emailError } = await scopedToConnectedMailboxes(supabase, buildEmailQuery)
+      const { data: emailData, error: emailError } = await scopedToConnectedMailboxes(supabase, orgId, buildEmailQuery)
 
       if (emailError) throw emailError
 
@@ -408,12 +436,16 @@ export async function GET(request: NextRequest) {
       return dateB - dateA
     })
 
+    const counts = channelCounts(conversations)
+    const listed = channel === 'all' ? conversations : conversations.filter(c => c.channel === channel)
+
     // Apply limit after merge
-    const limitedConversations = conversations.slice(offset, offset + limit)
+    const limitedConversations = listed.slice(offset, offset + limit)
 
     return NextResponse.json({
       conversations: limitedConversations,
-      total: conversations.length,
+      total: listed.length,
+      counts,
       success: true
     })
   } catch (error: any) {
