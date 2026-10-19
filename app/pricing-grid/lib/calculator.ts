@@ -164,16 +164,23 @@ export function calculateDay(day: GridDay, config: GridConfig): DayCalc {
  * for 3 at 25% showed 124.98 and stored 125.00. Now both take the whole cost,
  * apply the margin once, round once in the rate currency (a yen has no
  * cents), and add the premium (departure date) on top, rounded the same way.
+ *
+ * Extras (lib/extras.ts) join before the premium: a cost-only extra takes the
+ * margin with the trip, a set price is added as it is — never marked up. The
+ * premium is about the date, on the whole trip, extras included (the rule
+ * calculate-price's foldExtras follows). `totalCost` is the trip WITHOUT them.
  */
 export function sellingFromCost(input: {
   totalCost: number
   marginPercent: number
   season: SeasonMatch | null
   currency?: string | null
+  extras?: { margined_cost: number; pinned_sell: number } | null
 }): { baseSellingPriceTotal: number; seasonUplift: number; sellingPriceTotal: number } {
   const round = (n: number) => roundToCurrency(n, input.currency || 'EUR')
   const margin = Math.max(0, Math.min(isNaN(input.marginPercent) ? 0 : input.marginPercent, MARGIN_CAP))
-  const baseSellingPriceTotal = round(input.totalCost * (1 + margin / 100))
+  const margined = input.totalCost + (input.extras?.margined_cost ?? 0)
+  const baseSellingPriceTotal = round(margined * (1 + margin / 100) + (input.extras?.pinned_sell ?? 0))
   const seasonUplift = round(computeUplift({ sellingPrice: baseSellingPriceTotal, season: input.season }).amount)
   return { baseSellingPriceTotal, seasonUplift, sellingPriceTotal: round(baseSellingPriceTotal + seasonUplift) }
 }
@@ -185,6 +192,9 @@ export function calculateGrandTotals(
   // file is pure arithmetic — the page loads the calendar once and hands it
   // down. No calendar means no premium, which is what an ordinary date is.
   seasonWindows: SeasonWindow[] = [],
+  // The picked extras, priced (lib/extras.ts priceGridExtras). Their cost
+  // joins the total cost; what they add to the price follows sellingFromCost.
+  extras: { cost_total: number; margined_cost: number; pinned_sell: number } | null = null,
 ): GridTotals {
   const { pax } = config
 
@@ -201,8 +211,9 @@ export function calculateGrandTotals(
   // trip cannot be quoted two ways depending on which screen produced it.
   const season = seasonForDate(seasonWindows, config.startDate)
   const { baseSellingPriceTotal, seasonUplift, sellingPriceTotal } = sellingFromCost({
-    totalCost, marginPercent: config.marginPercent, season, currency: config.rateCurrency,
+    totalCost, marginPercent: config.marginPercent, season, currency: config.rateCurrency, extras,
   })
+  totalCost += extras?.cost_total ?? 0
   const marginAmount = round2(baseSellingPriceTotal - totalCost)
 
   return {

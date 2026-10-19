@@ -24,6 +24,8 @@ import { applyStoredPrices, storedUnitPrice, type StoredPrice, type StoredServic
 import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
 import type { ExchangeRates } from '@/lib/currency-service'
 import { loadGridRateOptions } from '../rate-options'
+import { gridTripProgramme, loadGridExtraRows } from '../extras-options'
+import { extraServiceRows, gridExtraOptions, priceGridExtras, sanitizeExtraPicks, type GridExtrasPricing } from '@/app/pricing-grid/lib/extras'
 
 /**
  * What a slot SELLS — the lines the save writes, and so the stored total:
@@ -550,8 +552,29 @@ export async function POST(request: NextRequest) {
     // the premium for the departure date from this company's calendar (it
     // was taken from the request). The screen computes the same.
     const supplierTotal = serviceInserts.reduce((sum, svc) => sum + (svc.total_cost || 0), 0)
+
+    // The Sell → Extras picked on the grid (app/pricing-grid/lib/extras.ts),
+    // priced from the rows read HERE — the trip's programme from the trip
+    // itself — never the request's figures. A set price is the price; a
+    // blank one is cost + this margin; neither is a hole the save names.
+    // Trip-level lines, on the first day, outside the margined total above.
+    let extrasPricing: GridExtrasPricing | null = null
+    const extraPicks = sanitizeExtraPicks(config.extras)
+    const firstDayNumber = dayInserts[0]?.day_number
+    if (extraPicks.length > 0 && firstDayNumber != null) {
+      const templateId = await gridTripProgramme(supabase, callerOrgId, {
+        itineraryId: isUpdate ? config.itineraryId : null,
+        templateId: typeof config.templateId === 'string' ? config.templateId : null,
+      })
+      const extraRows = await loadGridExtraRows(supabase, callerOrgId, templateId, { ids: extraPicks.map(p => p.id), rateCurrency })
+      const options = gridExtraOptions(extraRows.extras, extraRows.activities, paxN, config.passport === 'eu')
+      extrasPricing = priceGridExtras(options, extraPicks, paxN, marginPct)
+      warnings.push(...extraRows.warnings, ...extrasPricing.holes.map(h => h.message))
+      for (const row of extraServiceRows(extrasPricing, options, marginPct, rateCurrency)) pushService(firstDayNumber, row)
+    }
+
     const season = seasonForDate(await seasonWindowsOn(supabase, callerOrgId, startDate), startDate)
-    const { seasonUplift, sellingPriceTotal } = sellingFromCost({ totalCost: supplierTotal, marginPercent: marginPct, season, currency: rateCurrency })
+    const { seasonUplift, sellingPriceTotal } = sellingFromCost({ totalCost: supplierTotal, marginPercent: marginPct, season, currency: rateCurrency, extras: extrasPricing })
 
     // B2B: the partner's commission on the trip is the PARTNER's commission
     // (b2b_partners.commission_percent), as every other writer of this column
