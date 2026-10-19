@@ -151,7 +151,7 @@ async function sendEmail(
     return { success: true }
   } catch (error: any) {
     if (error instanceof GmailAuthError) {
-      return { success: false, error: clientMessage(error, 'Internal server error') }
+      return { success: false, error: error.message }
     }
     console.error('Email send error:', error)
     return { success: false, error: clientMessage(error, 'Failed to send email') }

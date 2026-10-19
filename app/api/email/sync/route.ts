@@ -71,7 +71,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(result)
   } catch (error: any) {
     if (error instanceof GmailAuthError) {
-      return NextResponse.json({ error: clientMessage(error, 'Internal server error'), success: false }, { status: 401 })
+      return NextResponse.json({ error: error.message, success: false }, { status: 401 })
     }
     if (error instanceof MailboxNotFoundError) {
       return NextResponse.json({ error: error.message, success: false }, { status: 400 })

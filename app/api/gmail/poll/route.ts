@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
       auth = await getMailboxGmail(userId)
     } catch (err) {
       if (err instanceof GmailAuthError) {
-        return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 401 })
+        return NextResponse.json({ error: err.message }, { status: 401 })
       }
       throw err
     }
@@ -395,7 +395,7 @@ export async function POST() {
       gmail = auth.gmail
     } catch (err) {
       if (err instanceof GmailAuthError) {
-        return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 401 })
+        return NextResponse.json({ error: err.message }, { status: 401 })
       }
       throw err
     }
