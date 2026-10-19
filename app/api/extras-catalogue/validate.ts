@@ -4,6 +4,7 @@
 // non-numeric cost or price was saved (a typed "abc" as no price at all).
 
 import { normaliseRateCurrency } from '@/lib/org-rate-currency'
+import { OFFERED_WITH } from '@/lib/extras/offered'
 
 export const EXTRA_UNITS = ['per_person', 'per_booking'] as const
 
@@ -24,6 +25,12 @@ export function extraInputError(body: Record<string, unknown>): string | null {
   }
   if ('rate_currency' in body && body.rate_currency && !normaliseRateCurrency(body.rate_currency)) {
     return 'Currency must be one of USD, EUR, GBP, EGP, JPY'
+  }
+  if ('offered_with' in body && !OFFERED_WITH.includes(String(body.offered_with) as typeof OFFERED_WITH[number])) {
+    return 'Offered with must be all or programmes'
+  }
+  if ('activity_rate_id' in body && body.activity_rate_id !== null && body.activity_rate_id !== '' && typeof body.activity_rate_id !== 'string') {
+    return 'activity_rate_id must be an id'
   }
   return null
 }

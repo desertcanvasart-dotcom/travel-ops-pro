@@ -10,6 +10,7 @@ import { guideLanguageWord } from '@/lib/guides/guide-language'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
+import { loadOfferedExtras, withActivityCost, type ActivityRateRow, type OfferedExtra } from '@/lib/extras/offered'
 import { currencySymbol } from '@/lib/currency-totals'
 import { getOrgDefaultMargin } from '@/lib/org-default-margin'
 import { quoteMarginPercent, partnerOverrideOn } from '@/lib/b2b/partner-margin'
@@ -168,31 +169,35 @@ async function loadPartnerMargins(orgId: string, partnerId: string, variationId:
   return { default: partner?.default_margin_percent ?? null, override }
 }
 
-// Catalogue extras chosen for this quote. Only ACTIVE rows of this org come
-// back; a withdrawn or foreign id is therefore a hole downstream, never a sale.
-// A row entered in another currency (rate_currency) is converted into the run
+// Catalogue extras chosen for this quote. Only ACTIVE rows of this org that
+// are offered with this programme come back (lib/extras/offered: every-booking
+// extras, plus those linked to the programme at its own price); a withdrawn,
+// foreign or not-offered id is therefore a hole downstream, never a sale.
+// Rows entered in another currency (rate_currency) are converted into the run
 // currency here, at the fetch boundary, like every other rate table — an EGP
-// fast-track must not join a USD total as if it were dollars. `select('*')`
-// on purpose: the column arrives by migration and the route must keep working
-// on a database that has not run it yet.
-async function loadExtras(orgId: string | null | undefined, ids: string[], runCurrency: string): Promise<CatalogueExtra[]> {
-  if (!orgId || ids.length === 0) return []
-  const { data, error } = await supabaseAdmin
-    .from('extras_catalogue')
-    .select('*')
-    .eq('org_id', orgId)
-    .eq('is_active', true)
-    .in('id', ids)
-  if (error) {
-    console.error('Error loading extras_catalogue:', error)
-    return []
-  }
+// fast-track must not join a USD total as if it were dollars. An extra linked
+// to an Activities rate takes its cost from it for each group size, so the
+// result is a function of pax (the rate sheet prices every pax count).
+type ExtrasForPax = (pax: number) => CatalogueExtra[]
+async function loadExtras(
+  orgId: string | null | undefined,
+  ids: string[],
+  runCurrency: string,
+  templateId: string | null | undefined,
+  isEurPassport: boolean
+): Promise<ExtrasForPax> {
+  if (!orgId || ids.length === 0) return () => []
+  const { extras, activities } = await loadOfferedExtras(supabaseAdmin, orgId, templateId, { ids })
   const normalizer = createRateNormalizer(runCurrency)
-  const rows = await normalizer.normalize('extras_catalogue', (data || []) as Record<string, unknown>[])
+  const rows = (await normalizer.normalize('extras_catalogue', extras as unknown as Record<string, unknown>[])) as unknown as OfferedExtra[]
+  const activityRows = (await normalizer.normalize('activity_rates', [...activities.values()] as unknown as Record<string, unknown>[])) as unknown as ActivityRateRow[]
   for (const miss of normalizer.misses) {
-    console.warn(`[calculate-price] extra ${miss.id} is in ${miss.currency} and could not be converted — treated as unpriced`)
+    console.warn(`[calculate-price] ${miss.table} ${miss.id} is in ${miss.currency} and could not be converted — treated as unpriced`)
   }
-  return (rows || []) as unknown as CatalogueExtra[]
+  const activityById = new Map(activityRows.map(a => [a.id, a]))
+  return (pax) => (rows || []).map(x =>
+    withActivityCost(x, x.activity_rate_id ? activityById.get(x.activity_rate_id) : null, pax, isEurPassport)
+  ) as unknown as CatalogueExtra[]
 }
 
 // Fold priced extras into a FINISHED result, so both engine branches treat
@@ -204,7 +209,7 @@ async function loadExtras(orgId: string | null | undefined, ids: string[], runCu
 // incomplete; the rate sheet is re-totalled at every pax count.
 function foldExtras(
   result: PriceCalculationResult,
-  catalogue: CatalogueExtra[],
+  catalogueFor: ExtrasForPax,
   selections: ExtraSelection[]
 ): PriceCalculationResult {
   if (selections.length === 0) return result
@@ -226,7 +231,7 @@ function foldExtras(
     }
   }
 
-  const p = priceExtras(catalogue, selections, result.num_pax)
+  const p = priceExtras(catalogueFor(result.num_pax), selections, result.num_pax)
   const top = fold(
     { totalCost: result.total_cost, marginAmount: result.margin_amount, sellingPrice: result.selling_price, pricePerPerson: result.price_per_person },
     result.num_pax, p
@@ -235,7 +240,7 @@ function foldExtras(
 
   type PaxBlock = (MoneyBlock & Record<string, unknown>) | undefined
   const pax_pricing_table = result.pax_pricing_table?.map((row) => {
-    const rp = priceExtras(catalogue, selections, row.numPax)
+    const rp = priceExtras(catalogueFor(row.numPax), selections, row.numPax)
     const f = (b: PaxBlock) => (b ? { ...b, ...fold(b, row.numPax, rp) } : b)
     return { ...row, withoutLeader: f(row.withoutLeader), withLeader: f(row.withLeader) }
   })
@@ -465,7 +470,6 @@ export async function POST(request: NextRequest) {
     const extraSelections: ExtraSelection[] = (Array.isArray(extras) ? extras : [])
       .map((e: unknown) => (typeof e === 'string' ? { id: e } : e))
       .filter(isSelection)
-    const extrasCatalogue = await loadExtras(await getCurrentOrgId(), extraSelections.map((e) => e.id), rateCurrency)
 
     // Determine if using passenger breakdown or simple num_pax
     const usePassengerBreakdown = num_adults !== undefined && num_adults !== null
@@ -549,6 +553,7 @@ export async function POST(request: NextRequest) {
     const effectiveTier = (tier || 'standard') as ServiceTier
     const template = variation.tour_templates as any
     const templateId = template?.id
+    const extrasCatalogue = await loadExtras(orgId, extraSelections.map((e) => e.id), rateCurrency, templateId, is_eur_passport)
 
     // Fetch services for this variation (template-direct requests have none).
     let services: any[] | null = null
@@ -563,7 +568,10 @@ export async function POST(request: NextRequest) {
         console.error('Services fetch error:', servError)
         return NextResponse.json({ error: 'Failed to fetch services' }, { status: 500 })
       }
-      services = serviceRows
+      // A programme's options are Extras since 20270107 (the migration copied
+      // every optional row there, linked to its programme). The old rows stay
+      // in the table but are not sold from here, or each would be offered twice.
+      services = (serviceRows ?? []).filter((s: { is_optional?: boolean | null }) => !s.is_optional)
     }
 
     // ============================================

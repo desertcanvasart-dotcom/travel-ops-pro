@@ -1,115 +1,136 @@
 'use client'
 
 // ============================================
-// The options a programme sells
+// The extras a programme offers
 // ============================================
-// This is the screen that was missing. tour_variation_services has carried
-// is_optional and optional_price_override for a long time, and nothing in the
-// app could write either — so the option list could not be authored, the
-// calculator's optional picker had nothing to show, and the extras catalogue
-// could only ever offer cross-package add-ons.
-// See docs/plans/extras-and-upgrades.md §6a.
+// Since 20270107 there is ONE list of extras (Sell → Extras). This page is a
+// programme's view of it: the extras offered only with this programme (each
+// at this programme's price when one is set), the every-booking extras it
+// offers anyway, and the others it could take. It replaced "Options this
+// programme sells", whose options were a second list per tier and whose
+// "Included" half was always empty (programmes are built day by day).
 //
-// What is set here is read in two places, and they now agree: the quote (an
-// option the customer picks) and a booking's extras (the same option, sold
-// afterwards). A price set here is THE price in both — options are priced
-// off-margin, so a margin percentage never restates it.
+// Programme level, not per tier (operator, 2026-10-19): every tier's button
+// opens the same list.
 
 import { useCallback, useEffect, useState } from 'react'
 import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { ArrowLeft, Loader2, Plus, Trash2, Sparkles, Package } from 'lucide-react'
+import { ArrowLeft, Loader2, Plus, Sparkles, X } from 'lucide-react'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 
-interface VariationService {
+interface ExtraRow {
   id: string
-  service_name: string
-  service_category: string | null
-  quantity_mode: string | null
-  quantity_value: number | null
-  cost_per_unit: number | null
-  day_number: number | null
-  is_optional: boolean
-  optional_price_override: number | null
+  name: string
+  description: string | null
+  category: string | null
+  supplier_cost: number | null
+  selling_price: number | null
+  rate_currency?: string | null
+  unit: 'per_person' | 'per_booking'
+  is_active: boolean
+  activity_rate_id?: string | null
 }
+type LinkedExtra = ExtraRow & { link_id: string; programme_price: number | null }
 
-const CATEGORIES = [
-  'activity', 'entrance', 'transportation', 'guide', 'meal',
-  'accommodation', 'cruise', 'tips', 'supplies', 'other',
-]
-
-const QUANTITY_MODES = ['per_pax', 'per_group', 'fixed', 'per_day', 'per_night', 'per_room']
-
-export default function VariationOptionsPage() {
+export default function ProgrammeExtrasPage() {
   const params = useParams()
   const variationId = String(params.id)
   const t = useTranslations('variationOptions')
   const confirmDialog = useConfirm()
+  const { rateCurrency } = useCurrency()
 
-  const [services, setServices] = useState<VariationService[]>([])
-  const [variationName, setVariationName] = useState<string>('')
-  // Costs and prices here are RATE-table amounts, so they are labelled in the
-  // org's rate currency — not the display currency a trip is sold in.
-  const { rateSymbol } = useCurrency()
+  const [templateId, setTemplateId] = useState<string | null>(null)
+  const [heading, setHeading] = useState('')
+  const [linked, setLinked] = useState<LinkedExtra[]>([])
+  const [everyBooking, setEveryBooking] = useState<ExtraRow[]>([])
+  const [others, setOthers] = useState<ExtraRow[]>([])
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [adding, setAdding] = useState(false)
+  // Typed prices, by link, until saved on blur.
+  const [prices, setPrices] = useState<Record<string, string>>({})
 
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [svcRes, varRes] = await Promise.all([
-        fetch(`/api/tours/variations/${variationId}/services`),
-        fetch(`/api/tours/variations/${variationId}`),
-      ])
-      if (svcRes.ok) {
-        const json = await svcRes.json()
-        setServices(json.data ?? json ?? [])
+      let tpl = templateId
+      if (!tpl) {
+        const res = await fetch(`/api/tours/variations/${variationId}`)
+        const json = await res.json().catch(() => ({}))
+        const v = json?.data
+        tpl = v?.template_id ?? null
+        setTemplateId(tpl)
+        const name = v?.tour_templates?.template_name || v?.variation_name || ''
+        const code = v?.tour_templates?.template_code
+        setHeading([code, name].filter(Boolean).join(' — '))
       }
-      if (varRes.ok) {
-        const json = await varRes.json()
-        setVariationName(json?.data?.variation_name ?? '')
-      }
+      if (!tpl) { setError(t('couldNotLoad')); return }
+      const res = await fetch(`/api/extras-catalogue/programmes?template_id=${tpl}`)
+      const json = await res.json().catch(() => ({}))
+      if (!res.ok || !json.success) { setError(json.error || t('couldNotLoad')); return }
+      setLinked(json.data.linked || [])
+      setEveryBooking(json.data.everyBooking || [])
+      setOthers(json.data.others || [])
+      setPrices(Object.fromEntries((json.data.linked || []).map((x: LinkedExtra) => [x.link_id, x.programme_price?.toString() ?? ''])))
+      setError(null)
     } finally {
       setLoading(false)
     }
-  }, [variationId])
-  useEffect(() => { load() }, [load])
+  }, [variationId, templateId, t])
+  useEffect(() => { void load() }, [load])
 
-  const patch = async (serviceId: string, fields: Record<string, unknown>) => {
-    setBusy(serviceId); setError(null)
+  const money = (n: number | null | undefined, row: { rate_currency?: string | null }) =>
+    n == null ? null : `${row.rate_currency || rateCurrency} ${n}`
+
+  /** What the customer pays by default, in words. */
+  const ownPrice = (x: ExtraRow) =>
+    money(x.selling_price, x) ?? t('costPlusMargin')
+
+  const link = async (extraId: string, sellingPrice: string | null = null) => {
+    if (!templateId) return
+    setBusy(extraId); setError(null)
     try {
-      const res = await fetch(`/api/tours/variations/${variationId}/services`, {
-        method: 'PATCH',
+      const res = await fetch('/api/extras-catalogue/programmes', {
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ serviceId, ...fields }),
+        body: JSON.stringify({ extra_id: extraId, template_id: templateId, selling_price: sellingPrice }),
       })
       if (!res.ok) { setError((await res.json().catch(() => ({})))?.error || t('couldNotSave')); return }
       await load()
     } finally { setBusy(null) }
   }
 
-  const remove = async (service: VariationService) => {
-    const ok = await confirmDialog(t('deleteMessage', { name: service.service_name }), {
-      title: t('deleteTitle'), confirmText: t('delete'), variant: 'danger',
-    })
-    if (!ok) return
-    setBusy(service.id); setError(null)
+  const savePrice = async (x: LinkedExtra) => {
+    const typed = prices[x.link_id] ?? ''
+    if (typed === (x.programme_price?.toString() ?? '')) return
+    setBusy(x.link_id); setError(null)
     try {
-      const res = await fetch(
-        `/api/tours/variations/${variationId}/services?serviceId=${service.id}`,
-        { method: 'DELETE' }
-      )
-      if (!res.ok) { setError((await res.json().catch(() => ({})))?.error || t('couldNotDelete')); return }
+      const res = await fetch(`/api/extras-catalogue/programmes/${x.link_id}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ selling_price: typed }),
+      })
+      if (!res.ok) { setError((await res.json().catch(() => ({})))?.error || t('couldNotSave')); return }
       await load()
     } finally { setBusy(null) }
   }
 
-  const optional = services.filter(s => s.is_optional)
-  const included = services.filter(s => !s.is_optional)
+  const unlink = async (x: LinkedExtra) => {
+    const ok = await confirmDialog(t('removeMessage', { name: x.name }), {
+      title: t('removeTitle'), confirmText: t('remove'), variant: 'danger',
+    })
+    if (!ok) return
+    setBusy(x.link_id); setError(null)
+    try {
+      const res = await fetch(`/api/extras-catalogue/programmes/${x.link_id}`, { method: 'DELETE' })
+      if (!res.ok) { setError((await res.json().catch(() => ({})))?.error || t('couldNotDelete')); return }
+      await load()
+    } finally { setBusy(null) }
+  }
 
   return (
     <div className="max-w-4xl mx-auto p-6">
@@ -121,7 +142,7 @@ export default function VariationOptionsPage() {
         <Sparkles className="w-5 h-5 text-[#647C47]" />
         {t('title')}
       </h1>
-      {variationName && <p className="text-sm text-gray-600 mb-1">{variationName}</p>}
+      {heading && <p className="text-sm text-gray-600 mb-1">{heading}</p>}
       <p className="text-sm text-gray-500 mb-6">{t('intro')}</p>
 
       {error && <p className="text-sm text-red-700 bg-red-50 rounded-lg px-3 py-2 mb-4">{error}</p>}
@@ -134,193 +155,101 @@ export default function VariationOptionsPage() {
         <>
           <section className="bg-white rounded-lg shadow-sm border mb-6">
             <div className="flex items-center justify-between p-4 border-b">
-              <h2 className="font-medium text-gray-900">{t('optionsHeading')}</h2>
-              <button type="button" onClick={() => { setAdding(v => !v); setError(null) }}
-                className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-[#647C47] border border-[#647C47] rounded-lg hover:bg-[#e8ede3]">
-                <Plus className="w-3.5 h-3.5" /> {t('addOption')}
-              </button>
+              <h2 className="font-medium text-gray-900">{t('linkedHeading')}</h2>
+              <div className="flex items-center gap-2">
+                <Link href="/rates/extras"
+                  className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50">
+                  {t('manageExtras')}
+                </Link>
+                {(others.length > 0 || everyBooking.length > 0) && (
+                  <button type="button" onClick={() => setAdding(v => !v)}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-[#647C47] border border-[#647C47] rounded-lg hover:bg-[#e8ede3]">
+                    <Plus className="w-3.5 h-3.5" /> {t('addExtra')}
+                  </button>
+                )}
+              </div>
             </div>
 
             {adding && (
-              <AddOptionForm
-                variationId={variationId}
-                rateSymbol={rateSymbol}
-                onDone={async () => { setAdding(false); await load() }}
-                onError={setError}
-              />
-            )}
-
-            {optional.length === 0 && !adding ? (
-              <p className="p-4 text-sm text-gray-500">{t('noOptions')}</p>
-            ) : (
-              <div className="divide-y">
-                {optional.map(s => (
-                  <div key={s.id} className="p-4 flex items-start justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-gray-900">{s.service_name}</p>
-                      <p className="text-xs text-gray-500">
-                        {[s.service_category, s.quantity_mode, s.day_number != null ? `${t('day')} ${s.day_number}` : null]
-                          .filter(Boolean).join(' · ')}
-                        {s.cost_per_unit != null && ` · ${t('costs')} ${rateSymbol}${s.cost_per_unit}`}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <label className="text-xs text-gray-600">
-                        {t('sellsFor')}
-                        <div className="flex items-center gap-1">
-                          <span className="text-gray-400">{rateSymbol}</span>
-                          <input
-                            type="number" min="0" step="0.01"
-                            defaultValue={s.optional_price_override ?? ''}
-                            placeholder={t('costPlusMargin')}
-                            disabled={busy === s.id}
-                            onBlur={e => {
-                              const raw = e.target.value
-                              const next = raw === '' ? null : Number(raw)
-                              if (next === (s.optional_price_override ?? null)) return
-                              patch(s.id, { optional_price_override: next })
-                            }}
-                            className="w-32 px-2 py-1 text-sm border border-gray-300 rounded-lg"
-                          />
-                        </div>
-                      </label>
-                      {busy === s.id && <Loader2 className="w-4 h-4 animate-spin text-gray-400 mt-4" />}
-                      {/* Says where it GOES, not that it is being added. The
-                          first label was "Include it", which reads as "yes, add
-                          this option to the trip" — the operator clicked it on
-                          both options and moved them into the base price. */}
-                      <button type="button" onClick={() => patch(s.id, { is_optional: false })}
-                        disabled={busy === s.id} title={t('makeIncluded')}
-                        className="mt-4 px-2.5 py-1 text-xs font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 disabled:opacity-40">
-                        {t('makeIncluded')}
-                      </button>
-                      <button type="button" onClick={() => remove(s)} disabled={busy === s.id}
-                        title={t('delete')} className="mt-4 p-1 text-gray-400 hover:text-red-600 disabled:opacity-40">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+              <div className="p-4 border-b bg-gray-50">
+                <select defaultValue="" onChange={e => { if (e.target.value) { void link(e.target.value); setAdding(false) } }}
+                  className="w-full md:w-96 px-3 py-2 text-sm border border-gray-300 rounded-lg">
+                  <option value="">{t('pickExtra')}</option>
+                  {others.length > 0 && (
+                    <optgroup label={t('otherProgrammesExtras')}>
+                      {others.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                    </optgroup>
+                  )}
+                  {everyBooking.length > 0 && (
+                    <optgroup label={t('everyBookingToPrice')}>
+                      {everyBooking.map(x => <option key={x.id} value={x.id}>{x.name}</option>)}
+                    </optgroup>
+                  )}
+                </select>
+                <p className="text-xs text-gray-500 mt-2">{t('addHelp')}</p>
               </div>
             )}
-            <p className="px-4 py-3 text-[11px] text-gray-500 border-t">{t('priceNote')}</p>
+
+            {linked.length === 0 ? (
+              <p className="p-4 text-sm text-gray-500">{t('noLinked')}</p>
+            ) : (
+              <ul className="divide-y">
+                {linked.map(x => (
+                  <li key={x.link_id} className={`p-4 flex items-center gap-4 ${x.is_active ? '' : 'opacity-50'}`}>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900">{x.name}</p>
+                      <p className="text-xs text-gray-500">
+                        {[x.category, x.unit === 'per_booking' ? t('perBooking') : t('perPerson'),
+                          x.activity_rate_id ? t('costFromActivity') : null,
+                          `${t('ownPrice')}: ${ownPrice(x)}`].filter(Boolean).join(' · ')}
+                      </p>
+                    </div>
+                    <label className="text-xs text-gray-600 flex items-center gap-2">
+                      {t('priceHere')}
+                      <input type="number" min="0" step="0.01" value={prices[x.link_id] ?? ''}
+                        placeholder={money(x.selling_price, x) ?? t('costPlusMargin')}
+                        onChange={e => setPrices(p => ({ ...p, [x.link_id]: e.target.value }))}
+                        onBlur={() => void savePrice(x)}
+                        disabled={busy === x.link_id}
+                        className="w-32 px-2 py-1 text-sm border border-gray-300 rounded-lg" />
+                    </label>
+                    <button type="button" aria-label={t('removeNamed', { name: x.name })} onClick={() => void unlink(x)}
+                      disabled={busy === x.link_id} className="p-1 text-gray-400 hover:text-red-600">
+                      <X className="w-4 h-4" />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            <p className="px-4 py-3 text-xs text-gray-500 border-t">{t('priceNote')}</p>
           </section>
 
           <section className="bg-white rounded-lg shadow-sm border">
             <div className="p-4 border-b">
-              <h2 className="font-medium text-gray-900 flex items-center gap-2">
-                <Package className="w-4 h-4 text-gray-400" />
-                {t('includedHeading')}
-              </h2>
-              <p className="text-xs text-gray-500 mt-1">{t('includedIntro')}</p>
+              <h2 className="font-medium text-gray-900">{t('everyBookingHeading')}</h2>
+              <p className="text-xs text-gray-500">{t('everyBookingIntro')}</p>
             </div>
-            {included.length === 0 ? (
-              <p className="p-4 text-sm text-gray-500">{t('noIncluded')}</p>
+            {everyBooking.length === 0 ? (
+              <p className="p-4 text-sm text-gray-500">{t('noEveryBooking')}</p>
             ) : (
-              <div className="divide-y">
-                {included.map(s => (
-                  <div key={s.id} className="p-3 flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <p className="text-sm text-gray-900">{s.service_name}</p>
-                      <p className="text-xs text-gray-500">
-                        {[s.service_category, s.day_number != null ? `${t('day')} ${s.day_number}` : null]
-                          .filter(Boolean).join(' · ')}
-                      </p>
+              <ul className="divide-y">
+                {everyBooking.map(x => (
+                  <li key={x.id} className="p-4 flex items-center gap-4">
+                    <div className="flex-1">
+                      <p className="text-sm text-gray-900">{x.name}</p>
+                      <p className="text-xs text-gray-500">{ownPrice(x)}</p>
                     </div>
-                    <button type="button" onClick={() => patch(s.id, { is_optional: true })}
-                      disabled={busy === s.id}
-                      className="flex-shrink-0 px-2.5 py-1 text-xs font-medium text-[#647C47] border border-[#647C47] rounded-lg hover:bg-[#e8ede3] disabled:opacity-40">
-                      {busy === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : t('makeOptional')}
+                    <button type="button" onClick={() => void link(x.id)} disabled={busy === x.id}
+                      className="text-xs font-medium text-[#647C47] hover:underline">
+                      {t('setPriceHere')}
                     </button>
-                  </div>
+                  </li>
                 ))}
-              </div>
+              </ul>
             )}
           </section>
         </>
       )}
     </div>
-  )
-}
-
-function AddOptionForm({
-  variationId, rateSymbol, onDone, onError,
-}: { variationId: string; rateSymbol: string; onDone: () => void; onError: (m: string | null) => void }) {
-  const t = useTranslations('variationOptions')
-  const [name, setName] = useState('')
-  const [category, setCategory] = useState('activity')
-  const [quantityMode, setQuantityMode] = useState('per_pax')
-  const [cost, setCost] = useState('')
-  const [price, setPrice] = useState('')
-  const [day, setDay] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    if (busy || !name.trim()) return
-    setBusy(true); onError(null)
-    try {
-      const res = await fetch(`/api/tours/variations/${variationId}/services`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          service_name: name.trim(),
-          service_category: category,
-          quantity_mode: quantityMode,
-          quantity_value: 1,
-          cost_per_unit: cost === '' ? null : Number(cost),
-          day_number: day === '' ? null : Number(day),
-          is_optional: true,
-          optional_price_override: price === '' ? null : Number(price),
-        }),
-      })
-      if (!res.ok) { onError((await res.json().catch(() => ({})))?.error || t('couldNotSave')); return }
-      onDone()
-    } finally { setBusy(false) }
-  }
-
-  return (
-    <form onSubmit={submit} className="p-4 bg-gray-50 border-b space-y-3">
-      <input value={name} onChange={e => setName(e.target.value)} required
-        placeholder={t('namePlaceholder')}
-        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg" />
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-        <label className="text-xs text-gray-600">
-          {t('category')}
-          <select value={category} onChange={e => setCategory(e.target.value)}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg">
-            {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-          </select>
-        </label>
-        <label className="text-xs text-gray-600">
-          {t('charged')}
-          <select value={quantityMode} onChange={e => setQuantityMode(e.target.value)}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg">
-            {QUANTITY_MODES.map(m => <option key={m} value={m}>{m}</option>)}
-          </select>
-        </label>
-        <label className="text-xs text-gray-600">
-          {t('costs')} ({rateSymbol})
-          <input type="number" min="0" step="0.01" value={cost} onChange={e => setCost(e.target.value)}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg" />
-        </label>
-        <label className="text-xs text-gray-600">
-          {t('sellsFor')} ({rateSymbol})
-          <input type="number" min="0" step="0.01" value={price} onChange={e => setPrice(e.target.value)}
-            placeholder={t('costPlusMargin')}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg" />
-        </label>
-        <label className="text-xs text-gray-600">
-          {t('day')}
-          <input type="number" min="1" value={day} onChange={e => setDay(e.target.value)}
-            placeholder={t('anyDay')}
-            className="w-full px-2 py-1.5 text-sm border border-gray-300 rounded-lg" />
-        </label>
-      </div>
-      <button type="submit" disabled={busy || !name.trim()}
-        className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium text-white bg-[#647C47] rounded-lg hover:bg-[#4f6238] disabled:opacity-40">
-        {busy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} {t('addOption')}
-      </button>
-    </form>
   )
 }

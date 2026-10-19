@@ -5590,6 +5590,8 @@ export interface Database {
           updated_at: string
           created_by: string | null
           rate_currency: string | null
+          offered_with: string
+          activity_rate_id: string | null
         }
         Insert: {
           id?: string
@@ -5606,6 +5608,8 @@ export interface Database {
           updated_at?: string
           created_by?: string | null
           rate_currency?: string | null
+          offered_with?: string
+          activity_rate_id?: string | null
         }
         Update: {
           id?: string
@@ -5622,8 +5626,17 @@ export interface Database {
           updated_at?: string
           created_by?: string | null
           rate_currency?: string | null
+          offered_with?: string
+          activity_rate_id?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "extras_catalogue_activity_rate_id_fkey"
+            columns: ["activity_rate_id"]
+            isOneToOne: false
+            referencedRelation: "activity_rates"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "extras_catalogue_org_id_fkey"
             columns: ["org_id"]
@@ -5636,6 +5649,55 @@ export interface Database {
             columns: ["supplier_id"]
             isOneToOne: false
             referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      extras_catalogue_programmes: {
+        Row: {
+          id: string
+          org_id: string
+          extra_id: string
+          template_id: string
+          selling_price: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          extra_id: string
+          template_id: string
+          selling_price?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          extra_id?: string
+          template_id?: string
+          selling_price?: number | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "extras_catalogue_programmes_extra_id_fkey"
+            columns: ["extra_id"]
+            isOneToOne: false
+            referencedRelation: "extras_catalogue"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extras_catalogue_programmes_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "extras_catalogue_programmes_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "tour_templates"
             referencedColumns: ["id"]
           },
         ]
