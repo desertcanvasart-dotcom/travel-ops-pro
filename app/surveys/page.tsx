@@ -7,7 +7,8 @@
 // guest's answers, labelled from the shared questionnaire definition.
 
 import { useEffect, useState } from 'react'
-import { ClipboardList, Loader2, ChevronDown, ChevronRight, Mail, MessageCircle } from 'lucide-react'
+import { ClipboardList, Loader2, ChevronDown, ChevronRight, Mail, MessageCircle, Trash2 } from 'lucide-react'
+import { useConfirm } from '@/components/ConfirmDialog'
 import {
   SURVEY_SECTIONS,
   OPTIONAL_TOURS,
@@ -39,6 +40,8 @@ interface SurveyResponse {
 
 interface Survey {
   id: string
+  /** Null when the trip was deleted: the invite is never sent then. */
+  itinerary_id: string | null
   token: string
   status: 'pending' | 'sent' | 'submitted'
   trip_snapshot: { trip_name?: string; tour_code?: string; start_date?: string; end_date?: string; client_name?: string }
@@ -111,6 +114,26 @@ export default function SurveysPage() {
   const [pageSize, setPageSize] = useState(50)
   // false: this company has no guest questionnaire, so surveys are never made.
   const [enabled, setEnabled] = useState<boolean | null>(null)
+  const confirm = useConfirm()
+  const [reload, setReload] = useState(0)
+  const [deleting, setDeleting] = useState<string | null>(null)
+
+  // Only an unanswered survey can be deleted (the API refuses one with answers).
+  const remove = async (s: Survey) => {
+    const ok = await confirm(
+      `Delete the survey for "${s.trip_snapshot?.trip_name || 'this trip'}"? Its link stops working. Nobody has answered it.`,
+      { title: 'Delete this survey?', confirmText: 'Delete', variant: 'danger' }
+    )
+    if (!ok) return
+    setDeleting(s.id); setError(null)
+    try {
+      const res = await fetch(`/api/surveys/${s.id}`, { method: 'DELETE' })
+      const j = await res.json().catch(() => ({}))
+      if (!res.ok || !j.success) { setError(j.error || 'Could not delete the survey'); return }
+      setOpen(null)
+      setReload(n => n + 1)
+    } finally { setDeleting(null) }
+  }
 
   useEffect(() => {
     setLoading(true)
@@ -125,7 +148,7 @@ export default function SurveysPage() {
       })
       .catch(e => setError(e instanceof Error ? e.message : 'Failed to load'))
       .finally(() => setLoading(false))
-  }, [page])
+  }, [page, reload])
 
   const pages = Math.max(1, Math.ceil(total / pageSize))
   const first = total === 0 ? 0 : (page - 1) * pageSize + 1
@@ -185,6 +208,7 @@ export default function SurveysPage() {
                       <div className="text-xs text-gray-500 mt-0.5 flex flex-wrap gap-2">
                         {s.trip_snapshot?.client_name && <span>{s.trip_snapshot.client_name}</span>}
                         {s.trip_snapshot?.end_date && <span>ends {s.trip_snapshot.end_date}</span>}
+                        {!s.itinerary_id && <span className="text-amber-700">trip deleted — will not be sent</span>}
                         {s.sent_email && <span className="inline-flex items-center gap-0.5"><Mail className="w-3 h-3" />email</span>}
                         {s.sent_whatsapp && <span className="inline-flex items-center gap-0.5"><MessageCircle className="w-3 h-3" />WhatsApp</span>}
                         {s.submitted_at && <span className="text-green-600">first answer {new Date(s.submitted_at).toLocaleDateString()}</span>}
@@ -204,9 +228,20 @@ export default function SurveysPage() {
                   {expanded && (
                     <div className="px-6 pb-5 pt-1 bg-gray-50/50 text-sm">
                       {answers.length === 0 ? (
-                        <p className="text-gray-500 py-2">
-                          Not yet answered. Link: <code className="text-xs">/survey/{s.token}</code>
-                        </p>
+                        <div className="flex items-center justify-between gap-4 py-2">
+                          <p className="text-gray-500">
+                            Not yet answered. Link: <code className="text-xs">/survey/{s.token}</code>
+                          </p>
+                          <button
+                            type="button"
+                            onClick={() => void remove(s)}
+                            disabled={deleting === s.id}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 text-xs font-medium text-red-700 border border-red-200 rounded-lg hover:bg-red-50 disabled:opacity-50"
+                          >
+                            {deleting === s.id ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Trash2 className="w-3.5 h-3.5" />}
+                            Delete survey
+                          </button>
+                        </div>
                       ) : (
                         answers.map((r, i) => (
                           <div key={r.id} className={i > 0 ? 'mt-5 pt-4 border-t border-gray-200' : 'mt-2'}>
