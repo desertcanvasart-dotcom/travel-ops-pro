@@ -102,7 +102,7 @@ export async function POST(request: NextRequest) {
       emailAddress = auth.emailAddress
     } catch (err) {
       if (err instanceof GmailAuthError) {
-        return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 401 })
+        return NextResponse.json({ error: err.message }, { status: 401 })
       }
       throw err
     }

@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
 import { randomUUID } from 'node:crypto'
-import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { getCurrentOrgId, getCurrentUserId, noOrgResponse } from '@/lib/auth/current-org'
@@ -120,7 +119,7 @@ export async function POST(request: Request) {
     } catch (err) {
       if (err instanceof GmailAuthError) {
         return NextResponse.json(
-          { success: false, error: clientMessage(err, 'Internal server error') },
+          { success: false, error: err.message },
           { status: 401 }
         )
       }

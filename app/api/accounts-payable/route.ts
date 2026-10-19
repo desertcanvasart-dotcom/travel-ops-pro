@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createClient } from '@supabase/supabase-js'
+import { todayFromRequest } from '@/lib/today'
 import { addToTotals, emptyTotals, type CurrencyTotals } from '@/lib/currency-totals'
 import { OWED_BILL_STATUSES, PAYABLE_BUCKET_OF_KEY, payableAgingKey, payableDueDate, unmatchedBillRows } from '@/lib/finance/payables'
 
@@ -97,10 +98,12 @@ export async function GET(request: NextRequest) {
     }
     const expenses = [...(expenseRows || []), ...billRows] as any[]
 
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    // Calendar dates as UTC midnights, so the day maths is the same on a
+    // server in Tokyo as on one in UTC (local midnights shifted every date a
+    // day early east of UTC). "Today" is the office's, not the server's.
     const DAY = 1000 * 60 * 60 * 24
-    const dateOnly = (d: string) => { const x = new Date(d); x.setHours(0, 0, 0, 0); return x }
+    const dateOnly = (d: string) => new Date(`${String(d).slice(0, 10)}T00:00:00Z`)
+    const today = dateOnly(todayFromRequest(request.url))
 
     // When a supplier's bill is matched to an expense, the bill's due date is
     // when the money is owed. Without one, an expense is due 14 days after it

@@ -25,7 +25,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ messages })
   } catch (err) {
     if (err instanceof GmailAuthError) {
-      return NextResponse.json({ error: clientMessage(err, 'Gmail not connected') }, { status: 401 })
+      return NextResponse.json({ error: err.message }, { status: 401 })
     }
     console.error('Fetch thread error:', err)
     return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 500 })
