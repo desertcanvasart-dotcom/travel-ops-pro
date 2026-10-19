@@ -2103,11 +2103,11 @@ export default function TourManagerContent() {
                                         <Link
                                           href={`/tours/variations/${variation.id}/options`}
                                           className="inline-flex items-center gap-1 px-2 py-1 text-xs font-semibold text-[#647C47] border border-[#b8c9a8] hover:bg-[#e8ede3] rounded transition-colors whitespace-nowrap"
-                                          title="Options and upgrades this programme sells"
+                                          title="Extras this programme offers"
                                           onClick={(e) => e.stopPropagation()}
                                         >
                                           <Sparkles className="w-3.5 h-3.5" />
-                                          Options
+                                          Extras
                                         </Link>
                                         <Link
                                           href={`/b2b/calculator/${variation.id}`}

@@ -125,6 +125,9 @@ interface CatalogueExtraOption {
   /** The currency the row was entered in; null = the org's rate currency. */
   rate_currency?: string | null
   unit: 'per_person' | 'per_booking'
+  /** Its cost is an Activities rate's, worked out for the group by the engine. */
+  activity_rate_id?: string | null
+  activity_name?: string | null
 }
 
 interface RateSheetRow {
@@ -300,12 +303,6 @@ function TourPriceCalculatorInner() {
   const [availableExtras, setAvailableExtras] = useState<CatalogueExtraOption[]>([])
   const [selectedExtraIds, setSelectedExtraIds] = useState<string[]>([])
 
-  useEffect(() => {
-    fetch('/api/extras-catalogue?active_only=true')
-      .then(r => r.json())
-      .then(d => { if (d?.success) setAvailableExtras(d.data || []) })
-      .catch(err => console.error('Failed to fetch extras:', err))
-  }, [])
   const { rateSymbol: extrasRateSymbol, rateCurrency: extrasRateCurrency } = useCurrency()
   // Every amount on this page is in the currency the engine priced in —
   // the org's rate currency. It used to be a hardcoded euro sign in 18
@@ -359,6 +356,15 @@ function TourPriceCalculatorInner() {
 
   // Itinerary editor state
   const [templateId, setTemplateId] = useState<string | null>(null)
+  // The extras THIS programme offers: every-booking ones plus its own, at its
+  // price (lib/extras/offered). Waits for the programme to be known.
+  useEffect(() => {
+    if (!templateId) return
+    fetch(`/api/extras-catalogue?active_only=true&template_id=${templateId}`)
+      .then(r => r.json())
+      .then(d => { if (d?.success) setAvailableExtras(d.data || []) })
+      .catch(err => console.error('Failed to fetch extras:', err))
+  }, [templateId])
   const [templateName, setTemplateName] = useState<string>('')
   const [editableDays, setEditableDays] = useState<TemplateItineraryDay[]>([])
   const [originalDays, setOriginalDays] = useState<TemplateItineraryDay[]>([])
@@ -1165,9 +1171,11 @@ function TourPriceCalculatorInner() {
                   <p className="text-xs text-gray-500 mb-2">{t('extrasHint')}</p>
                   <div className="space-y-1.5 max-h-48 overflow-y-auto">
                     {availableExtras.map(x => {
-                      const unpriced = x.supplier_cost == null && x.selling_price == null
+                      const unpriced = x.supplier_cost == null && x.selling_price == null && !x.activity_rate_id
                       const label = x.selling_price != null
                         ? `${extraMoney(x, x.selling_price)} · ${t('extrasSetPrice')}`
+                        : x.activity_rate_id
+                        ? `${t('extrasFromActivity', { name: x.activity_name ?? '' })} · ${t('extrasCostPlusMargin')}`
                         : x.supplier_cost != null
                         ? `${extraMoney(x, x.supplier_cost)} · ${t('extrasCostPlusMargin')}`
                         : t('extrasNotPriced')

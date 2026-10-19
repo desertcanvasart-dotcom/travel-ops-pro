@@ -25,7 +25,7 @@ type Db = { from: (table: string) => any }
 export type RateUseTable = 'guide_rates' | 'meal_rates' | 'entrance_fees' | 'activity_rates'
 
 export interface RateUse {
-  where: 'trip_line' | 'variation' | 'tour_day' | 'programme'
+  where: 'trip_line' | 'variation' | 'tour_day' | 'programme' | 'extra'
   /** What uses it, for the message: a programme's name, when there is one. */
   name?: string
 }
@@ -76,6 +76,19 @@ export async function rateInUse(db: Db, table: RateUseTable, id: string, orgId: 
     if (hit) return { where: 'programme', name: hit.template_name ?? undefined }
   }
 
+  // An extra whose cost comes from this activity (extras_catalogue.
+  // activity_rate_id, 20270107): deleting it would leave the extra unpriced.
+  if (table === 'activity_rates') {
+    const { data: extras, error } = await db
+      .from('extras_catalogue')
+      .select('id, name')
+      .eq('org_id', orgId)
+      .eq('activity_rate_id', id)
+      .limit(1)
+    // A database without the column yet: nothing can point here.
+    if (!error && extras?.length) return { where: 'extra', name: extras[0].name ?? undefined }
+  }
+
   return null
 }
 
@@ -86,6 +99,7 @@ export function rateInUseMessage(use: RateUse): string {
     variation: "a tour variation's service list",
     tour_day: 'a day of a tour',
     programme: use.name ? `a picked ticket on the programme "${use.name}"` : 'a picked ticket on a programme',
+    extra: use.name ? `the extra "${use.name}", which takes its cost from it` : 'an extra that takes its cost from it',
   }[use.where]
   return `This rate cannot be deleted: it is used by ${what}. Deactivate it instead, or remove it there first.`
 }

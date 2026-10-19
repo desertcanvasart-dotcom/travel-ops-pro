@@ -1,19 +1,21 @@
 // ============================================
 // GET /api/bookings/[id]/extras/catalog — what can be added to this trip
 // ============================================
-// Two lists, because there are two ways an option exists:
+// The lists, one per way an add-on exists:
 //
-//   THIS PROGRAMME'S OPTIONS   the optional services on the tour variations of
-//                              the template this trip was built from. The
-//                              operator curates them per package, and each can
-//                              carry its own selling price.
+//   EXTRAS FOR THIS PROGRAMME  Sell → Extras offered only with the programme
+//                              this trip was built from, at that programme's
+//                              price when it has one (20270107 — they were
+//                              Tours → Options, per tier, before).
 //   ATTRACTION EXTRAS          entrance fees flagged is_sellable_extra — a
 //                              site the customer can pay to add. Deliberately
 //                              NOT is_addon: that means "not auto-priced", a
 //                              different decision that does not imply this one.
-//   CATALOGUE EXTRAS           extras_catalogue — fast-track, luggage, late
-//                              check-out: sellable things that are not
-//                              attractions and never will be.
+//   CATALOGUE EXTRAS           extras_catalogue offered with every booking —
+//                              fast-track, luggage, late check-out.
+//
+// An extra linked to an Activities rate takes its cost from it for this
+// trip's group (lib/extras/offered).
 //
 // Both are PRE-FILLS. Every price is a suggestion the office can change before
 // the option is offered, and anything that cannot be priced honestly comes
@@ -35,6 +37,8 @@ import {
   type PropertyStay,
 } from '@/lib/extras-catalog'
 import { getHotelRates, getCruiseRates } from '@/lib/auto-pricing-service'
+import { loadOfferedExtras, offeredWith, withActivityCost, type ActivityRateRow, type OfferedExtra } from '@/lib/extras/offered'
+import { createRateNormalizer } from '@/lib/rates/rate-currency'
 
 export const dynamic = 'force-dynamic'
 
@@ -51,7 +55,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
 
   const { data: booking } = await admin
     .from('bookings')
-    .select('id, currency, itinerary_id')
+    .select('id, currency, itinerary_id, num_adults, num_children')
     .eq('id', id)
     .eq('org_id', orgId)
     .maybeSingle()
@@ -91,50 +95,49 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       convert,
     })
 
-  // ---------- this programme's own options ----------
+  // ---------- extras: this programme's, then every booking's ----------
   const packageItems: CatalogItem[] = []
+  const catalogueItems: CatalogItem[] = []
   const templateId = await templateForBooking(booking.itinerary_id, orgId)
-  if (templateId) {
-    const { data: variations } = await admin
-      .from('tour_variations')
-      .select('id, variation_name, tier')
-      .eq('template_id', templateId)
-      // The company's own variations (tour_variations.org_id, 20261207).
-      .eq('org_id', orgId)
-
-    const variationIds = (variations ?? []).map(v => v.id)
-    if (variationIds.length) {
-      const { data: services, error } = await admin
-        .from('tour_variation_services')
-        .select('id, variation_id, service_name, service_category, cost_per_unit, optional_price_override, notes')
-        .in('variation_id', variationIds)
-        .eq('is_optional', true)
-      if (error) console.error('extras catalog: variation services', error)
-
-      const variationById = new Map((variations ?? []).map(v => [v.id, v]))
-      // The same option usually exists on every tier of a programme. The office
-      // is choosing an option, not a tier, so it is listed once — by name, at
-      // the first price found.
-      const seen = new Set<string>()
-      for (const s of services ?? []) {
-        const key = String(s.service_name || '').trim().toLowerCase()
-        if (!key || seen.has(key)) continue
-        seen.add(key)
-
-        // tour_variation_services has no rate_currency column: org currency.
-        const priced = price(s.cost_per_unit, s.optional_price_override)
-        const variation = variationById.get(s.variation_id)
-        packageItems.push({
-          source_kind: 'package_option',
-          source_id: String(s.id),
-          title: String(s.service_name),
-          subtitle: [s.service_category, variation?.variation_name].filter(Boolean).join(' · ') || null,
-          supplier_id: null,
-          ...priced,
-          currency: bookingCurrency,
-        })
-      }
+  const pax = Math.max(1, (Number(booking.num_adults) || 0) + (Number(booking.num_children) || 0))
+  const { extras, activities } = await loadOfferedExtras(admin, orgId, templateId)
+  // An activity-linked extra's cost is the activity's, which may be in
+  // another currency than the extra: both are brought into the org's rate
+  // currency first, then priced as one row.
+  const normalizer = createRateNormalizer(rateCurrency)
+  const activityRows = (await normalizer.normalize('activity_rates', [...activities.values()] as unknown as Record<string, unknown>[])) as unknown as ActivityRateRow[]
+  const activityById = new Map(activityRows.map(a => [a.id, a]))
+  for (const raw of extras) {
+    let c: OfferedExtra = raw
+    let currencyRow: { rate_currency?: string | null } = raw
+    if (raw.activity_rate_id) {
+      const [inOrgCurrency] = (await normalizer.normalize('extras_catalogue', [raw] as unknown as Record<string, unknown>[])) as unknown as OfferedExtra[]
+      // A booking does not record passport type: the non-EUR rate, as for
+      // attraction extras (entranceFeeBasis), and the note says so.
+      c = withActivityCost(inOrgCurrency ?? raw, activityById.get(raw.activity_rate_id), pax, false)
+      currencyRow = { rate_currency: rateCurrency }
     }
+    // A selling price the operator set IS the price (off-margin); blank means
+    // cost plus the org's margin. The row names its own currency (20260902).
+    const priced = price(c.supplier_cost, c.selling_price, currencyRow)
+    const activity = raw.activity_rate_id ? activityById.get(raw.activity_rate_id) : undefined
+    const basis = raw.activity_rate_id
+      ? `cost from Activities${activity?.activity_name ? ` (${activity.activity_name})` : ''}, non-EUR rate, ${pax} traveller${pax === 1 ? '' : 's'}`
+      : null
+    const item: CatalogItem = {
+      source_kind: 'catalogue_extra',
+      source_id: String(c.id),
+      title: String(c.name),
+      subtitle: [c.category, c.description, c.unit === 'per_booking' ? 'per booking' : 'per person']
+        .filter(Boolean)
+        .join(' · ') || null,
+      supplier_id: c.supplier_id ?? null,
+      ...priced,
+      price_note: [basis, c.programme_price ? "this programme's price" : null, priced.price_note].filter(Boolean).join(', '),
+      currency: bookingCurrency,
+    }
+    if (offeredWith(c) === 'programmes') packageItems.push(item)
+    else catalogueItems.push(item)
   }
 
   // ---------- attraction extras (sellable sites) ----------
@@ -161,33 +164,6 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
       // The basis matters: a booking does not record passport type, so the
       // office has to be told which rate this price came from.
       price_note: basis ? `${basis}, ${priced.price_note}` : priced.price_note,
-      currency: bookingCurrency,
-    })
-  }
-
-  // ---------- catalogue extras (not attractions) ----------
-  const catalogueItems: CatalogItem[] = []
-  const { data: catalogue, error: catalogueError } = await admin
-    .from('extras_catalogue')
-    .select('*')
-    .eq('org_id', orgId)
-    .eq('is_active', true)
-  if (catalogueError) console.error('extras catalog: catalogue extras', catalogueError)
-
-  for (const c of catalogue ?? []) {
-    // Same pricing rule as a package option: a selling price the operator set
-    // IS the price (off-margin); blank means cost plus the org's margin.
-    // The row names its own currency (migration 20260902); blank = the org's.
-    const priced = price(c.supplier_cost, c.selling_price, c)
-    catalogueItems.push({
-      source_kind: 'catalogue_extra',
-      source_id: String(c.id),
-      title: String(c.name),
-      subtitle: [c.category, c.description, c.unit === 'per_booking' ? 'per booking' : 'per person']
-        .filter(Boolean)
-        .join(' · ') || null,
-      supplier_id: c.supplier_id ?? null,
-      ...priced,
       currency: bookingCurrency,
     })
   }
@@ -220,7 +196,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     rate_currency: rateCurrency,
     margin_percent: marginPercent,
     groups: [
-      { source: 'package', label: 'Options in this programme', items: packageItems },
+      { source: 'package', label: 'Extras for this programme', items: packageItems },
       { source: 'supplement', label: "Upgrades at this trip's hotels and ship", items: supplementItems },
       { source: 'addon', label: 'Attraction extras', items: addonItems },
       { source: 'catalogue', label: 'Extras', items: catalogueItems },

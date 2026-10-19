@@ -65,7 +65,10 @@ describe('extras catalog currency selection', () => {
     // migration 20260902 gave extras_catalogue its own rate_currency. Until
     // then the route said "authored in the org's rate currency by design" and
     // priced every catalogue row as USD.
-    expect(ROUTE).toMatch(/price\(c\.supplier_cost,\s*c\.selling_price,\s*c\)/)
+    // The row's own currency — or, for an extra costed from an Activities
+    // rate, the org's (both rows are normalised into it first, 20270107).
+    expect(ROUTE).toMatch(/price\(c\.supplier_cost,\s*c\.selling_price,\s*currencyRow\)/)
+    expect(ROUTE).toMatch(/let currencyRow[^=]*=\s*raw\b/)
     expect(ROUTE).not.toMatch(/authored in the org's rate currency by design/)
   })
 
