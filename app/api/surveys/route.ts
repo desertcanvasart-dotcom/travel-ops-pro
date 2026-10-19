@@ -30,7 +30,7 @@ export async function GET(request: NextRequest) {
 
     const { data, error, count } = await supabase
       .from('guest_surveys')
-      .select('id, token, status, trip_snapshot, sent_email, sent_whatsapp, sent_at, submitted_at, created_at', { count: 'exact' })
+      .select('id, itinerary_id, token, status, trip_snapshot, sent_email, sent_whatsapp, sent_at, submitted_at, created_at', { count: 'exact' })
       .eq('org_id', org_id)
       .order('created_at', { ascending: false })
       .range(from, from + SURVEY_PAGE_SIZE - 1)

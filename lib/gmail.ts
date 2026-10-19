@@ -80,6 +80,15 @@ export async function getAuthenticatedGmail(userId: string): Promise<Authenticat
         })
         .eq('user_id', userId)
     } catch (refreshError: any) {
+      // Google's own reason (usually `invalid_grant`: the refresh token was
+      // revoked, the password changed, or the OAuth app is in Testing and its
+      // tokens lapse after 7 days). Logged because the message below is all
+      // the caller sees.
+      console.error(
+        '[gmail] token refresh failed:',
+        refreshError?.response?.data?.error || refreshError?.message || refreshError,
+        refreshError?.response?.data?.error_description || ''
+      )
       throw new GmailAuthError('Failed to refresh Gmail token. Please reconnect your Gmail account.')
     }
   }

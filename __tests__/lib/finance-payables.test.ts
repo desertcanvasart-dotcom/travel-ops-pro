@@ -2,12 +2,22 @@
 // expense settles the supplier bill it completes (against a fake database).
 import { describe, it, expect, beforeEach } from 'vitest'
 import {
-  billsCompletedByExpensePayment, expenseDeleteBlocker, payableAgingKey, payExpenseAndSettleBills,
+  billsCompletedByExpensePayment, expenseDeleteBlocker, payableAgingKey, payableDueDate, payExpenseAndSettleBills,
   unmatchedBillRows, PAYABLE_BUCKET_OF_KEY,
 } from '@/lib/finance/payables'
 import { fakeClient, resetDb, tables } from '../api/_finance-fake-db'
 
 const db = fakeClient as never
+
+describe('due dates are calendar dates', () => {
+  // A local midnight made every due date a day early on a server east of UTC
+  // (the office in Japan); the date must not depend on the server's clock.
+  it('expense date + 14 days, whatever the server timezone', () => {
+    expect(payableDueDate('2026-10-19')).toBe('2026-11-02')
+    expect(payableDueDate('2026-10-19T00:00:00+09:00')).toBe('2026-11-02')
+    expect(payableDueDate('2026-12-25', 7)).toBe('2027-01-01')
+  })
+})
 
 describe('payables aging', () => {
   it.each([[-3, 'current'], [0, 'current'], [1, 'days30'], [30, 'days30'], [31, 'days60'], [60, 'days60'], [61, 'days90Plus']] as const)(

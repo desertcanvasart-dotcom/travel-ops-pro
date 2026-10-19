@@ -188,6 +188,10 @@ test('P&L API returns the commission and realized fields for every trip', async 
 
   // Summary always carries the new aggregates, even with no commissions on file
   // — a missing key would silently render as "undefined" rather than €0.
+  // With trips in more than one currency the flat totals are null on purpose
+  // (AUDIT H3: € and ¥ added together is no figure) and by_currency carries
+  // them — the shared E2E database has trips in two currencies.
+  const mixed = body.summary.mixed_currency === true
   for (const key of [
     'total_agent_commissions',
     'total_net_profit',
@@ -196,7 +200,16 @@ test('P&L API returns the commission and realized fields for every trip', async 
     'total_realized_cost',
     'total_realized_profit',
   ]) {
-    expect(typeof body.summary[key], `summary.${key}`).toBe('number')
+    expect(key in body.summary, `summary.${key}`).toBe(true)
+    if (mixed) expect(body.summary[key], `summary.${key}`).toBeNull()
+    else expect(typeof body.summary[key], `summary.${key}`).toBe('number')
+  }
+  if (mixed) {
+    for (const [cur, b] of Object.entries(body.summary.by_currency as Record<string, Record<string, unknown>>)) {
+      for (const key of ['agent_commissions', 'net_profit', 'realized_revenue', 'realized_cost', 'realized_profit']) {
+        expect(typeof b[key], `by_currency.${cur}.${key}`).toBe('number')
+      }
+    }
   }
 
   for (const trip of body.data) {

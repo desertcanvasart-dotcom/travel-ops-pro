@@ -34,8 +34,9 @@ export const PAYABLE_BUCKET_OF_KEY: Record<PayableAgingKey, string> = {
 }
 
 export function payableDueDate(expenseDate: string, daysDefault = DEFAULT_DUE_DAYS): string {
-  const d = new Date(expenseDate)
-  d.setHours(0, 0, 0, 0)
+  // UTC midnight of the calendar date: a local midnight made this a day early
+  // on any server east of UTC (an office in Japan).
+  const d = new Date(`${String(expenseDate).slice(0, 10)}T00:00:00Z`)
   return new Date(d.getTime() + daysDefault * DAY_MS).toISOString().slice(0, 10)
 }
 
