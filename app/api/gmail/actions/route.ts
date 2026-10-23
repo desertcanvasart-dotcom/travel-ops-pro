@@ -3,6 +3,7 @@ import { clientMessage } from '@/lib/api-errors'
 import { GmailAuthError } from '@/lib/gmail'
 import { getMailboxGmail } from '@/lib/gmail-mailbox'
 import { getCurrentUserId } from '@/lib/auth/current-org'
+import { TRASH_PURGE_MESSAGE } from '@/lib/email/trash-purge'
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,8 +23,9 @@ export async function POST(request: NextRequest) {
     if (match !== undefined && !matchSel) {
       return NextResponse.json({ error: 'Invalid selection' }, { status: 400 })
     }
-    if (matchSel && action === 'permanentDelete') {
-      return NextResponse.json({ error: 'Delete forever takes chosen emails only' }, { status: 400 })
+    // Not allowed by the app's Gmail access (lib/email/trash-purge).
+    if (action === 'permanentDelete') {
+      return NextResponse.json({ error: TRASH_PURGE_MESSAGE }, { status: 400 })
     }
     if ((!messageIds && !threadIds && !matchSel) || !action) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
@@ -42,8 +44,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'The email is already in that folder' }, { status: 400 })
     }
 
-    // What each action does to the labels. (permanentDelete is the one action
-    // that is not a label change.)
+    // What each action does to the labels.
     const LABEL_CHANGES: Record<string, { add?: string[]; remove?: string[] } | undefined> = {
       delete: { add: ['TRASH'], remove: ['INBOX'] }, // move to trash
       archive: { remove: ['INBOX'] },
@@ -64,11 +65,8 @@ export async function POST(request: NextRequest) {
     if (['move', 'addLabel', 'removeLabel'].includes(action) && !labelId) {
       return NextResponse.json({ error: action === 'move' ? 'Label ID required for move action' : 'Label ID required' }, { status: 400 })
     }
-    if (action !== 'permanentDelete' && action !== 'restore' && !(action in LABEL_CHANGES)) {
+    if (action !== 'restore' && !(action in LABEL_CHANGES)) {
       return NextResponse.json({ error: 'Invalid action' }, { status: 400 })
-    }
-    if (action === 'permanentDelete' && threadIds) {
-      return NextResponse.json({ error: 'Permanent delete takes message ids only' }, { status: 400 })
     }
 
     // Tokens are stored ENCRYPTED. This route used to read gmail_tokens itself
@@ -114,14 +112,6 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true, count: ids.length, capped })
     }
 
-    if (action === 'permanentDelete') {
-      // Permanently delete (use with caution)
-      for (const id of ids) {
-        await gmail.users.messages.delete({ userId: 'me', id })
-      }
-      return NextResponse.json({ success: true })
-    }
-
     const change = LABEL_CHANGES[action]!
     if (threadIds) {
       // A conversation in the inbox IS a Gmail thread. Its id used to be sent
@@ -157,9 +147,25 @@ export async function POST(request: NextRequest) {
     if (err instanceof GmailAuthError) {
       return NextResponse.json({ error: err.message }, { status: 401 })
     }
+    // Nor is Google refusing an action the mailbox's grant does not cover.
+    if (isScopeError(err)) {
+      return NextResponse.json(
+        { error: 'Gmail refused this action: the app’s access to this mailbox does not include it.' },
+        { status: 403 }
+      )
+    }
     return NextResponse.json({ error: clientMessage(err, 'Internal server error') }, { status: 500 })
   }
 }
+/** Google's 403 for a call outside the granted OAuth scopes. */
+function isScopeError(err: unknown): boolean {
+  if (!err || typeof err !== 'object') return false
+  const e = err as { code?: unknown; status?: unknown; response?: { status?: unknown }; message?: unknown }
+  const status = Number(e.code ?? e.status ?? e.response?.status)
+  const message = typeof e.message === 'string' ? e.message : ''
+  return status === 403 && /insufficient (authentication scopes|permission)/i.test(message)
+}
+
 // ---- "Select all N": every email in a folder (and search) ----
 
 /** At most this many emails per action; the response says when there were more. */

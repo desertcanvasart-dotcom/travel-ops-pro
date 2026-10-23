@@ -31,6 +31,7 @@ vi.mock('@/lib/gmail-mailbox', async () => {
 
 import { POST } from '@/app/api/gmail/actions/route'
 import { moveThreadInGmail } from '@/lib/email/conversation-trash'
+import { TRASH_PURGE_MESSAGE } from '@/lib/email/trash-purge'
 
 const post = (body: unknown) => POST(new NextRequest('http://x/api/gmail/actions', { method: 'POST', body: JSON.stringify(body) }))
 const src = (f: string) => readFileSync(path.join(process.cwd(), f), 'utf8')
@@ -62,8 +63,26 @@ describe('Inbox: Trash and Spam', () => {
     const page = src('app/inbox/page.tsx')
     expect(page).toContain("spam: 'SPAM', trash: 'TRASH'")
     expect(page).toContain("handleEmailAction(folder === 'trash' ? 'restore' : folder === 'spam' ? 'notSpam' : 'archive')")
-    // Delete in Trash is for good, and asks first.
-    expect(page).toContain("if (!window.confirm('Delete forever? This cannot be undone.')) return")
+    // Delete in Trash says Gmail empties it after 30 days — no permanent delete.
+    expect(page).toContain('setSendNotice({ text: TRASH_PURGE_MESSAGE })')
+    expect(page).not.toContain("handleEmailAction('permanentDelete')")
+  })
+
+  // Operator, 2026-10-23: "Delete forever" in Trash showed "Internal server
+  // error" — Gmail's permanent delete needs the full mail.google.com scope,
+  // which the app does not ask for.
+  it('Delete forever is refused with the 30-day message, before Gmail is called', async () => {
+    const res = await post({ messageIds: ['m1'], action: 'permanentDelete' })
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toBe(TRASH_PURGE_MESSAGE)
+    expect(messagesUntrash).not.toHaveBeenCalled()
+  })
+
+  it('Google refusing for scope is a readable 403, not "Internal server error"', async () => {
+    batchModify.mockRejectedValueOnce(Object.assign(new Error('Request had insufficient authentication scopes.'), { code: 403 }))
+    const res = await post({ messageIds: ['m1'], action: 'markRead' })
+    expect(res.status).toBe(403)
+    expect((await res.json()).error).toMatch(/Gmail refused this action/)
   })
 })
 
