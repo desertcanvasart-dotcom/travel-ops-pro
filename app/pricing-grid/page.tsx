@@ -28,6 +28,9 @@ import ClientInfoBar from './components/ClientInfoBar'
 import InputPanel from './components/InputPanel'
 import DayRow from './components/DayRow'
 import GridSummary from './components/GridSummary'
+import GridExtras from './components/GridExtras'
+import { extraPicksFromServices, gridExtraOptions, priceGridExtras, type GridExtraOption } from './lib/extras'
+import type { ActivityRateRow } from '@/lib/extras/offered'
 
 // ============================================
 // LOCAL STORAGE PERSISTENCE
@@ -355,6 +358,34 @@ function PricingGridContent() {
     return () => { cancelled = true }
   }, [])
 
+  // The Sell → Extras this trip is offered (every booking's, plus its
+  // programme's at the programme's price), in the rate currency. Re-read
+  // when the trip or its programme changes; priced below for the group.
+  const [extraRows, setExtraRows] = useState<{ extras: GridExtraOption[]; activities: ActivityRateRow[]; warnings: string[]; templateId: string | null }>(
+    { extras: [], activities: [], warnings: [], templateId: null })
+  useEffect(() => {
+    let cancelled = false
+    const params = new URLSearchParams()
+    if (config.itineraryId) params.set('itinerary_id', config.itineraryId)
+    if (config.templateId) params.set('template_id', config.templateId)
+    ;(async () => {
+      try {
+        const data = await (await fetch(`/api/pricing-grid/extras?${params}`)).json()
+        if (cancelled || !data.success) return
+        setExtraRows({
+          extras: Array.isArray(data.data?.extras) ? data.data.extras : [],
+          activities: Array.isArray(data.data?.activities) ? data.data.activities : [],
+          warnings: Array.isArray(data.data?.warnings) ? data.data.warnings : [],
+          templateId: data.data?.templateId ?? null,
+        })
+      } catch (err) {
+        // No list means none offered here; a saved pick is still named below.
+        console.error('Failed to load extras:', err)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [config.itineraryId, config.templateId])
+
   // --- URL Params: Auto-load conversation from inbox redirect ---
   const searchParams = useSearchParams()
   const hasProcessedParams = useRef(false)
@@ -416,6 +447,8 @@ function PricingGridContent() {
       clientId: clientIdParam || null,
       itineraryId: null,
       itineraryCode: null,
+      templateId: null,
+      extras: [],
     }))
 
     // Clear localStorage so reload doesn't bring back old data
@@ -583,7 +616,7 @@ function PricingGridContent() {
       setDays([])
       setParseNotes([])
       setShowReadback(false)
-      setConfig(prev => ({ ...prev, itineraryId: null, itineraryCode: null }))
+      setConfig(prev => ({ ...prev, itineraryId: null, itineraryCode: null, templateId: null, extras: [] }))
       // Written in the agency's format: read here, by name, without the AI
       // (structured-itinerary.ts) — exact, instant, and free.
       if (rates && isStructuredItinerary(text)) {
@@ -706,6 +739,10 @@ function PricingGridContent() {
         clientId: itn.client_id || null,
         itineraryId: itn.id,
         itineraryCode: itn.itinerary_code,
+        // Its programme's extras are offered too; its extras are read back
+        // from its lines below.
+        templateId: itn.template_id || null,
+        extras: [],
       }))
 
       // Fetch days with services
@@ -759,6 +796,10 @@ function PricingGridContent() {
         // Re-priced from the rates by the hydration effect once the trip's
         // tier's rates are in (its saved lines carry no periods or guide bed).
         setDays(loadedDays)
+        // The extras it was saved with: lines tagged with their extra's id
+        // (lib/extras.ts), which the slot mapping above leaves out.
+        const savedExtras = extraPicksFromServices(daysData.data.flatMap((d: any) => d.services || []))
+        setConfig(prev => ({ ...prev, extras: savedExtras }))
         setSaveMessage(`Loaded ${itn.itinerary_code}`)
       }
     } catch (err) {
@@ -901,9 +942,14 @@ function PricingGridContent() {
   // The picks with no rate behind them — priced as nothing, and named.
   const unpricedItems = rates && ratesTier === config.tier ? hydrateDays(days, rates, config.pax).unpriced : []
 
+  // The extras, priced for this group (lib/extras.ts) — as the save will.
+  const extraOptions = gridExtraOptions(extraRows.extras, extraRows.activities, config.pax, config.passport === 'eu')
+  const extraPicks = config.extras ?? []
+  const extrasPricing = priceGridExtras(extraOptions, extraPicks, config.pax, config.marginPercent)
+
   // --- Calculate Totals ---
   const totals: GridTotals = days.length > 0
-    ? calculateGrandTotals(days, viewConfig, seasonWindows)
+    ? calculateGrandTotals(days, viewConfig, seasonWindows, extrasPricing)
     : {
         costPerPerson: 0, totalCost: 0, marginAmount: 0,
         sellingPricePerPerson: 0, sellingPriceTotal: 0, baseSellingPriceTotal: 0,
@@ -1139,6 +1185,16 @@ function PricingGridContent() {
               Throughout guide: {countMissingGuideBeds(days, config)} night(s) have no guide bed rate on the chosen hotel/cruise — fill "Guide bed / night" on its rate periods, or this quote is missing his bed.
             </div>
           )}
+
+          <GridExtras
+            options={extraOptions}
+            picks={extraPicks}
+            pricing={extrasPricing}
+            config={viewConfig}
+            hasProgramme={!!extraRows.templateId}
+            warnings={extraRows.warnings}
+            onChange={(next) => setConfig(prev => ({ ...prev, extras: next }))}
+          />
 
           {/* Grand Summary + Save */}
           <GridSummary

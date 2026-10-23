@@ -1,6 +1,7 @@
 import type { PricingBasis } from '@/lib/pricing/pricing-basis'
 import type { OptionPeriod } from '@/lib/rates/date-window'
 import type { PackageType } from '@/lib/package-types'
+import type { GridExtraPick } from './lib/extras'
 
 // ============================================
 // PRICING GRID — Type Definitions
@@ -71,6 +72,13 @@ export interface GridConfig {
   /** The client record the trip is priced for (the inbox hands it over);
    *  the save links the itinerary to it when it is this company's. */
   clientId?: string | null
+  /** The programme the trip was built from (itineraries.template_id, set when
+   *  a saved trip is loaded): its extras are offered too. The save reads a
+   *  saved trip's own, never this. */
+  templateId?: string | null
+  /** The Sell → Extras picked for the trip (app/pricing-grid/lib/extras.ts).
+   *  Ids only matter — the save prices them from the rows itself. */
+  extras?: GridExtraPick[]
 }
 
 // --- Day Type Preset + Component Model (consolidation Phase B / rich gate) ---

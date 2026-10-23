@@ -131,7 +131,7 @@ describe('H30 — the season premium is priced on the server', async () => {
   it('the save route prices the premium itself, from the departure', () => {
     const save = src('app/api/pricing-grid/save/route.ts')
     expect(save).toContain('const season = seasonForDate(await seasonWindowsOn(supabase, callerOrgId, startDate), startDate)')
-    expect(save).toContain('sellingFromCost({ totalCost: supplierTotal, marginPercent: marginPct, season, currency: rateCurrency })')
+    expect(save).toContain('sellingFromCost({ totalCost: supplierTotal, marginPercent: marginPct, season, currency: rateCurrency, extras: extrasPricing })')
   })
 })
 
