@@ -78,6 +78,15 @@ describe('#20 finishing a website order', () => {
     expect(status).toBe(200)
     expect((await rows('web_order_intakes')).find((w) => w.id === 'wo-open')).toMatchObject({ outcome: 'quote_created', quote_id: json.quote.id })
   })
+
+  // Operator, 2026-10-23: the test order's quote was deleted, and its order
+  // stayed "finished" with nothing behind it — it could not be quoted again.
+  it('an order whose quote was deleted can be finished again', async () => {
+    tables({ web_order_intakes: [{ id: 'wo-gone', org_id: 'org-1', outcome: 'quote_created', quote_id: null, resolved_at: '2026-10-01T00:00:00Z' }] })
+    const { status, json } = await post({ text: ORDER, intakeId: 'wo-gone' })
+    expect(status).toBe(200)
+    expect((await rows('web_order_intakes'))[0]).toMatchObject({ outcome: 'quote_created', quote_id: json.quote.id })
+  })
 })
 
 describe('#21 the seat hold respects the seats left', () => {

@@ -74,7 +74,7 @@ describe('/contacts', () => {
 
 describe('email matching ignores case', () => {
   it('B2B convert looks the client up with ilike and the oldest wins', () => {
-    const src = read('app/api/b2b/quotes/[id]/convert/route.ts')
+    const src = (read('app/api/b2b/quotes/[id]/convert/route.ts') + read('lib/b2b/convert-template-quote.ts'))
     const lookup = src.slice(src.indexOf('Create or find client'), src.indexOf('Create or find client') + 1600)
     expect(lookup).toContain(".ilike('email', escapeLike(")
     expect(lookup).not.toContain(".eq('email'")

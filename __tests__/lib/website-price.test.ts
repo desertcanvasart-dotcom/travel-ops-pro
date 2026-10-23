@@ -47,3 +47,20 @@ describe('website-priced orders', () => {
     expect(row).toMatchObject({ quantity: 2, total_cost: 3000, supplier_currency: 'USD', supplier_cost_original: 20, exchange_rate_used: 150 })
   })
 })
+
+describe('applications and questions', () => {
+  it('an application (or a form with no type) becomes a trip; a question does not', async () => {
+    const { isApplicationOrder } = await import('@/lib/intake/tour-up-order')
+    expect(isApplicationOrder({ inquiryType: '申込み' })).toBe(true)
+    expect(isApplicationOrder({ inquiryType: 'お申し込み' })).toBe(true)
+    expect(isApplicationOrder({ inquiryType: '' })).toBe(true)
+    expect(isApplicationOrder({ inquiryType: 'お問合せ' })).toBe(false)
+    expect(isApplicationOrder({ inquiryType: '資料請求' })).toBe(false)
+  })
+
+  it("a website trip's gap reads without the before-sending instruction", async () => {
+    const { costGapReason } = await import('@/lib/pricing/itinerary-completeness')
+    expect(costGapReason('No cost entered. Fill it in on the itinerary before sending. No rate: No 4D cruise transport package.')).toBe('No 4D cruise transport package.')
+    expect(costGapReason('No cost entered. Fill it in on the itinerary before sending.')).toBe('No cost entered. Fill it in on the itinerary before sending.')
+  })
+})

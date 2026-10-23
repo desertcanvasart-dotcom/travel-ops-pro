@@ -670,7 +670,10 @@ ${bodyText}`
         const r = await fetch(`/api/intake/web-orders?messageId=${encodeURIComponent(selectedEmail.id)}`)
         const j = await r.json()
         if (j.success && j.intake) {
-          window.location.href = j.intake.quote ? `/b2b/quotes/${j.intake.quote.id}` : `/intake/order?intake=${j.intake.id}`
+          // The trip it became, else its quote, else the order to finish by hand.
+          window.location.href = j.intake.quote?.converted_to_itinerary_id
+            ? `/itineraries/${j.intake.quote.converted_to_itinerary_id}`
+            : j.intake.quote ? `/b2b/quotes/${j.intake.quote.id}` : `/intake/order?intake=${j.intake.id}`
           return
         }
       } catch { /* not taken in yet: read it here */ }

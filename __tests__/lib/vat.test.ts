@@ -214,7 +214,7 @@ describe('every document renders the marker, in both states', () => {
 
 describe('the flag travels from the quote', () => {
   it('convert carries it to the trip; booking carries the booked quote\'s; the invoice inherits the trip\'s', () => {
-    const convert = src('app/api/b2b/quotes/[id]/convert/route.ts')
+    const convert = (src('app/api/b2b/quotes/[id]/convert/route.ts') + src('lib/b2b/convert-template-quote.ts'))
     expect(convert.match(/tripVatFromQuote\(quote\)/g)?.length).toBe(2)
     expect(src('app/api/bookings/from-quote/route.ts')).toContain("update({ status: 'confirmed', ...tripVatFromQuote(quoteVat) })")
     // The invoice side is exercised in __tests__/api/vat-documents.test.ts.

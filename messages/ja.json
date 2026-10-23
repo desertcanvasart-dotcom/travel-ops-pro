@@ -9012,7 +9012,7 @@
   },
   "orderIntake": {
     "title": "申込み取り込み",
-    "subtitle": "ウェブサイトの申込みフォームのメールを貼り付けてください。指定されたプログラムをその人数・出発日で見積り、確認用の見積り下書きを1件作成します。",
+    "subtitle": "ウェブサイトからの注文はメールで届き、自動で取り込まれます。ウェブサイト料金の申込みはそのまま旅程になります。自動処理できなかった注文はここで対応してください。",
     "placeholder": "申込みメールの全文をここに貼り付け…",
     "read": "申込みを読み取る",
     "notAnOrder": "申込みフォームとして読み取れませんでした。",
@@ -9063,7 +9063,7 @@
     "dismiss": "対応済みにする",
     "dismissConfirm": "この注文を一覧から外しますか？何も作成・削除されません。",
     "webOrders": "ウェブ注文",
-    "webOrdersHint": "ウェブサイトからの注文メールは、メール同期（10分ごと）のたびに自動で取り込まれます。",
+    "webOrdersHint": "メール同期（10分ごと）のたびに取り込まれます。フォームからのお問合せは、メールとして受信箱に残ります。",
     "webOrdersEmpty": "ウェブ注文はまだありません。",
     "outcome_quote_created": "見積り作成済み",
     "outcome_needs_attention": "要対応",
@@ -9075,7 +9075,14 @@
     "result": "結果",
     "websiteBaseFare": "サイトの基本旅行代金（第1希望日）",
     "websiteBaseFareAdults": "大人 {fare}円 × {count}名",
-    "websiteBaseFareChildren": "子供 {fare}円 × {count}名"
+    "websiteBaseFareChildren": "子供 {fare}円 × {count}名",
+    "pasteOrder": "注文メールを貼り付ける",
+    "createdItinerary": "ウェブ注文から旅程 {code} を作成しました。見積 {quote} は記録として残ります。",
+    "openItinerary": "旅程を開く",
+    "outcome_itinerary": "旅程作成済み",
+    "quoteDeleted": "見積が削除されています",
+    "websitePrice": "ウェブサイト料金",
+    "estimatedCost": "見込み原価"
   },
   "travelLeg": {
     "mode": {
