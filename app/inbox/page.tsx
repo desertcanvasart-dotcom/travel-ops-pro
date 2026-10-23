@@ -27,6 +27,7 @@ import { useEmailPolling, useEmailCache } from '@/lib/use-email-polling'
 import { addCachedEmails, removeCachedEmails, type CachedEmail } from '@/lib/email-cache'
 import { sanitizeHtml } from '@/lib/sanitize-html'
 import { replacePlaceholders, buildPlaceholderData, getPlaceholders } from '@/lib/template-placeholders'
+import { TRASH_PURGE_MESSAGE } from '@/lib/email/trash-purge'
 import { 
   Mail, 
   Inbox, 
@@ -954,10 +955,6 @@ ${bodyText}`
     // first — it reaches emails nobody has on screen.
     const allMatching = selectAllMatching && !selectedEmail
     if (allMatching) {
-      if (action === 'permanentDelete') {
-        setError('Delete forever works on chosen emails only — select them on the page.')
-        return
-      }
       const verb: Record<string, string> = {
         delete: 'Move to Trash', archive: 'Archive', move: 'Move', markRead: 'Mark as read', markUnread: 'Mark as unread',
         spam: 'Report as spam', notSpam: 'Mark as not spam', restore: 'Restore', star: 'Star', unstar: 'Unstar',
@@ -989,7 +986,7 @@ ${bodyText}`
       }
 
       // Out of this folder now: off the list at once, not on the next fetch.
-      const leavesFolder = ['delete', 'archive', 'move', 'restore', 'notSpam', 'permanentDelete', 'spam'].includes(action)
+      const leavesFolder = ['delete', 'archive', 'move', 'restore', 'notSpam', 'spam'].includes(action)
       if (leavesFolder) {
         setEmails(prev => prev.filter(e => !ids.includes(e.id)))
       }
@@ -1020,12 +1017,13 @@ ${bodyText}`
     }
   }
   
-  // In Trash, Delete is for good (Gmail's own permanent delete, after asking)
-  // and the archive button restores; in Spam, it is "Not spam".
+  // In Trash, Delete says how emails leave it — Gmail empties Trash itself after
+  // 30 days; the app's Gmail access cannot delete for good — and the archive
+  // button restores; in Spam, it is "Not spam".
   const handleDelete = () => {
     if (folder === 'trash') {
-      if (!window.confirm('Delete forever? This cannot be undone.')) return
-      return handleEmailAction('permanentDelete')
+      setSendNotice({ text: TRASH_PURGE_MESSAGE })
+      return
     }
     return handleEmailAction('delete')
   }
@@ -1036,7 +1034,7 @@ ${bodyText}`
       : handleEmailAction(folder === 'trash' ? 'restore' : folder === 'spam' ? 'notSpam' : 'archive')
   const archiveLabel = currentLabelId ? 'Move to Inbox' : folder === 'trash' ? 'Restore' : folder === 'spam' ? 'Not spam' : 'Archive'
   const ArchiveIcon = currentLabelId ? Inbox : folder === 'trash' ? RotateCcw : folder === 'spam' ? ShieldCheck : Archive
-  const deleteLabel = folder === 'trash' ? 'Delete forever' : 'Delete'
+  const deleteLabel = folder === 'trash' ? 'Deleted automatically after 30 days' : 'Delete'
   // Print the open email — the whole conversation when it has one.
   const handlePrint = () => {
     if (!selectedEmail) return
