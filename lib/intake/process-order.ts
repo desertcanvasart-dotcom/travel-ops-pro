@@ -207,6 +207,9 @@ export async function processTourUpOrder(
         variation_code: `${template.template_code}-STANDARD`.toUpperCase().slice(0, 60),
         variation_name: `${template.template_name} - Standard`,
         tier: 'standard', group_type: 'private', min_pax: 1, max_pax: 15, is_active: true,
+        // text[] NOT NULL with no default: left out, every order for a
+        // programme with no standard variation yet failed here.
+        inclusions: [], exclusions: [],
       }).select('id').single()
       if (error || !made) {
         return { status: 500, body: { ...preview, success: false, error: clientMessage(error, 'Could not create the programme variation') } }
