@@ -35,6 +35,8 @@ import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { itineraryCompleteness } from '@/lib/pricing/itinerary-completeness'
 import { describeGaps } from '@/lib/pricing/quote-completeness'
+import { isWebsitePriced } from '@/lib/pricing/website-price'
+import WebsitePriceNote from '@/app/components/WebsitePriceNote'
 import { LanguageStatusRow, DayLanguageChip, BilingualDayEditor, HighlightPlaceholders, type ContentView } from '@/components/multilingual'
 import CoverageGrid from '@/components/itineraries/CoverageGrid'
 import type { Language, ItineraryVersion } from '@/types/multilingual'
@@ -88,6 +90,8 @@ interface TaskPreview {
 interface Itinerary {
   id: string
   itinerary_code: string
+  /** 'web_form' (in yen): sold at the website's price (lib/pricing/website-price). */
+  source?: string | null
   client_id?: string
   client_name: string
   client_email: string
@@ -204,7 +208,9 @@ export default function ViewItineraryPage() {
   // ask first here (lib/pricing/itinerary-completeness).
   const confirmIncompleteSend = async (days: Array<{ day_number: number; services: Array<{ service_name: string; rate_eur: number; total_cost: number; notes: string }> }>): Promise<'complete' | 'go' | 'stop'> => {
     const { complete, gaps } = itineraryCompleteness(days)
-    if (complete) return 'complete'
+    // A website order is sent at the website's price: a missing cost is the
+    // office's to fill, not a reason to ask (lib/pricing/website-price).
+    if (complete || isWebsitePriced(itinerary)) return 'complete'
     const ok = await dialog.confirm({
       title: t('incompleteTitle'),
       message: t('sendIncompleteConfirm', { count: gaps.length, services: describeGaps(gaps) }),
@@ -234,7 +240,7 @@ export default function ViewItineraryPage() {
   const supabase = createClient()
   const intlLocale = useLocale() as Language
   // Generating commissions is a manager's action (the route refuses agents).
-  const { canAccess } = useRole()
+  const { canAccess, canViewFinancials } = useRole()
   const canGenerateCommissions = canAccess(['admin', 'manager'])
   // The money screens are a manager's (the finance routes answer an agent 403):
   // Add expense, the expenses panel, the actual P&L and the P&L card are theirs too.
@@ -1916,6 +1922,13 @@ export default function ViewItineraryPage() {
       {/* Success Messages */}
       {(() => {
         const { complete, gaps } = itineraryCompleteness(days)
+        if (isWebsitePriced(itinerary)) {
+          return (
+            <div className="container mx-auto px-4 pt-3">
+              <WebsitePriceNote gaps={gaps} canViewFinancials={canViewFinancials} dayLabel={(day, name) => t('gapOnDay', { day, name })} />
+            </div>
+          )
+        }
         if (complete) return null
         return (
           <div className="container mx-auto px-4 pt-3">

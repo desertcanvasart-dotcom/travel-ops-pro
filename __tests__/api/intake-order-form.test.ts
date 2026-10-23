@@ -13,6 +13,9 @@ vi.mock('@/lib/auth/current-org', () => ({
   noOrgResponse: () => new Response(JSON.stringify({ error: 'no org' }), { status: 403 }),
 }))
 vi.mock('@/lib/org-rate-currency', () => ({ getOrgRateCurrency: async () => 'USD' }))
+// Pinned rates: no network in tests (EUR base → USD→JPY = 150).
+const fxRates = { base: 'EUR', date: '2026-10-23', rates: { EUR: 1, USD: 1.1, JPY: 165 } as Record<string, number> }
+vi.mock('@/lib/rates/fx-source', () => ({ fetchRunExchangeRates: async () => fxRates }))
 vi.mock('@/lib/org-default-margin', () => ({
   getOrgDefaultMargin: async () => 30,
   resolveMarginPercent: ({ orgDefault }: { orgDefault: number | null }) => orgDefault ?? 25,

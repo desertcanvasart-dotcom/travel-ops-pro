@@ -15,6 +15,7 @@
 
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { quoteCompleteness, type QuoteCompleteness } from './quote-completeness'
+import { withoutCostGaps } from './website-price'
 
 export interface ItineraryServiceRow {
   service_name?: string | null
@@ -71,7 +72,7 @@ export async function loadItineraryServiceLines(
   if (!itineraryId || !orgId) return { ok: false, status: 404, error: 'Itinerary not found' }
   const { data: owned, error: ownedError } = await supabase
     .from('itineraries')
-    .select('id')
+    .select('id, source, currency')
     .eq('id', itineraryId)
     .eq('org_id', orgId)
     .maybeSingle()
@@ -82,5 +83,7 @@ export async function loadItineraryServiceLines(
     .select('day_number, services:itinerary_services(service_name, rate_eur, total_cost, notes)')
     .eq('itinerary_id', itineraryId)
   if (error) return { ok: false, status: 503, error: "Could not check this itinerary's services. Try again." }
-  return { ok: true, lines: itineraryServiceLines((days ?? []) as ItineraryDayRow[]) }
+  // A website order's trip is sold at the website's price: a cost with no
+  // rate is the office's to fill, not a gap in what the client is sent.
+  return { ok: true, lines: withoutCostGaps(owned, itineraryServiceLines((days ?? []) as ItineraryDayRow[])) }
 }

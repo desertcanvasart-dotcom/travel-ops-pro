@@ -8617,5 +8617,15 @@
       "linkPrompt": "Link address (leave empty to remove the link)",
       "uploadFailed": "Could not upload the image"
     }
+  },
+  "websitePrice": {
+    "title": "Price from the website",
+    "body": "This order came from the website form. Its price is final; the services below are what the trip includes.",
+    "costEstimate": "Cost estimate",
+    "costGaps": "{count, plural, one {# service has} other {# services have}} no cost rate yet, so the cost and profit estimate leaves {count, plural, one {it} other {them}} out. The customer's price is not affected.",
+    "noCostRate": "No cost rate",
+    "estimatedCost": "Estimated cost",
+    "estimatedProfit": "Estimated profit",
+    "websitePrice": "Website price"
   }
 }

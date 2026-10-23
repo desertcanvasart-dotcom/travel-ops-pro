@@ -102,7 +102,7 @@ describe('every path a quote leaves by checks its lines', () => {
   }
 
   it('the booking route selects the saved lines it checks', () => {
-    expect(src('app/api/bookings/from-quote/route.ts')).toMatch(/quote_number, services_snapshot'/)
+    expect(src('app/api/bookings/from-quote/route.ts')).toMatch(/quote_number, services_snapshot, source'/)
   })
 
   it('the booking card never passes the click event as the override', () => {

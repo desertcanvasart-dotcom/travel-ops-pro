@@ -26,6 +26,7 @@ import { getCurrentOrgId } from '@/lib/auth/current-org'
 import { clientMessage } from '@/lib/api-errors'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { allowsIncomplete } from '@/lib/pricing/quote-completeness'
+import { isWebsitePriced } from '@/lib/pricing/website-price'
 import {
   buildBookingRow,
   populateSuppliersFromItinerary,
@@ -124,7 +125,7 @@ export async function POST(request: NextRequest) {
         ? supabaseAdmin
             .from(table)
             .select(
-              'id, status, itinerary_id, converted_to_itinerary_id, selling_price, currency, quote_number, services_snapshot'
+              'id, status, itinerary_id, converted_to_itinerary_id, selling_price, currency, quote_number, services_snapshot, source'
             )
             .eq('id', quote_id)
         : supabaseAdmin
@@ -176,7 +177,8 @@ export async function POST(request: NextRequest) {
     const priceCheck = checkAmountDeliverable(quote.selling_price, {
       currency: quote.currency,
       ...(quoteType === 'b2b' ? { servicesSnapshot: quote.services_snapshot ?? [] } : {}),
-      allowIncomplete: allowsIncomplete(body?.allow_incomplete),
+      // A website order's price is final (lib/pricing/website-price).
+      allowIncomplete: allowsIncomplete(body?.allow_incomplete) || isWebsitePriced(quote as { source?: string | null; currency?: string | null }),
     })
     if (!priceCheck.ok) {
       return NextResponse.json(

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { setMockTables, createMockClient } from '../_mock-supabase'
-import { OPTIONAL_TOUR_MAIL, PACKAGE_TOUR_MAIL } from '../fixtures/tup-mails'
+import { OPTIONAL_TOUR_MAIL, PACKAGE_TOUR_MAIL, REAL_TOUR_MAIL } from '../fixtures/tup-mails'
 
 // Operator, 2026-10-02: the website's order emails must reach "the correct
 // program", the customer linked, and start the existing pipeline — with the
@@ -10,6 +10,9 @@ import { OPTIONAL_TOUR_MAIL, PACKAGE_TOUR_MAIL } from '../fixtures/tup-mails'
 // decisions.
 
 vi.mock('@/lib/org-rate-currency', () => ({ getOrgRateCurrency: async () => 'USD' }))
+// Pinned rates: no network in tests (EUR base → USD→JPY = 150).
+const fxRates = { base: 'EUR', date: '2026-10-23', rates: { EUR: 1, USD: 1.1, JPY: 165 } as Record<string, number> }
+vi.mock('@/lib/rates/fx-source', () => ({ fetchRunExchangeRates: async () => fxRates }))
 vi.mock('@/lib/org-default-margin', () => ({
   getOrgDefaultMargin: async () => 30,
   resolveMarginPercent: ({ orgDefault }: { orgDefault: number | null }) => orgDefault ?? 25,
@@ -110,6 +113,39 @@ describe('website order emails become quotes after the sync', () => {
     expect(holds[0]).toMatchObject({ org_id: 'org-1', departure_id: 'dep-1016', pax: 3, status: 'pending', client_name: '佐藤 一郎' })
     expect(holds[0].notes).toContain((await rows('tour_quotes'))[0].quote_number ?? '')
     expect((await rows('web_order_intakes'))[0].departure_booking_id).toBe(holds[0].id)
+  })
+
+  // Operator, 2026-10-23: a website order is not quoted by the office — the
+  // website's fare is final, in yen; the engine's run is the cost estimate.
+  it('the website fare is the quote price, in yen; the engine cost is kept as the estimate', async () => {
+    inbox([{ id: 'm1', body: OPTIONAL_TOUR_MAIL }])
+    await processNewWebOrders(db())
+    const [q] = await rows('tour_quotes')
+    // 小計 175,000円; cost 98 USD × 150 = 14,700円.
+    expect(q).toMatchObject({ currency: 'JPY', selling_price: 175000, total_cost: 14700, margin_amount: 160300, margin_percent: 999.99, price_per_person: 87500 })
+    expect(q.services_snapshot[0]).toMatchObject({ unit_cost: 14700, line_total: 14700, cost_currency: 'USD', cost_unit_original: 98, cost_total_original: 98, cost_exchange_rate: 150 })
+  })
+
+  it('a package tour with no 小計: the 1st-date base fare × the party', async () => {
+    inbox([{ id: 'm1', body: REAL_TOUR_MAIL }], {
+      tour_templates: [{ id: 'tpl-502', template_code: 'NEK502', template_name: 'Egypt 8 days', duration_days: 8, is_active: true, tour_type: 'tour', website_url: null }],
+    })
+    await processNewWebOrders(db())
+    const [q] = await rows('tour_quotes')
+    // 大人 348,000円 × 3.
+    expect(q).toMatchObject({ currency: 'JPY', selling_price: 1044000, price_per_person: 348000 })
+  })
+
+  it('no rate to yen: the quote is priced the old way, in the rate currency', async () => {
+    const saved = fxRates.rates.JPY
+    delete fxRates.rates.JPY
+    try {
+      inbox([{ id: 'm1', body: OPTIONAL_TOUR_MAIL }])
+      await processNewWebOrders(db())
+      expect((await rows('tour_quotes'))[0]).toMatchObject({ currency: 'USD', selling_price: 127.4, total_cost: 98 })
+    } finally {
+      fxRates.rates.JPY = saved
+    }
   })
 
   it('an existing client is linked, not duplicated', async () => {

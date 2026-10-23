@@ -123,12 +123,12 @@ describe('every path an itinerary reaches a client by checks its services', () =
 
 describe('loadItineraryServiceLines fails closed', () => {
   // A minimal stand-in for the two queries it makes.
-  const client = (opts: { ownedError?: boolean; owned?: boolean; daysError?: boolean; days?: unknown[] }) => ({
+  const client = (opts: { ownedError?: boolean; owned?: boolean; daysError?: boolean; days?: unknown[]; trip?: Record<string, unknown> }) => ({
     from(table: string) {
       const chain: Record<string, unknown> = {}
       chain.select = () => chain
       chain.eq = () => chain
-      chain.maybeSingle = async () => ({ data: opts.owned === false ? null : { id: 'it-1' }, error: opts.ownedError ? { message: 'boom' } : null })
+      chain.maybeSingle = async () => ({ data: opts.owned === false ? null : { id: 'it-1', ...opts.trip }, error: opts.ownedError ? { message: 'boom' } : null })
       if (table === 'itinerary_days') {
         chain.eq = async () => ({ data: opts.days ?? [], error: opts.daysError ? { message: 'boom' } : null })
       }
@@ -153,5 +153,17 @@ describe('loadItineraryServiceLines fails closed', () => {
     const r = await loadItineraryServiceLines(client({ days: [{ day_number: 6, services: [noCost] }] }), 'it-1', 'org-1')
     expect(r.ok).toBe(true)
     expect(r.ok && r.lines[0].unpriced).toBe(true)
+  })
+
+  // Operator, 2026-10-23: a website order is sent at the website's price; a
+  // cost with no rate is the office's to fill, never a hold-up on sending.
+  it("a website order's trip (web_form, in yen) has no cost gaps to hold up sending", async () => {
+    const { loadItineraryServiceLines } = await import('@/lib/pricing/itinerary-completeness')
+    const days = [{ day_number: 6, services: [noCost] }]
+    const web = await loadItineraryServiceLines(client({ days, trip: { source: 'web_form', currency: 'JPY' } }), 'it-1', 'org-1')
+    expect(web.ok && web.lines).toEqual([])
+    // A web-form trip still in the rate currency was priced the old way.
+    const old = await loadItineraryServiceLines(client({ days, trip: { source: 'web_form', currency: 'USD' } }), 'it-1', 'org-1')
+    expect(old.ok && old.lines[0].unpriced).toBe(true)
   })
 })
