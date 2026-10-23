@@ -71,7 +71,9 @@ describe('website order emails become quotes after the sync', () => {
     expect(quotes[0].notes).toContain('ウェブページ: https://tour.ats-hj.com/opt_detail.php?id=67')
     expect(quotes[0].notes).toContain('ウェブ表示の小計: ¥175,000')
     expect(quotes[0].notes).toContain('同行者1: YAMADA TARO')
-    expect((await rows('tour_variations'))[0]).toMatchObject({ template_id: 'tpl-luxor' })
+    // inclusions / exclusions are NOT NULL with no default (prod, 2026-10-23:
+    // "Could not create the programme variation" on NEK803-ABCR).
+    expect((await rows('tour_variations'))[0]).toMatchObject({ template_id: 'tpl-luxor', inclusions: [], exclusions: [] })
 
     const clients = await rows('clients')
     expect(clients).toHaveLength(1)
