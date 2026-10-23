@@ -15,10 +15,14 @@
 //     → claimed in web_order_intakes (unique per message: never twice)
 //     → the same customer, code and date already made a quote: 'duplicate',
 //       linked to that quote
+//   a question asked through the form (問合せ内容 not 申込み)
+//     → checked, nothing else: it is answered as an email (operator, 2026-10-23)
 //     → else the shared pipeline (lib/intake/process-order.ts): programme by
 //       website page then code, client by email (found or created), ONE
-//       priced draft quote, a pending seat hold on the date's departure
-//         - done: 'quote_created', managers notified with the quote
+//       priced quote, a pending seat hold on the date's departure, and — at
+//       the website's price — the itinerary converted from it
+//         - done: 'quote_created', managers notified with the itinerary
+//           (the quote when there is none)
 //         - not (unknown programme, a rate hole, an unreadable form):
 //           'needs_attention' with the reason, managers notified with a link
 //           that opens the order on /intake/order to finish by hand
@@ -29,7 +33,7 @@
 // per conversation: the notifications share a subject, so Gmail threads
 // different customers' orders together.
 import type { SupabaseClient } from '@supabase/supabase-js'
-import { looksLikeTourUpOrder, parseTourUpOrder, type TourUpOrder } from '@/lib/intake/tour-up-order'
+import { looksLikeTourUpOrder, parseTourUpOrder, isApplicationOrder, type TourUpOrder } from '@/lib/intake/tour-up-order'
 import { emailOrderText } from '@/lib/intake/tup-mail'
 import { processTourUpOrder } from '@/lib/intake/process-order'
 import { notifyOrgManagers } from '@/lib/notify-managers'
@@ -37,13 +41,14 @@ import { notifyOrgManagers } from '@/lib/notify-managers'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from(table: string): any }
 
-export type WebOrderOutcome = 'quote_created' | 'needs_attention' | 'duplicate' | 'not_an_order' | 'already_taken' | 'error'
+export type WebOrderOutcome = 'quote_created' | 'needs_attention' | 'duplicate' | 'not_an_order' | 'question' | 'already_taken' | 'error'
 
 export interface WebOrderResult {
   messageId: string
   outcome: WebOrderOutcome
   intakeId?: string
   quoteId?: string
+  itineraryId?: string
   reason?: string
 }
 
@@ -99,6 +104,16 @@ export async function processNewWebOrders(
         continue
       }
 
+      const order = parseTourUpOrder(text)
+
+      // A question through the form is mail to answer, like any other: no
+      // order, no quote, and the lead detector still reads it.
+      if (order && !isApplicationOrder(order)) {
+        await checked()
+        results.push({ messageId: msg.id, outcome: 'question' })
+        continue
+      }
+
       // Not a lead for the AI: the order makes the client.
       if (msg.conversation_id) {
         await db.from('email_conversations')
@@ -107,8 +122,6 @@ export async function processNewWebOrders(
           .eq('org_id', orgId)
           .is('lead_checked_at', null)
       }
-
-      const order = parseTourUpOrder(text)
 
       // Claim the message first: a crash after the quote must not make a
       // second one next run — the unique email_message_id refuses it.
@@ -187,6 +200,7 @@ export async function processNewWebOrders(
       const quote = result?.body.quote
       if (result?.body.success && quote) {
         const client = result.body.client as { id: string } | null | undefined
+        const itinerary = result.body.itinerary as { id: string; code: string } | null | undefined
         await settle({
           outcome: 'quote_created',
           reason: null,
@@ -197,13 +211,13 @@ export async function processNewWebOrders(
         })
         await notifyOrgManagers(db as never, orgId, {
           type: 'order_received',
-          title: `ウェブ注文 ${quote.quote_number}: ${order.tourCode}`,
+          title: itinerary ? `ウェブ注文 ${itinerary.code}: ${order.tourCode}` : `ウェブ注文 ${quote.quote_number}: ${order.tourCode}`,
           // A party larger than the seats left got no seat hold: say so.
           message: `ウェブサイトの注文メールより自動作成。${result.body.departureFull ? `座席は未確保（出発の空き ${result.body.departureFull.free} 席に対し ${result.body.departureFull.requested} 名）。` : ''}${summary}`,
-          link: `/b2b/quotes/${quote.id}`,
+          link: itinerary ? `/itineraries/${itinerary.id}` : `/b2b/quotes/${quote.id}`,
         })
         await checked()
-        results.push({ messageId: msg.id, outcome: 'quote_created', intakeId, quoteId: quote.id })
+        results.push({ messageId: msg.id, outcome: 'quote_created', intakeId, quoteId: quote.id, itineraryId: itinerary?.id })
         continue
       }
 

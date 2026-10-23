@@ -33,7 +33,7 @@ import ItineraryExpenses from '@/app/components/ItineraryExpenses'
 import { createClient } from '@/lib/supabase'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
-import { itineraryCompleteness } from '@/lib/pricing/itinerary-completeness'
+import { itineraryCompleteness, costGapReason } from '@/lib/pricing/itinerary-completeness'
 import { describeGaps } from '@/lib/pricing/quote-completeness'
 import { isWebsitePriced } from '@/lib/pricing/website-price'
 import WebsitePriceNote from '@/app/components/WebsitePriceNote'
@@ -1925,7 +1925,7 @@ export default function ViewItineraryPage() {
         if (isWebsitePriced(itinerary)) {
           return (
             <div className="container mx-auto px-4 pt-3">
-              <WebsitePriceNote gaps={gaps} canViewFinancials={canViewFinancials} dayLabel={(day, name) => t('gapOnDay', { day, name })} />
+              <WebsitePriceNote gaps={gaps.map(g => ({ ...g, issue: costGapReason(g.issue) }))} canViewFinancials={canViewFinancials} dayLabel={(day, name) => t('gapOnDay', { day, name })} />
             </div>
           )
         }

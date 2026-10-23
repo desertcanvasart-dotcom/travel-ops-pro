@@ -98,7 +98,7 @@ describe('client quote PDF terms', () => {
 
 describe('quote convert', () => {
   it('never dates a trip today', () => {
-    const route = src('app/api/b2b/quotes/[id]/convert/route.ts')
+    const route = (src('app/api/b2b/quotes/[id]/convert/route.ts') + src('lib/b2b/convert-template-quote.ts'))
     expect(route).not.toContain('quote.travel_date ? new Date(quote.travel_date) : new Date()')
   })
 })
@@ -131,7 +131,7 @@ describe('round 8', () => {
     expect(page).not.toContain('filteredSuppliers as unknown as Record<string, unknown>[]')
   })
   it('convert never re-issues a taken itinerary code', () => {
-    const route = src('app/api/b2b/quotes/[id]/convert/route.ts')
+    const route = (src('app/api/b2b/quotes/[id]/convert/route.ts') + src('lib/b2b/convert-template-quote.ts'))
     expect(route).not.toContain("select('*', { count: 'exact', head: true })")
     expect(route).toContain("itinError?.code !== '23505'")
   })

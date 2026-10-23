@@ -8427,7 +8427,7 @@
   },
   "orderIntake": {
     "title": "Order intake",
-    "subtitle": "Paste the order email from the website form. The programme it names is priced for that party and date, and one draft quote is created for you to review.",
+    "subtitle": "Website orders arrive by email and are taken in by themselves. An application at the website's price becomes its itinerary straight away; orders the app could not finish wait here for you.",
     "placeholder": "Paste the whole order email here…",
     "read": "Read the order",
     "notAnOrder": "This text does not read as the order form.",
@@ -8478,7 +8478,7 @@
     "dismiss": "Dismiss",
     "dismissConfirm": "Remove this order from the list? Nothing is created or deleted.",
     "webOrders": "Website orders",
-    "webOrdersHint": "Order emails from the website are taken in automatically after each mailbox sync (every 10 minutes).",
+    "webOrdersHint": "Taken in after each mailbox sync (every 10 minutes). A question sent through the form stays in the inbox as an email to answer.",
     "webOrdersEmpty": "No website orders yet.",
     "outcome_quote_created": "Quote created",
     "outcome_needs_attention": "Needs attention",
@@ -8490,7 +8490,14 @@
     "result": "Result",
     "websiteBaseFare": "Website base fare (1st date)",
     "websiteBaseFareAdults": "JPY {fare} × {count} adults",
-    "websiteBaseFareChildren": "JPY {fare} × {count} children"
+    "websiteBaseFareChildren": "JPY {fare} × {count} children",
+    "pasteOrder": "Paste an order email",
+    "createdItinerary": "Itinerary {code} created from the website order. Quote {quote} is kept behind it as its record.",
+    "openItinerary": "Open the itinerary",
+    "outcome_itinerary": "Itinerary created",
+    "quoteDeleted": "Its quote was deleted",
+    "websitePrice": "Website price",
+    "estimatedCost": "Estimated cost"
   },
   "travelLeg": {
     "mode": {

@@ -20,20 +20,24 @@
 //
 // When the order carries the website's fare, the quote is held in yen at that
 // fare — final, the office does not quote it — and the engine's run becomes
-// its cost estimate (lib/pricing/website-price).
+// its cost estimate (lib/pricing/website-price). And when the customer
+// applied (申込み), that quote is converted to the itinerary at once: the
+// office starts from the trip, the quote stays behind it as the record.
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isBookableLine } from '@/lib/pricing/breakdown-order'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { getOrgDefaultMargin, resolveMarginPercent } from '@/lib/org-default-margin'
 import { calculateAutoPricing, calculatePricingWithPassengerBreakdown } from '@/lib/auto-pricing-service'
 import { roomingAdjustment } from '@/lib/pricing/rooming'
-import { matchProgramme, type TourUpOrder } from '@/lib/intake/tour-up-order'
+import { matchProgramme, isApplicationOrder, type TourUpOrder } from '@/lib/intake/tour-up-order'
 import { clientMessage } from '@/lib/api-errors'
 import { createInitialQuoteRevision } from '@/lib/quotes/initial-revision'
 import { isBookableStatus, seatsFree } from '@/lib/departures/seats'
 import { getExchangeRate } from '@/lib/currency-service'
 import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
-import { WEBSITE_PRICE_CURRENCY, websiteOrderPriceJpy, linesInWebsiteCurrency, websitePricedTotals } from '@/lib/pricing/website-price'
+import { WEBSITE_PRICE_CURRENCY, WEBSITE_ORDER_SOURCE, isWebsitePriced, websiteOrderPriceJpy, linesInWebsiteCurrency, websitePricedTotals } from '@/lib/pricing/website-price'
+import { convertTemplateQuote, QUOTE_FOR_CONVERT_SELECT } from '@/lib/b2b/convert-template-quote'
+import { paymentRuleFrom } from '@/lib/payment-schedule'
 
 // The seat rule lives in lib/departures/seats.ts; re-exported for the callers
 // and tests that have always imported it from here.
@@ -337,7 +341,14 @@ export async function processTourUpOrder(
     else departureFull = { free: Number(result.free) || 0, requested: numPax }
   }
 
-  return { status: 200, body: { ...preview, client: { id: clientId, name: clientName }, clientCreated, quote: quote as { id: string; quote_number: string }, departureBooking, departureFull } }
+  // 5. An application at the website's price is a trip now — no quote step
+  // for the office. Never fails the order: the quote stands, and its Convert
+  // button still works if this did not.
+  const itinerary = isWebsitePriced({ source: WEBSITE_ORDER_SOURCE, currency: money.currency }) && isApplicationOrder(order)
+    ? await convertToItinerary(supabase, { quoteId: quote.id, orgId, userId, startIso: order.departureDate1 })
+    : null
+
+  return { status: 200, body: { ...preview, client: { id: clientId, name: clientName }, clientCreated, quote: quote as { id: string; quote_number: string }, departureBooking, departureFull, itinerary } }
 }
 
 /** Seats left on the departure (lib/departures/seats: booked_pax, which the
@@ -381,6 +392,34 @@ async function rateToYen(from: string): Promise<number | null> {
     const rate = getExchangeRate(from, WEBSITE_PRICE_CURRENCY, await fetchRunExchangeRates())
     return rate && rate > 0 ? rate : null
   } catch {
+    return null
+  }
+}
+
+/** The website-priced quote, converted as the quote page's Convert button
+ *  does it (lib/b2b/convert-template-quote), with the org's payment rule. */
+async function convertToItinerary(
+  supabase: SupabaseClient, opts: { quoteId: string; orgId: string; userId: string | null; startIso: string },
+): Promise<{ id: string; code: string } | null> {
+  try {
+    const { data: quote, error } = await supabase.from('tour_quotes').select(QUOTE_FOR_CONVERT_SELECT).eq('id', opts.quoteId).eq('org_id', opts.orgId).single()
+    if (error || !quote) {
+      console.error('[intake] quote for conversion not read:', error)
+      return null
+    }
+    const { data: terms } = await supabase.from('organizations')
+      .select('deposit_percent, deposit_due_days, balance_due_days_before_departure').eq('id', opts.orgId).maybeSingle()
+    const made = await convertTemplateQuote(supabase, {
+      quote, orgId: opts.orgId, userId: opts.userId, startIso: opts.startIso,
+      depositPercent: paymentRuleFrom(terms).deposit_percent,
+    })
+    if (!made.ok) {
+      console.error('[intake] conversion failed:', made.error)
+      return null
+    }
+    return { id: made.itineraryId, code: made.itineraryCode }
+  } catch (e) {
+    console.error('[intake] conversion threw:', e)
     return null
   }
 }

@@ -60,7 +60,7 @@ describe('B2B routes are scoped to the organisation', () => {
     expect(pickB2bQuoteUpdates({ itinerary_id: 'x', partner_id: 'y', variation_id: 'z' }, { lock: null })).toEqual({ ok: true, updates: {} })
   })
   it('convert path A reads and updates only our trip', () => {
-    const c = src('app/api/b2b/quotes/[id]/convert/route.ts')
+    const c = (src('app/api/b2b/quotes/[id]/convert/route.ts') + src('lib/b2b/convert-template-quote.ts'))
     expect(c).toMatch(/\.select\('id, currency, fx_frozen'\)\s*\.eq\('id', quote\.itinerary_id\)\s*\.eq\('org_id', orgId\)/)
     expect(c).toMatch(/\.eq\('id', quote\.itinerary_id\)\s*\.eq\('org_id', orgId\)\s*\.select\('itinerary_code'\)/)
   })
@@ -89,7 +89,7 @@ describe('round 10', () => {
     expect(check).toBeLessThan(q.indexOf("partner_id: partner_id || null"))
   })
   it("convert uses the run rates (org table over ECB), not the ECB feed alone", () => {
-    const c = src('app/api/b2b/quotes/[id]/convert/route.ts')
+    const c = (src('app/api/b2b/quotes/[id]/convert/route.ts') + src('lib/b2b/convert-template-quote.ts'))
     expect(c).toContain('await fetchRunExchangeRates()')
     expect(c).not.toContain('fetchExchangeRates(quoteCurrency)')
   })

@@ -339,3 +339,12 @@ export function matchProgramme<T extends { template_code: string; website_url?: 
   const byCode = matchTemplateCode(order.tourCode, templates)
   return { template: byCode, matchedBy: byCode ? 'code' : null }
 }
+
+/** Did the customer apply (申込み), or only ask (お問合せ …)? A form that
+ *  names no type is an application — the paste page's documents and the
+ *  hosted /order form say 申込み. Only an application becomes a trip by
+ *  itself; a question is answered as an email (operator, 2026-10-23). */
+export function isApplicationOrder(order: Pick<TourUpOrder, 'inquiryType'>): boolean {
+  const kind = (order.inquiryType ?? '').trim()
+  return kind === '' || /申込|申し込/.test(kind)
+}

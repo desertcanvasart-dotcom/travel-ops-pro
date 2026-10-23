@@ -53,6 +53,7 @@ function inbox(messages: Array<{ id: string; body: string; conv?: string; html?:
       { id: 'tpl-803', template_code: 'NEK803-CR-ABS', template_name: 'Nile cruise 8 days', duration_days: 8, is_active: true, tour_type: 'cruise', website_url: null },
     ],
     tour_variations: [], clients: [], tour_quotes: [], tour_departures: [], departure_bookings: [], web_order_intakes: [],
+    itineraries: [], itinerary_days: [], itinerary_services: [],
     ...extra,
   })
 }
@@ -91,8 +92,14 @@ describe('website order emails become quotes after the sync', () => {
     expect(intake.order_text).toContain('●オプショナルコード')
     expect(intake.resolved_at).toBeTruthy()
 
+    // An application at the website's price is a trip at once (operator,
+    // 2026-10-23): the itinerary, and the quote kept behind it, converted.
+    const trips = await rows('itineraries')
+    expect(trips).toHaveLength(1)
+    expect(trips[0]).toMatchObject({ org_id: 'org-1', source: 'web_form', currency: 'JPY', total_cost: 175000, status: 'quoted', start_date: '2027-02-24' })
+    expect((await rows('tour_quotes'))[0]).toMatchObject({ status: 'converted', converted_to_itinerary_id: trips[0].id })
     expect(notices).toHaveLength(1)
-    expect(notices[0].link).toBe(`/b2b/quotes/${quotes[0].id}`)
+    expect(notices[0].link).toBe(`/itineraries/${trips[0].id}`)
 
     // Looked at once; the conversation is not a lead for the AI.
     expect((await rows('email_messages'))[0].order_checked_at).toBeTruthy()
@@ -136,16 +143,33 @@ describe('website order emails become quotes after the sync', () => {
     expect(q).toMatchObject({ currency: 'JPY', selling_price: 1044000, price_per_person: 348000 })
   })
 
-  it('no rate to yen: the quote is priced the old way, in the rate currency', async () => {
+  it('no rate to yen: the quote is priced the old way, in the rate currency, and stays a quote', async () => {
     const saved = fxRates.rates.JPY
     delete fxRates.rates.JPY
     try {
       inbox([{ id: 'm1', body: OPTIONAL_TOUR_MAIL }])
       await processNewWebOrders(db())
-      expect((await rows('tour_quotes'))[0]).toMatchObject({ currency: 'USD', selling_price: 127.4, total_cost: 98 })
+      expect((await rows('tour_quotes'))[0]).toMatchObject({ currency: 'USD', selling_price: 127.4, total_cost: 98, status: 'draft' })
+      // The office prices it, so there is no trip until it converts it.
+      expect(await rows('itineraries')).toEqual([])
+      expect(notices[0].link).toBe(`/b2b/quotes/${(await rows('tour_quotes'))[0].id}`)
     } finally {
       fxRates.rates.JPY = saved
     }
+  })
+
+  it('a question sent through the form is an email to answer: no order, no quote, no trip', async () => {
+    inbox([{ id: 'm1', body: REAL_TOUR_MAIL.replace(/(●?問合せ内容[：:]\s*)申込み/, '$1お問合せ') }], {
+      tour_templates: [{ id: 'tpl-502', template_code: 'NEK502', template_name: 'Egypt 8 days', duration_days: 8, is_active: true, tour_type: 'tour', website_url: null }],
+    })
+    const [r] = await processNewWebOrders(db())
+    expect(r.outcome).toBe('question')
+    expect(await rows('web_order_intakes')).toEqual([])
+    expect(await rows('tour_quotes')).toEqual([])
+    expect(notices).toEqual([])
+    // Looked at once, and still a lead for the detector to read.
+    expect((await rows('email_messages'))[0].order_checked_at).toBeTruthy()
+    expect((await rows('email_conversations'))[0].lead_check).toBeNull()
   })
 
   it('an existing client is linked, not duplicated', async () => {

@@ -2,8 +2,8 @@
 // GET /api/intake/web-orders — the website's orders, as taken in
 // ============================================
 // What the scheduled intake (lib/intake/web-order-intake.ts) made of each
-// website order email: a quote, a duplicate of one, or "needs attention" and
-// why. The office's list on /intake/order.
+// website order email: a quote (and the itinerary converted from it), a
+// duplicate of one, or "needs attention" and why. The office's list on /intake/order.
 //
 //   ?messageId=<Gmail message id>  the one order that email became (the inbox
 //                                  asks, so a taken-in order opens its quote
@@ -15,7 +15,7 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 
 const supabase = createActorAdminClient()
 
-const COLUMNS = 'id, received_at, subject, outcome, reason, tour_code, travel_date, customer_email, customer_name, client_id, quote_id, departure_booking_id, resolved_at, created_at, quote:tour_quotes(id, quote_number, status), client:clients(id, first_name, last_name)'
+const COLUMNS = 'id, received_at, subject, outcome, reason, tour_code, travel_date, customer_email, customer_name, client_id, quote_id, departure_booking_id, resolved_at, created_at, quote:tour_quotes(id, quote_number, status, converted_to_itinerary_id), client:clients(id, first_name, last_name)'
 
 export async function GET(request: NextRequest) {
   try {

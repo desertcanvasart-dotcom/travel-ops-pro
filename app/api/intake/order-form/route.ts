@@ -37,12 +37,16 @@ export async function POST(request: NextRequest) {
     // Finishing a website order: only one that is still open. Opening an
     // already-quoted order's link again and confirming made a SECOND quote,
     // client hold and seat hold, and repointed the order at the new quote —
-    // the first one dropped out of the list.
+    // the first one dropped out of the list. Open means: needing attention
+    // and not dismissed, or quoted once but its quote since deleted (the
+    // order was stuck as finished with nothing behind it).
     const finishing = dryRun !== true && typeof intakeId === 'string' && intakeId ? intakeId : null
+    let finishingOutcome: string | null = null
     if (finishing) {
-      const { data: open } = await supabase.from('web_order_intakes').select('id')
-        .eq('org_id', orgId).eq('id', finishing).eq('outcome', 'needs_attention').is('resolved_at', null)
-        .maybeSingle()
+      const { data: row } = await supabase.from('web_order_intakes').select('id, outcome, resolved_at, quote_id')
+        .eq('org_id', orgId).eq('id', finishing).maybeSingle()
+      const open = row && intakeIsOpen(row)
+      finishingOutcome = open ? row.outcome : null
       if (!open) {
         return NextResponse.json({ success: false, error: 'This website order is already finished (a quote was made from it, or it was dismissed). Open it from the list to see its quote.' }, { status: 409 })
       }
@@ -63,7 +67,7 @@ export async function POST(request: NextRequest) {
         departure_booking_id: result.body.departureBooking?.id ?? null,
         resolved_at: new Date().toISOString(),
         resolved_by: userId,
-      }).eq('org_id', orgId).eq('id', finishing).eq('outcome', 'needs_attention').is('resolved_at', null)
+      }).eq('org_id', orgId).eq('id', finishing).eq('outcome', finishingOutcome).is('quote_id', null)
       if (error) console.error('[intake/order-form] intake not updated:', error)
     }
     return NextResponse.json(result.body, { status: result.status })
@@ -71,4 +75,11 @@ export async function POST(request: NextRequest) {
     console.error('[intake/order-form]', err)
     return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
   }
+}
+
+/** Can this website order still be finished by hand? (see the guard above) */
+function intakeIsOpen(row: { outcome: string; resolved_at: string | null; quote_id: string | null }): boolean {
+  if (row.quote_id) return false
+  if (row.outcome === 'needs_attention') return !row.resolved_at
+  return row.outcome === 'quote_created'
 }

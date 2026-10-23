@@ -81,6 +81,8 @@ describe('templateDaysToItineraryDays', () => {
 
 describe('the convert route reads the programme from the template, never tour_days', () => {
   const src = readFileSync(join(ROOT, 'app', 'api', 'b2b', 'quotes', '[id]', 'convert', 'route.ts'), 'utf8')
+    // and the converter it hands the building to (lib/b2b/convert-template-quote)
+    + readFileSync(join(ROOT, 'lib', 'b2b', 'convert-template-quote.ts'), 'utf8')
 
   it('does not embed tour_days (there is no foreign key — the embed fails the whole query)', () => {
     expect(src).not.toMatch(/tour_days\s*\(/)
@@ -143,6 +145,8 @@ describe('packageTypeForTemplate', () => {
     // none of which exist. The write-contract guard skips payloads built by
     // a map(), which is exactly how this one is built, so pin it here.
     const src = readFileSync(join(ROOT, 'app', 'api', 'b2b', 'quotes', '[id]', 'convert', 'route.ts'), 'utf8')
+    // and the converter it hands the building to (lib/b2b/convert-template-quote)
+    + readFileSync(join(ROOT, 'lib', 'b2b', 'convert-template-quote.ts'), 'utf8')
     const types = readFileSync(join(ROOT, 'types', 'database.types.ts'), 'utf8')
     const m = types.match(/^ {6}itinerary_services: \{\n {8}Row: \{\n([\s\S]*?)\n {8}\}/m)!
     const live = new Set([...m[1].matchAll(/^ {10}([a-z_0-9]+)\??:/gm)].map(x => x[1]))
@@ -174,6 +178,8 @@ describe('itineraryServiceType', () => {
 
   it('the route builds every service line through the helper', () => {
     const src = readFileSync(join(ROOT, 'app', 'api', 'b2b', 'quotes', '[id]', 'convert', 'route.ts'), 'utf8')
+    // and the converter it hands the building to (lib/b2b/convert-template-quote)
+    + readFileSync(join(ROOT, 'lib', 'b2b', 'convert-template-quote.ts'), 'utf8')
     expect(src).toContain('serviceLineForItinerary(service')
     expect(src).not.toMatch(/service_type:\s*service\.service_category/)
   })
@@ -222,6 +228,8 @@ describe('serviceLineForItinerary', () => {
 describe('the convert route writes the operator’s deposit, never a hardcoded split', () => {
   it('has no 30/70 literals left and reads the payment rule', () => {
     const src = readFileSync(join(ROOT, 'app', 'api', 'b2b', 'quotes', '[id]', 'convert', 'route.ts'), 'utf8')
+    // and the converter it hands the building to (lib/b2b/convert-template-quote)
+    + readFileSync(join(ROOT, 'lib', 'b2b', 'convert-template-quote.ts'), 'utf8')
     expect(src).not.toMatch(/\*\s*0\.3\b/)
     expect(src).not.toMatch(/\*\s*0\.7\b/)
     expect(src).toContain('paymentRuleFrom(orgTerms)')

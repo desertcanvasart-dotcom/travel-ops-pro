@@ -5,16 +5,19 @@ import { readHandoffText } from '@/lib/text-handoff'
 // Order intake — the tour-up.jp form, read as a document
 // ============================================
 // Website order emails are taken in by themselves after each mailbox sync
-// (lib/intake/web-order-intake.ts); the list at the bottom says what each
-// became. One the intake could not finish opens here (?intake=<id>) to be
-// finished by hand; an email can also be pasted. The page shows what was
-// read (programme, dates, party, traveller, price and any holes) and writes
-// ONE draft quote plus the client on confirm. Nothing is written on preview.
+// (lib/intake/web-order-intake.ts) and, at the website's price, become the
+// itinerary directly; the list says what each became. The page is that list
+// first: one the intake could not finish opens here (?intake=<id>, or from
+// the inbox) to be finished by hand, and an order that came some other way
+// can still be pasted (folded away until asked for). The reading shows the
+// programme, dates, party, traveller and price; nothing is written on preview.
 import { Suspense, useEffect, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { ClipboardPaste, Loader2, CheckCircle2, AlertTriangle, Globe, Inbox } from 'lucide-react'
+import { useRole } from '@/hooks/useRole'
+import { websiteOrderPriceJpy } from '@/lib/pricing/website-price'
 
 interface Preview {
   success: boolean
@@ -36,6 +39,7 @@ interface Preview {
   client?: { id: string; name: string } | null
   pricing?: { total_cost: number; selling_price: number; price_per_person: number; currency: string; margin_percent: number; holes: { kind: string; message: string }[]; warnings: string[]; complete: boolean } | null
   quote?: { id: string; quote_number: string } | null
+  itinerary?: { id: string; code: string } | null
   clientCreated?: boolean
 }
 
@@ -50,7 +54,8 @@ interface WebOrder {
   customer_email: string | null
   customer_name: string | null
   resolved_at: string | null
-  quote?: { id: string; quote_number: string; status: string } | null
+  quote?: { id: string; quote_number: string; status: string; converted_to_itinerary_id: string | null } | null
+  quote_id?: string | null
   client?: { id: string; first_name: string | null; last_name: string | null } | null
 }
 
@@ -71,7 +76,11 @@ export default function OrderIntakePage() {
 
 function OrderIntakeInner() {
   const t = useTranslations('orderIntake')
+  const tWeb = useTranslations('websitePrice')
+  const { canViewFinancials } = useRole()
   const params = useSearchParams()
+  // The paste box, folded away unless an order was handed in or asked for.
+  const [pasting, setPasting] = useState(false)
   const [text, setText] = useState('')
   const [preview, setPreview] = useState<Preview | null>(null)
   const [busy, setBusy] = useState(false)
@@ -141,7 +150,13 @@ function OrderIntakeInner() {
         </div>
       )}
 
-      {!done && (
+      {!done && !pasting && !text && (
+        <button type="button" onClick={() => setPasting(true)} className="text-sm text-[#647C47] underline flex items-center gap-1">
+          <ClipboardPaste className="w-4 h-4" />{t('pasteOrder')}
+        </button>
+      )}
+
+      {!done && (pasting || !!text) && (
         <div className="bg-white rounded-lg border border-gray-200 p-4 space-y-3">
           <textarea
             value={text}
@@ -200,7 +215,12 @@ function OrderIntakeInner() {
           </div>
           {o.requests && <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500 mb-1">{t('requests')}</p><p className="whitespace-pre-wrap">{o.requests}</p></div>}
 
-          {preview.pricing && (
+          {preview.pricing && (() => {
+            // The website's price, when it can be read, IS the price: the
+            // engine's figures are the cost estimate, for admins and managers.
+            const websitePrice = websiteOrderPriceJpy(o)
+            const showEngine = !websitePrice || canViewFinancials
+            return (
             <section className="border-t border-gray-200 pt-4">
               <h2 className="font-semibold text-gray-900 mb-2">{t('price')}</h2>
               <div className={`grid gap-3 ${o.websiteSubtotalJpy || o.websiteBaseFare1 ? 'grid-cols-2 md:grid-cols-4' : 'grid-cols-3'}`}>
@@ -222,19 +242,26 @@ function OrderIntakeInner() {
                     </div>
                   )
                 })() : null}
-                <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500">{t('cost')}</p><p className="font-semibold">{fmt(preview.pricing.total_cost, preview.pricing.currency)}</p></div>
-                <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500">{t('selling', { margin: preview.pricing.margin_percent })}</p><p className="font-semibold">{fmt(preview.pricing.selling_price, preview.pricing.currency)}</p></div>
-                <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500">{t('perPerson')}</p><p className="font-semibold">{fmt(preview.pricing.price_per_person, preview.pricing.currency)}</p></div>
+                {showEngine && <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500">{websitePrice ? t('estimatedCost') : t('cost')}</p><p className="font-semibold">{fmt(preview.pricing.total_cost, preview.pricing.currency)}</p></div>}
+                {!websitePrice && <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500">{t('selling', { margin: preview.pricing.margin_percent })}</p><p className="font-semibold">{fmt(preview.pricing.selling_price, preview.pricing.currency)}</p></div>}
+                {!websitePrice && <div className="bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500">{t('perPerson')}</p><p className="font-semibold">{fmt(preview.pricing.price_per_person, preview.pricing.currency)}</p></div>}
               </div>
               {o.priceNotes && <div className="mt-3 bg-gray-50 rounded-lg p-3"><p className="text-xs text-gray-500 mb-1">{t('priceNotes')}</p><p className="whitespace-pre-wrap text-xs">{o.priceNotes}</p></div>}
-              {preview.pricing.holes.length > 0 && (
+              {preview.pricing.holes.length > 0 && !websitePrice && (
                 <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-900">
                   <p className="font-medium flex items-center gap-1"><AlertTriangle className="w-4 h-4" />{t('holes', { count: preview.pricing.holes.length })}</p>
                   <ul className="list-disc ml-5 mt-1 text-xs">{preview.pricing.holes.map((h, i) => <li key={i}>{h.message}</li>)}</ul>
                 </div>
               )}
+              {preview.pricing.holes.length > 0 && websitePrice && canViewFinancials && (
+                <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 text-gray-600">
+                  <p className="text-xs">{tWeb('costGaps', { count: preview.pricing.holes.length })}</p>
+                  <ul className="list-disc ml-5 mt-1 text-xs">{preview.pricing.holes.map((h, i) => <li key={i}>{h.message}</li>)}</ul>
+                </div>
+              )}
             </section>
-          )}
+            )
+          })()}
 
           <div className="flex justify-end gap-2 border-t border-gray-200 pt-4">
             <button type="button" onClick={() => call(false)} disabled={busy || !preview.template} className="px-4 py-2 bg-[#647C47] text-white rounded-lg text-sm font-medium hover:bg-[#4a5c35] disabled:opacity-50 flex items-center gap-2">
@@ -248,13 +275,15 @@ function OrderIntakeInner() {
         <div className={`rounded-lg border p-5 text-sm ${done.success ? 'bg-green-50 border-green-200 text-green-900' : 'bg-red-50 border-red-200 text-red-800'}`}>
           {done.success && done.quote ? (
             <>
-              <p className="font-medium flex items-center gap-2"><CheckCircle2 className="w-5 h-5" />{t('created', { quote: done.quote.quote_number })}</p>
+              <p className="font-medium flex items-center gap-2"><CheckCircle2 className="w-5 h-5" />{done.itinerary ? t('createdItinerary', { code: done.itinerary.code, quote: done.quote.quote_number }) : t('created', { quote: done.quote.quote_number })}</p>
               <p className="mt-1">{done.clientCreated ? t('clientCreated') : t('clientLinked')}</p>
               {done.departureBooking && <p className="mt-1">{t('departureHeld')}</p>}
               {done.departureFull && <p className="mt-1 text-amber-800">{t('departureFull', { free: done.departureFull.free, requested: done.departureFull.requested })}</p>}
               <div className="mt-3 flex gap-2">
-                <Link href={`/b2b/quotes/${done.quote.id}`} className="px-4 py-2 bg-[#647C47] text-white rounded-lg font-medium">{t('openQuote')}</Link>
-                <button type="button" onClick={() => { setDone(null); setText(''); }} className="px-4 py-2 border border-gray-300 rounded-lg">{t('another')}</button>
+                {done.itinerary
+                  ? <Link href={`/itineraries/${done.itinerary.id}`} className="px-4 py-2 bg-[#647C47] text-white rounded-lg font-medium">{t('openItinerary')}</Link>
+                  : <Link href={`/b2b/quotes/${done.quote.id}`} className="px-4 py-2 bg-[#647C47] text-white rounded-lg font-medium">{t('openQuote')}</Link>}
+                <button type="button" onClick={() => { setDone(null); setText(''); setPasting(false) }} className="px-4 py-2 border border-gray-300 rounded-lg">{t('another')}</button>
               </div>
             </>
           ) : <p>{done.error ?? t('failed')}</p>}
@@ -281,7 +310,10 @@ function OrderIntakeInner() {
               </thead>
               <tbody>
                 {webOrders.map(w => {
-                  const open = w.outcome === 'needs_attention' && !w.resolved_at
+                  // Quoted once, its quote since deleted: open again to be finished.
+                  const quoteGone = w.outcome === 'quote_created' && !w.quote
+                  const open = (w.outcome === 'needs_attention' && !w.resolved_at) || quoteGone
+                  const trip = w.quote?.converted_to_itinerary_id ?? null
                   return (
                     <tr key={w.id} className="border-b border-gray-100 align-top">
                       <td className="py-2 pr-3 whitespace-nowrap text-gray-600">{w.received_at ? new Date(w.received_at).toLocaleString() : '—'}</td>
@@ -293,17 +325,19 @@ function OrderIntakeInner() {
                       </td>
                       <td className="py-2 pr-3">
                         <span className={`text-xs px-1.5 py-0.5 rounded ${open ? 'bg-amber-100 text-amber-800' : w.outcome === 'needs_attention' ? 'bg-gray-100 text-gray-600' : w.outcome === 'duplicate' ? 'bg-gray-100 text-gray-700' : 'bg-green-100 text-green-800'}`}>
-                          {w.outcome === 'needs_attention' && w.resolved_at ? t('dismissed') : t(`outcome_${w.outcome}`)}
+                          {w.outcome === 'needs_attention' && w.resolved_at ? t('dismissed') : quoteGone ? t('quoteDeleted') : trip ? t('outcome_itinerary') : t(`outcome_${w.outcome}`)}
                         </span>
-                        {open && w.reason && <div className="text-xs text-gray-500 mt-1 max-w-xs">{w.reason}</div>}
+                        {open && !quoteGone && w.reason && <div className="text-xs text-gray-500 mt-1 max-w-xs">{w.reason}</div>}
                       </td>
                       <td className="py-2 whitespace-nowrap text-right">
-                        {w.quote ? (
+                        {trip ? (
+                          <Link href={`/itineraries/${trip}`} className="text-[#647C47] underline">{t('openItinerary')}</Link>
+                        ) : w.quote ? (
                           <Link href={`/b2b/quotes/${w.quote.id}`} className="text-[#647C47] underline">{w.quote.quote_number}</Link>
                         ) : open ? (
                           <span className="flex gap-3 justify-end">
                             <Link href={`/intake/order?intake=${w.id}`} className="text-[#647C47] underline">{t('finish')}</Link>
-                            <button type="button" onClick={() => dismiss(w.id)} className="text-gray-500 underline">{t('dismiss')}</button>
+                            {!quoteGone && <button type="button" onClick={() => dismiss(w.id)} className="text-gray-500 underline">{t('dismiss')}</button>}
                           </span>
                         ) : null}
                       </td>

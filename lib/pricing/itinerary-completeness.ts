@@ -31,6 +31,13 @@ export interface ItineraryDayRow {
 
 const NO_COST = 'No cost entered. Fill it in on the itinerary before sending.'
 
+/** A gap's reason without the "before sending" instruction — for a website
+ *  order's trip, whose sending a missing cost never holds up
+ *  (lib/pricing/website-price). */
+export function costGapReason(issue: string): string {
+  return issue.replace(NO_COST, '').replace(/^\s*No rate:\s*/, '').trim() || issue
+}
+
 /** The itinerary's rows in the saved-line shape quoteCompleteness reads. */
 export function itineraryServiceLines(days: readonly ItineraryDayRow[] | null | undefined) {
   const lines: Array<{ service_name: string; day_number: number | null; unpriced?: true; issue?: string }> = []
