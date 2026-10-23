@@ -17,6 +17,10 @@
 // programme as a departure on that date — a pending seat hold on it. The
 // itinerary, booking and documents follow from the quote's own Convert
 // button, unchanged.
+//
+// When the order carries the website's fare, the quote is held in yen at that
+// fare — final, the office does not quote it — and the engine's run becomes
+// its cost estimate (lib/pricing/website-price).
 import type { SupabaseClient } from '@supabase/supabase-js'
 import { isBookableLine } from '@/lib/pricing/breakdown-order'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
@@ -27,6 +31,9 @@ import { matchProgramme, type TourUpOrder } from '@/lib/intake/tour-up-order'
 import { clientMessage } from '@/lib/api-errors'
 import { createInitialQuoteRevision } from '@/lib/quotes/initial-revision'
 import { isBookableStatus, seatsFree } from '@/lib/departures/seats'
+import { getExchangeRate } from '@/lib/currency-service'
+import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
+import { WEBSITE_PRICE_CURRENCY, websiteOrderPriceJpy, linesInWebsiteCurrency, websitePricedTotals } from '@/lib/pricing/website-price'
 
 // The seat rule lives in lib/departures/seats.ts; re-exported for the callers
 // and tests that have always imported it from here.
@@ -240,6 +247,24 @@ export async function processTourUpOrder(
       pricing_note: rooming > 0 ? 'Room of one' : 'Room of three',
     })
   }
+  // The website's fare, when it can be read and the cost converted to yen.
+  // Neither: the quote is priced the old way, in the rate currency.
+  const websitePrice = websiteOrderPriceJpy(order)
+  let money: { lines: QuoteLine[]; selling_price: number; total_cost: number; margin_amount: number; margin_percent: number; price_per_person: number; single_supplement: number; currency: string } = {
+    lines, selling_price: priced.sellingPrice, total_cost: priced.totalCost, margin_amount: priced.marginAmount,
+    margin_percent: priced.marginPercent, price_per_person: priced.pricePerPerson, single_supplement: priced.singleSupplement ?? 0, currency: priced.currency,
+  }
+  if (websitePrice) {
+    const rate = priced.currency === WEBSITE_PRICE_CURRENCY ? 1 : await rateToYen(priced.currency)
+    if (rate) {
+      money = {
+        lines: linesInWebsiteCurrency(lines, priced.currency, rate),
+        ...websitePricedTotals({ priceJpy: websitePrice, costInRateCurrency: priced.totalCost, singleSupplementInRateCurrency: priced.singleSupplement ?? 0, rate, pax: numPax }),
+      }
+    } else {
+      console.warn(`[intake] no ${priced.currency}→${WEBSITE_PRICE_CURRENCY} rate; ${order.tourCode} quoted in ${priced.currency}`)
+    }
+  }
   const validUntil = new Date(); validUntil.setDate(validUntil.getDate() + 30)
   const clientName = `${order.lead.lastNameKanji ?? order.lead.lastNameRomaji} ${order.lead.firstNameKanji ?? order.lead.firstNameRomaji}`.trim()
   const { data: quote, error: qErr } = await supabase.from('tour_quotes').insert({
@@ -254,15 +279,15 @@ export async function processTourUpOrder(
     travel_date: order.departureDate1,
     num_adults: order.adults,
     num_children: order.children,
-    services_snapshot: lines,
-    total_cost: priced.totalCost,
-    margin_percent: priced.marginPercent,
-    margin_amount: priced.marginAmount,
-    selling_price: priced.sellingPrice,
-    price_per_person: priced.pricePerPerson,
-    currency: priced.currency,
+    services_snapshot: money.lines,
+    total_cost: money.total_cost,
+    margin_percent: money.margin_percent,
+    margin_amount: money.margin_amount,
+    selling_price: money.selling_price,
+    price_per_person: money.price_per_person,
+    currency: money.currency,
     tour_leader_included: false,
-    single_supplement: priced.singleSupplement ?? 0,
+    single_supplement: money.single_supplement,
     is_eur_passport: false,
     status: 'draft',
     valid_until: validUntil.toISOString().split('T')[0],
@@ -347,4 +372,15 @@ async function findDeparture(
     .order('created_at', { ascending: true })
     .limit(1)
   return ((data ?? [])[0] as { id: string; start_date: string; status: string; max_pax: number; booked_pax: number } | undefined) ?? null
+}
+
+/** Today's rate from the rate currency to yen, as pricing runs read it; null
+ *  when there is none (never guessed). */
+async function rateToYen(from: string): Promise<number | null> {
+  try {
+    const rate = getExchangeRate(from, WEBSITE_PRICE_CURRENCY, await fetchRunExchangeRates())
+    return rate && rate > 0 ? rate : null
+  } catch {
+    return null
+  }
 }

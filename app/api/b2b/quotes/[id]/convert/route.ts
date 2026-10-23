@@ -15,6 +15,7 @@ import { parseFrozenFx, frozenToExchangeRates } from '@/lib/itinerary-fx'
 import { quoteAmountsInTripCurrency, allocateClientPrices } from '@/lib/b2b/convert-money'
 import { templateDaysToItineraryDays, packageTypeForTemplate, serviceLineForItinerary, type ItineraryServiceRow } from '@/lib/itineraries/template-days'
 import { escapeLike } from '@/lib/db/escape-like'
+import { isWebsitePriced, WEBSITE_ORDER_SOURCE } from '@/lib/pricing/website-price'
 import { newItineraryCode } from '@/lib/itineraries/itinerary-code'
 
 // ============================================
@@ -114,7 +115,9 @@ export async function POST(
     const priceCheck = checkAmountDeliverable(quote.selling_price, {
       currency: quote.currency,
       servicesSnapshot: quote.services_snapshot ?? [],
-      allowIncomplete: allowsIncomplete(body?.allow_incomplete),
+      // A website order's price is final; a cost with no rate is the office's
+      // to fill in, never a hole in what the customer pays.
+      allowIncomplete: allowsIncomplete(body?.allow_incomplete) || isWebsitePriced(quote),
     })
     if (!priceCheck.ok) {
       return NextResponse.json(
@@ -345,7 +348,8 @@ export async function POST(
           // The quote's VAT choice and recorded rate (lib/vat.ts). Written
           // only when on, so a database without the columns still converts.
           ...(quote.vat_applied === true ? tripVatFromQuote(quote) : {}),
-          source: 'b2b_template'
+          // A website order's trip stays priced by the website (lib/pricing/website-price).
+          source: isWebsitePriced(quote) ? WEBSITE_ORDER_SOURCE : 'b2b_template'
         })
         .select()
         .single()

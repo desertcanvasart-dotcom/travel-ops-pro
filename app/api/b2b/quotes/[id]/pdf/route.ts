@@ -5,6 +5,7 @@ import { createClient } from '@supabase/supabase-js'
 import puppeteer from 'puppeteer'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { allowsIncomplete } from '@/lib/pricing/quote-completeness'
+import { isWebsitePriced } from '@/lib/pricing/website-price'
 import { getServerLocale, lookupServerMessage } from '@/lib/i18n/server-messages'
 import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
 import { formatMoney } from '@/lib/currency-totals'
@@ -718,7 +719,8 @@ export async function GET(
     const priceCheck = checkAmountDeliverable(finalQuote.selling_price, {
       currency: finalQuote.currency,
       servicesSnapshot: finalQuote.services_snapshot ?? [],
-      allowIncomplete: allowsIncomplete(request.nextUrl.searchParams.get('allow_incomplete')),
+      // A website order's price is final (lib/pricing/website-price).
+      allowIncomplete: allowsIncomplete(request.nextUrl.searchParams.get('allow_incomplete')) || isWebsitePriced(finalQuote),
     })
     if (!priceCheck.ok) {
       return NextResponse.json(

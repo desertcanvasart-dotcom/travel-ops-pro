@@ -22,6 +22,9 @@ import { readVat, totalWithVat } from '@/lib/vat'
 import { VatToken, VatToggle } from '@/app/components/Vat'
 import { useConfirm, useConfirmDialog } from '@/components/ConfirmDialog'
 import { quoteCompleteness, describeGaps } from '@/lib/pricing/quote-completeness'
+import { isWebsitePriced } from '@/lib/pricing/website-price'
+import WebsitePriceNote from '@/app/components/WebsitePriceNote'
+import { useRole } from '@/hooks/useRole'
 
 // ============================================
 // B2B QUOTE DETAIL PAGE
@@ -115,6 +118,8 @@ export default function QuoteDetailPage() {
   const quoteId = params?.id as string
   const t = useTranslations('b2bQuotes')
   const tVat = useTranslations('vat')
+  const tWeb = useTranslations('websitePrice')
+  const { canViewFinancials } = useRole()
   const confirmDialog = useConfirm()
   const dialog = useConfirmDialog()
 
@@ -212,7 +217,8 @@ export default function QuoteDetailPage() {
     // A quote with services that have no rate converts only when the operator
     // says so: the itinerary would carry a total that leaves them out.
     const { complete, gaps } = quoteCompleteness(quote.services_snapshot)
-    if (!complete && !(await confirmDialog(t('convertIncompleteConfirm', { count: gaps.length, services: describeGaps(gaps) }), {
+    // A website order's price is final: nothing to confirm (lib/pricing/website-price).
+    if (!complete && !isWebsitePriced(quote) && !(await confirmDialog(t('convertIncompleteConfirm', { count: gaps.length, services: describeGaps(gaps) }), {
       title: t('incompleteTitle'), confirmText: t('continueAnyway'), variant: 'warning',
     }))) return
     // No travel date: ask for the trip's first day. The itinerary was dated
@@ -386,13 +392,17 @@ export default function QuoteDetailPage() {
   const itinerarySource = quote.itineraries
   const services = quote.services_snapshot || []
   const completeness = quoteCompleteness(services)
+  // A website order: the website's price is final, the lines are a cost
+  // estimate — shown to admins and managers only, its holes never in red.
+  const websitePriced = isWebsitePriced(quote)
+  const showCosts = !websitePriced || canViewFinancials
   // Every amount in the quote's own currency and that currency's decimals —
   // not the org's current rate currency (which can change after the quote).
   const money = (v: number | null | undefined) => formatMoney(Number(v) || 0, quote.currency || 'EUR')
 
   const downloadPdf = async () => {
     const url = `/api/b2b/quotes/${quote.id}/pdf`
-    if (completeness.complete) {
+    if (completeness.complete || websitePriced) {
       window.open(url, '_blank')
       return
     }
@@ -452,7 +462,12 @@ export default function QuoteDetailPage() {
 
       {/* Saved with services that have no rate. The PDF, converting and
           booking all ask before going ahead with a total that leaves them out. */}
-      {!completeness.complete && (
+      {websitePriced && (
+        <div className="mb-6">
+          <WebsitePriceNote gaps={completeness.gaps} canViewFinancials={canViewFinancials} dayLabel={(day, name) => t('gapOnDay', { day, name })} />
+        </div>
+      )}
+      {!websitePriced && !completeness.complete && (
         <div className="mb-6 rounded-lg border border-red-300 bg-red-50 p-4">
           <p className="text-sm font-semibold text-red-900">{t('incompleteTitle')}</p>
           <p className="text-sm text-red-800 mt-1">{t('incompleteBody', { count: completeness.gaps.length })}</p>
@@ -513,43 +528,48 @@ export default function QuoteDetailPage() {
                   <tr>
                     <th className="px-4 py-2 text-left font-medium text-gray-600">{t('serviceColumn')}</th>
                     <th className="px-4 py-2 text-right font-medium text-gray-600">{t('qtyColumn')}</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-600">{t('unitColumn')}</th>
-                    <th className="px-4 py-2 text-right font-medium text-gray-600">{t('totalColumn')}</th>
+                    {showCosts && <th className="px-4 py-2 text-right font-medium text-gray-600">{t('unitColumn')}</th>}
+                    {showCosts && <th className="px-4 py-2 text-right font-medium text-gray-600">{websitePriced ? tWeb('costEstimate') : t('totalColumn')}</th>}
                   </tr>
                 </thead>
                 <tbody>
                   {/* Day by day, in the order each day runs, with a band where each day starts. */}
                   {groupLinesByDay(services as any[], (s: any) => ({ id: s.service_id, category: s.service_category, dayNumber: s.day_number })).map((group, groupIndex) => {
                     const gaps = group.lines.filter((s: any) => s.unpriced).length
+                    // Red only where a gap is a hole in the price.
+                    const redGaps = gaps > 0 && !websitePriced
                     const total = group.lines.reduce((sum: number, s: any) => sum + (Number(s.line_total) || 0), 0)
                     return (
                       <Fragment key={group.day}>
                         <DayBandRow
-                          columns={4}
+                          columns={showCosts ? 4 : 2}
                           first={groupIndex === 0}
                           day={group.day}
                           label={group.day > 0 ? t('dayNumber', { day: group.day }) : t('wholeTrip')}
                           meta={t('servicesCount', { count: group.lines.length })}
-                          badge={gaps > 0 && (
+                          badge={redGaps && (
                             <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">{t('dayGaps', { count: gaps })}</span>
                           )}
-                          total={money(total)}
-                          hasGaps={gaps > 0}
+                          total={showCosts ? money(total) : null}
+                          hasGaps={redGaps}
                         />
                         {group.lines.map((service: any, idx: number) => (
-                          <tr key={idx} className={`border-b border-gray-100 ${service.unpriced ? 'bg-red-50' : service.included ? 'text-gray-400 hover:bg-gray-50' : 'hover:bg-gray-50'}`}>
+                          <tr key={idx} className={`border-b border-gray-100 ${service.unpriced && !websitePriced ? 'bg-red-50' : service.included ? 'text-gray-400 hover:bg-gray-50' : 'hover:bg-gray-50'}`}>
                             <td className={`px-4 py-2 ${DAY_LINE_EDGE}`}>
-                              <span className={service.unpriced ? 'text-red-800 font-medium' : undefined}>{service.service_name || t('serviceColumn')}</span>
-                              {service.unpriced && (
+                              <span className={service.unpriced && !websitePriced ? 'text-red-800 font-medium' : undefined}>{service.service_name || t('serviceColumn')}</span>
+                              {service.unpriced && !websitePriced && (
                                 <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] font-medium bg-red-600 text-white">{t('noRate')}</span>
+                              )}
+                              {service.unpriced && websitePriced && canViewFinancials && (
+                                <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-500">{tWeb('noCostRate')}</span>
                               )}
                               {!service.unpriced && service.included && (
                                 <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-500">{service.issue || t('included')}</span>
                               )}
                             </td>
                             <td className="px-4 py-2 text-right">{service.quantity || 1}</td>
-                            <td className={`px-4 py-2 text-right ${service.unpriced ? 'text-red-700' : ''}`}>{money(service.unit_cost)}</td>
-                            <td className={`px-4 py-2 text-right font-medium ${service.unpriced ? 'text-red-700' : ''}`}>{money(service.line_total)}</td>
+                            {showCosts && <td className={`px-4 py-2 text-right ${service.unpriced && !websitePriced ? 'text-red-700' : ''}`}>{money(service.unit_cost)}</td>}
+                            {showCosts && <td className={`px-4 py-2 text-right font-medium ${service.unpriced && !websitePriced ? 'text-red-700' : ''}`}>{money(service.line_total)}</td>}
                           </tr>
                         ))}
                       </Fragment>
@@ -593,14 +613,18 @@ export default function QuoteDetailPage() {
               <TrendingUp className="w-4 h-4 text-[#647C47]" />{t('pricing')}
             </h3>
             <div className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">{t('subtotal')}</span>
-                <span>{money(quote.total_cost)}</span>
-              </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">{t('margin')} ({quote.margin_percent}%)</span>
-                <span className="text-green-600">{money(quote.margin_amount)}</span>
-              </div>
+              {showCosts && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">{websitePriced ? tWeb('estimatedCost') : t('subtotal')}</span>
+                  <span>{money(quote.total_cost)}</span>
+                </div>
+              )}
+              {showCosts && (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">{websitePriced ? tWeb('estimatedProfit') : t('margin')} ({quote.margin_percent}%)</span>
+                  <span className={Number(quote.margin_amount) < 0 ? 'text-red-600' : 'text-green-600'}>{money(quote.margin_amount)}</span>
+                </div>
+              )}
               {quote.tour_leader_included && quote.tour_leader_cost && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">{t('tourLeaderCost')}</span>
@@ -622,7 +646,7 @@ export default function QuoteDetailPage() {
               )}
               <div className="pt-3 border-t">
                 <div className="flex justify-between">
-                  <span className="font-medium">{t('sellingPrice')}</span>
+                  <span className="font-medium">{websitePriced ? tWeb('websitePrice') : t('sellingPrice')}</span>
                   <span className="text-xl font-bold text-[#647C47]">{money(quote.selling_price)}</span>
                 </div>
                 <p className="text-xs text-gray-500 text-right mt-1">{money(quote.price_per_person)} {t('perPersonLong')}</p>
@@ -645,7 +669,7 @@ export default function QuoteDetailPage() {
                   />
                 )}
               </div>
-              {quote.single_supplement && quote.single_supplement > 0 && (
+              {showCosts && quote.single_supplement && quote.single_supplement > 0 && (
                 <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-lg">
                   <div className="flex justify-between text-sm">
                     <span className="text-amber-800">{t('singleSupplement')}</span>

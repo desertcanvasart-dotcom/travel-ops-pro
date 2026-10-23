@@ -209,6 +209,11 @@ export interface SnapshotLine {
   issue?: string | null
   /** The hotel or ship a night line is for (calculator quotes from 2026-09-17). */
   property_name?: string | null
+  /** A website-priced quote's line is in yen; what it costs the office in the
+   *  rate currency rides along (lib/pricing/website-price). */
+  cost_currency?: string | null
+  cost_total_original?: number | null
+  cost_exchange_rate?: number | null
 }
 
 export interface ItineraryServiceRow {
@@ -240,6 +245,12 @@ export function serviceLineForItinerary(
   const total = Math.round(perUnit * quantity * 100) / 100
   const serviceType = itineraryServiceType(line.service_category)
   const remapped = serviceType !== normalizeServiceType(line.service_category)
+  // Paid to the supplier in its own currency: the original cost, for the same
+  // quantity, and the rate that turned it into the trip's.
+  const rate = Number(line.cost_exchange_rate)
+  const supplier = line.cost_currency && rate > 0
+    ? { currency: line.cost_currency, original: Math.round(((Number(line.cost_total_original) || 0) / units) * quantity * 100) / 100, rate }
+    : { currency: opts.currency, original: total, rate: 1 }
   return {
     itinerary_day_id: opts.dayId,
     service_type: serviceType,
@@ -250,9 +261,9 @@ export function serviceLineForItinerary(
     rate_eur: Math.round(perUnit * 100) / 100,
     total_cost: total,
     client_price: Math.round(total * (1 + (opts.marginPercent || 0) / 100) * 100) / 100,
-    supplier_currency: opts.currency,
-    supplier_cost_original: total,
-    exchange_rate_used: 1,
+    supplier_currency: supplier.currency,
+    supplier_cost_original: supplier.original,
+    exchange_rate_used: supplier.rate,
     // A line with no rate converts to a zero row — the itinerary's own record
     // of the gap (lib/pricing/itinerary-completeness) — carrying the reason.
     notes: [line.unpriced ? `No rate: ${line.issue ?? 'add it in Rates'}` : null, line.pricing_note, remapped ? `category: ${line.service_category}` : null].filter(Boolean).join(' · ') || null,
