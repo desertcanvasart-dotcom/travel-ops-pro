@@ -6,6 +6,7 @@ import { createBrowserClient } from '@supabase/ssr'
 import { Lock, Eye, EyeOff, Loader2, CheckCircle, XCircle } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
+import { parseRecoveryLink } from '@/lib/auth/recovery-link'
 
 export default function ResetPasswordPage() {
   const router = useRouter()
@@ -18,6 +19,10 @@ export default function ResetPasswordPage() {
   const [success, setSuccess] = useState(false)
   const [sessionChecked, setSessionChecked] = useState(false)
   const [hasSession, setHasSession] = useState(false)
+  // The link's one-time token, spent on submit (not on load) so a mail
+  // scanner opening the link first cannot use it up. Null once spent.
+  const [tokenHash, setTokenHash] = useState<string | null>(null)
+  const [linkError, setLinkError] = useState<string | null>(null)
 
   const supabase = createBrowserClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -25,10 +30,17 @@ export default function ResetPasswordPage() {
   )
 
   useEffect(() => {
-    // Check if user has a valid session from the reset link
     const checkSession = async () => {
-      const { data: { session } } = await supabase.auth.getSession()
-      setHasSession(!!session)
+      const link = parseRecoveryLink(window.location.href)
+      if (link.tokenHash) {
+        setTokenHash(link.tokenHash)
+        setHasSession(true)
+      } else {
+        // Older ?code= links (same browser only) still arrive as a session.
+        const { data: { session } } = await supabase.auth.getSession()
+        setHasSession(!!session)
+        setLinkError(session ? null : link.error)
+      }
       setSessionChecked(true)
     }
     checkSession()
@@ -51,6 +63,19 @@ export default function ResetPasswordPage() {
     setLoading(true)
 
     try {
+      if (tokenHash) {
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          type: 'recovery',
+          token_hash: tokenHash,
+        })
+        if (verifyError) {
+          throw verifyError
+        }
+        // Spent: a retry after a rejected password reuses the session instead.
+        setTokenHash(null)
+        window.history.replaceState(null, '', window.location.pathname)
+      }
+
       const { error } = await supabase.auth.updateUser({
         password: password
       })
@@ -93,6 +118,9 @@ export default function ResetPasswordPage() {
           <p className="text-gray-600 mb-6">
             {t('resetLinkExpired')}
           </p>
+          {linkError && (
+            <p className="-mt-3 mb-6 text-sm text-gray-500">{linkError}</p>
+          )}
           <Link
             href="/forgot-password"
             className="inline-flex items-center justify-center px-4 py-2 bg-[#647C47] text-white rounded-lg hover:bg-[#4f6339] transition-colors"
