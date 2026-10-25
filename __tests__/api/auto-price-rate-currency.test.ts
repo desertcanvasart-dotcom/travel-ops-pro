@@ -13,7 +13,7 @@ vi.mock('@/lib/auto-pricing-service', () => ({
 }))
 vi.mock('@/lib/auth/current-org', () => ({ getCurrentOrgId: async () => 'org-1' }))
 vi.mock('@/lib/org-default-margin', () => ({ getOrgDefaultMargin: async () => 30, resolveMarginPercent: () => 30 }))
-vi.mock('@/lib/org-rate-currency', () => ({ getOrgRateCurrency: async () => 'USD' }))
+vi.mock('@/lib/org-rate-currency', async (orig) => ({ ...(await orig<typeof import('@/lib/org-rate-currency')>()), getOrgRateCurrency: async () => 'USD' }))
 vi.mock('@/lib/supabase-server', () => ({ createServerClient: () => ({}) }))
 vi.mock('@/lib/vocabulary-server', () => ({ tierLadderForCurrentOrg: async () => ['standard', 'deluxe'] }))
 

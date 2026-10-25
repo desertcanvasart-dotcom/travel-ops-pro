@@ -26,7 +26,7 @@ vi.mock('@/lib/auth/current-org', () => ({
   noOrgResponse: () => new Response(JSON.stringify({ success: false }), { status: 403 }),
 }))
 vi.mock('@/lib/org-identity', () => ({ orgIdentity: async () => ({ name: 'Nile <b>Journeys</b>' }) }))
-vi.mock('@/lib/org-rate-currency', () => ({ getOrgRateCurrency: async () => 'JPY' }))
+vi.mock('@/lib/org-rate-currency', async (orig) => ({ ...(await orig<typeof import('@/lib/org-rate-currency')>()), getOrgRateCurrency: async () => 'JPY' }))
 vi.mock('@/lib/pdf-fonts-server', () => ({ getJapaneseFontFace: async () => '' }))
 vi.mock('@/lib/i18n/server-messages', () => ({
   getServerLocale: async () => 'en',

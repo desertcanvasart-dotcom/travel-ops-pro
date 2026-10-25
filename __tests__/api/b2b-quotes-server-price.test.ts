@@ -19,7 +19,7 @@ vi.mock('@/lib/auth/current-org', () => ({
   getCurrentUserRole: async () => role,
   noOrgResponse: () => new Response(JSON.stringify({ error: 'no org' }), { status: 403 }),
 }))
-vi.mock('@/lib/org-rate-currency', () => ({ getOrgRateCurrency: async () => 'EUR' }))
+vi.mock('@/lib/org-rate-currency', async (orig) => ({ ...(await orig<typeof import('@/lib/org-rate-currency')>()), getOrgRateCurrency: async () => 'EUR' }))
 
 const ENGINE = {
   services: [

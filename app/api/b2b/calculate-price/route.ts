@@ -10,6 +10,7 @@ import { guideLanguageWord } from '@/lib/guides/guide-language'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
+import { snapshotPaidFields } from '@/lib/paid-currency'
 import { loadOfferedExtras, withActivityCost, type ActivityRateRow, type OfferedExtra } from '@/lib/extras/offered'
 import { currencySymbol } from '@/lib/currency-totals'
 import { getOrgDefaultMargin } from '@/lib/org-default-margin'
@@ -76,6 +77,10 @@ interface CalculatedService {
   price_basis?: 'operator_price' | 'cost_plus_margin'
   day_number: number | null
   pricing_note?: string
+  /** The currency the rate was entered in and its factor into the rate
+   *  currency (lib/paid-currency snapshotPaidFields); absent = the rate currency. */
+  paid_currency?: string
+  paid_fx?: number
   /** No usable rate: listed in its place at 0 (the gap is also a hole). */
   unpriced?: boolean
   /** Already paid for inside another line — shown so the day reads whole. */
@@ -322,7 +327,7 @@ async function pickedGuideRate(
   orgId: string | null,
   id: string,
   normalizer: ReturnType<typeof createRateNormalizer>
-): Promise<{ id: string; name: string; dailyRate: number } | null> {
+): Promise<{ id: string; name: string; dailyRate: number; rate_currency?: string | null } | null> {
   const { data } = await supabaseAdmin
     .from('guide_rates')
     .select('*')
@@ -331,7 +336,7 @@ async function pickedGuideRate(
     .eq('is_active', true)
   const row = ((await normalizer.normalize('guide_rates', (data ?? []) as Record<string, any>[])) ?? [])[0]
   const dailyRate = Number(row?.base_rate_eur) || 0
-  return row && dailyRate > 0 ? { id: row.id, name: `${guideLanguageWord(row.guide_language)} Speaking Guide`, dailyRate } : null
+  return row && dailyRate > 0 ? { id: row.id, name: `${guideLanguageWord(row.guide_language)} Speaking Guide`, dailyRate, rate_currency: row.rate_currency ?? null } : null
 }
 
 // Matches no organisation: a rate read without one finds nothing (a missing
@@ -660,6 +665,7 @@ export async function POST(request: NextRequest) {
         ...(s.included ? { included: true } : {}),
         ...(s.issue ? { issue: s.issue } : {}),
         ...(s.propertyName ? { property_name: s.propertyName } : {}),
+        ...snapshotPaidFields(s.enteredCurrency, s.enteredFx),
       }))
 
       // The per-person accommodation lines are per-person-in-double. A solo
@@ -698,7 +704,8 @@ export async function POST(request: NextRequest) {
         line_total: s.lineTotal,
         is_optional: true,
         day_number: s.dayNumber,
-        pricing_note: s.notes
+        pricing_note: s.notes,
+        ...snapshotPaidFields(s.enteredCurrency, s.enteredFx),
       }))
 
       // Extract age-based pricing if available
@@ -823,6 +830,8 @@ export async function POST(request: NextRequest) {
       let rateSource = 'manual'
       let pricingNote = ''
       let effectiveQuantityMode = service.quantity_mode || 'per_pax'
+      // The currency the rate behind this line was entered in (lib/paid-currency).
+      let enteredCurrency: string | null = null
 
       // ============================================
       // STEP 1: Tiered activity pricing from the catalog (volume discounts
@@ -911,6 +920,7 @@ export async function POST(request: NextRequest) {
             const guide = picked ?? await getGuideRate(orgId, language, effectiveTier, serviceNormalizer, { grade: guideGrade, mode: guideMode, date: travel_date })
             if (guide) {
               unitCost = guide.dailyRate
+              enteredCurrency = guide.rate_currency ?? null
               lineTotal = guide.dailyRate
               effectiveQuantityMode = 'fixed'
               pricingNote = `${guide.name}: ${rateSym}${guide.dailyRate}/day`
@@ -928,6 +938,7 @@ export async function POST(request: NextRequest) {
               })
               if (priced) {
                 ({ unitCost, lineTotal, pricingNote, rateSource } = priced)
+                enteredCurrency = priced.enteredCurrency ?? null
                 effectiveQuantityMode = priced.quantityMode
               }
             }
@@ -951,12 +962,14 @@ export async function POST(request: NextRequest) {
           case 'cruise': {
             // Cruise rates from nile_cruises table
             if (service.rate_id) {
-              const { data: cruise } = await supabaseAdmin
+              const { data: rawCruise } = await supabaseAdmin
                 .from('nile_cruises')
                 .select('*')
                 .eq('org_id', orgId ?? NO_ORG)
                 .eq('id', service.rate_id)
                 .single()
+              // In the run currency like every other rate here: an EGP ship was priced as that many of it.
+              const cruise = rawCruise ? (await serviceNormalizer.normalize('nile_cruises', [rawCruise]))?.[0] : rawCruise
 
               if (cruise) {
                 if (num_pax === 1 && cruise.rate_single_eur) {
@@ -972,6 +985,7 @@ export async function POST(request: NextRequest) {
                 lineTotal = unitCost * num_pax
                 effectiveQuantityMode = 'per_pax'
                 rateSource = 'nile_cruises'
+                enteredCurrency = cruise.rate_currency ?? null
                 console.log(`✅ Cruise from B2C: ${cruise.ship_name} -> ${rateSym}${unitCost}/pax`)
               }
             }
@@ -990,6 +1004,7 @@ export async function POST(request: NextRequest) {
             })
             if (priced) {
               ({ unitCost, lineTotal, pricingNote, rateSource } = priced)
+              enteredCurrency = priced.enteredCurrency ?? null
               effectiveQuantityMode = priced.quantityMode
             }
             break
@@ -1036,7 +1051,8 @@ export async function POST(request: NextRequest) {
         line_total: Math.round(lineTotal * 100) / 100,
         is_optional: service.is_optional || false,
         day_number: service.day_number,
-        pricing_note: pricingNote || undefined
+        pricing_note: pricingNote || undefined,
+        ...snapshotPaidFields(enteredCurrency, enteredCurrency ? await serviceNormalizer.fxFor(enteredCurrency) : null),
       }
 
       if (service.is_optional) {

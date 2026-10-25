@@ -157,6 +157,7 @@ export function packageTypeForTemplate(
 // the fallback is 'extra' (the catch-all the vocabulary already has), never
 // a confident wrong guess like 'transportation'.
 
+import { paidFieldsWith } from '@/lib/paid-currency'
 import { SERVICE_TYPES, normalizeServiceType } from '@/lib/service-types'
 
 const CATEGORY_ALIASES: Record<string, (typeof SERVICE_TYPES)[number]> = {
@@ -214,6 +215,10 @@ export interface SnapshotLine {
   cost_currency?: string | null
   cost_total_original?: number | null
   cost_exchange_rate?: number | null
+  /** The currency the rate was entered in (an EGP guide) and 1 unit of it in
+   *  the rate currency (lib/paid-currency snapshotPaidFields). */
+  paid_currency?: string | null
+  paid_fx?: number | null
 }
 
 export interface ItineraryServiceRow {
@@ -231,6 +236,10 @@ export interface ItineraryServiceRow {
   notes: string | null
   /** The hotel or ship, on a night line — how the itinerary names the overnight. */
   supplier_name: string | null
+  /** What the supplier is paid in, for a rate entered in another currency (lib/paid-currency). */
+  paid_currency: string | null
+  paid_amount: number | null
+  paid_rate: number | null
 }
 
 /** One itinerary_services row for one quote line, for a party of `pax`. */
@@ -264,6 +273,13 @@ export function serviceLineForItinerary(
     supplier_currency: supplier.currency,
     supplier_cost_original: supplier.original,
     exchange_rate_used: supplier.rate,
+    // A rate entered in another currency (an EGP guide): what the supplier
+    // is paid, from the same line's cost in the rate currency.
+    ...paidFieldsWith(
+      [{ rate_currency: line.paid_currency ?? null }],
+      { runTotal: supplier.original, runCurrency: supplier.currency, tripCurrency: opts.currency, runToTrip: supplier.rate },
+      () => line.paid_fx,
+    ),
     // A line with no rate converts to a zero row — the itinerary's own record
     // of the gap (lib/pricing/itinerary-completeness) — carrying the reason.
     notes: [line.unpriced ? `No rate: ${line.issue ?? 'add it in Rates'}` : null, line.pricing_note, remapped ? `category: ${line.service_category}` : null].filter(Boolean).join(' · ') || null,
