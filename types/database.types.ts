@@ -7791,6 +7791,9 @@ export interface Database {
           supplier_cost_original: number | null
           exchange_rate_used: number | null
           sold_by_supplier_id: string | null
+          paid_currency: string | null
+          paid_amount: number | null
+          paid_rate: number | null
         }
         Insert: {
           id?: string
@@ -7819,6 +7822,9 @@ export interface Database {
           supplier_cost_original?: number | null
           exchange_rate_used?: number | null
           sold_by_supplier_id?: string | null
+          paid_currency?: string | null
+          paid_amount?: number | null
+          paid_rate?: number | null
         }
         Update: {
           id?: string
@@ -7847,6 +7853,9 @@ export interface Database {
           supplier_cost_original?: number | null
           exchange_rate_used?: number | null
           sold_by_supplier_id?: string | null
+          paid_currency?: string | null
+          paid_amount?: number | null
+          paid_rate?: number | null
         }
         Relationships: [
           {
