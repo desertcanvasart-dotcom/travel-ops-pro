@@ -12,6 +12,8 @@ import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { OWN_SUPPLIER_EMBED, ownSupplierOnRows } from '@/lib/rates/own-supplier-embed'
 import { rateDeleteBlocked } from '@/lib/rates/rate-delete-guard'
+import { rowsInRateCurrency } from '@/lib/rates/rows-in-rate-currency'
+import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 
 // ============================================
 // TRANSPORTATION RATES API - Full CRUD
@@ -120,10 +122,19 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
+    // A picker that copies the rate onto a trip asks for every row in the
+    // company's rate currency (lib/rates/rows-in-rate-currency): the
+    // itinerary editor took an EGP 3,000 transfer as 3,000 of the rate
+    // currency, like the other pickers before them.
+    let rows = ownSupplierOnRows(data, orgId)
+    if (searchParams.get('in_rate_currency') === 'true') {
+      rows = await rowsInRateCurrency('transportation_rates', rows, await getOrgRateCurrency(supabaseAdmin, orgId))
+    }
+
     // Also return enum options for UI dropdowns
     return NextResponse.json({
       success: true,
-      data: ownSupplierOnRows(data, orgId),
+      data: rows,
       options: {
         serviceTypes: SERVICE_TYPES,
         durations: DURATIONS,

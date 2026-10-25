@@ -70,7 +70,14 @@ export async function loadGridRateOptions(
   supabase: Db,
   orgId: string,
   tier: string | null,
-): Promise<{ rates: AllRates; rateCurrency: RateCurrency; fixedCosts: GridFixedCosts }> {
+): Promise<{
+  rates: AllRates
+  rateCurrency: RateCurrency
+  fixedCosts: GridFixedCosts
+  /** 1 unit of a currency in the rate currency — the factor these rates were
+   *  converted with (RateNormalizer.fxFor), for the save's paid fields. */
+  fxFor: (currency: string) => Promise<number | null>
+}> {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const ofTier = (q: any) => (tier ? q.eq('tier', tier) : q)
   // Fetch all rate tables in parallel
@@ -396,7 +403,7 @@ export async function loadGridRateOptions(
   // The fixed costs, from the same helper as automatic pricing and in the same
   // rate currency as every other amount here.
   const fixedCosts = await loadGridFixedCosts(orgId, normalizer, rateCurrency)
-  return { rates: rates as unknown as AllRates, rateCurrency, fixedCosts }
+  return { rates: rates as unknown as AllRates, rateCurrency, fixedCosts, fxFor: currency => normalizer.fxFor(currency) }
 }
 
 /** The guide durations as the rate form names them. */

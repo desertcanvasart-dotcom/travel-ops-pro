@@ -12,6 +12,50 @@ const src = (p: string) => readFileSync(p, 'utf8')
 // 1 USD = 50 EGP; no JPY rate.
 const fx = async () => ({ base: 'USD', date: '2027-01-01', rates: { USD: 1, EGP: 50 } })
 
+describe('picker rows say what each rate was entered in (lib/paid-currency)', () => {
+  it('entered_fx is the factor the row was converted with; null for a row in the company currency', async () => {
+    const rows = await rowsInRateCurrency('guide_rates', [
+      { id: 'g', base_rate_eur: 1500, rate_currency: 'EGP' },
+      { id: 'u', base_rate_eur: 40, rate_currency: null },
+    ], 'USD', { getRates: fx })
+    expect(rows[0]).toMatchObject({ base_rate_eur: 30, entered_currency: 'EGP' })
+    expect(rows[0].entered_fx).toBeCloseTo(0.02, 10)
+    expect(rows[1]).toMatchObject({ entered_currency: null, entered_fx: null })
+  })
+
+  it('the picker hands the entered currency on with the rate', () => {
+    const [r] = normalizeRates('guide', [{ id: 'g', guide_language: 'Arabic', base_rate_eur: 30, entered_currency: 'EGP', entered_fx: 0.02 }], 2)
+    expect(r).toMatchObject({ rate_eur: 30, entered_currency: 'EGP', entered_fx: 0.02 })
+    const [plain] = normalizeRates('meal', [{ id: 'm', restaurant_name: 'Deck', base_rate_eur: 10 }], 2)
+    expect(plain).toMatchObject({ entered_currency: null, entered_fx: null })
+  })
+
+  it('the editor stamps a picked rate\'s paid fields, and clears them for a rate in the rate currency', () => {
+    const page = src('app/itineraries/[id]/edit/page.tsx')
+    expect(page).toContain('{ entered_currency: rate.entered_currency, entered_fx: rate.entered_fx }')
+    expect(page).toContain('paidFieldsWith(')
+    expect(src('components/ServiceRatePicker.tsx')).toContain('entered_currency: rate.entered_currency ?? null,')
+  })
+})
+
+describe('the transport picker converts like the others', () => {
+  it('asks for rows in the rate currency and drops unconvertible ones', () => {
+    expect(getApiUrl('transportation')).toContain('in_rate_currency=true')
+    expect(normalizeRates('transportation', [
+      { id: 'x', route_name: 'Van', rate_unconvertible: true, vehicles: null, base_rate_eur: null },
+    ], 2)).toEqual([])
+  })
+
+  it('an EGP 3,000 transfer is $60 on the trip, not $3,000', async () => {
+    const rows = await rowsInRateCurrency('transportation_rates', [
+      { id: 't', route_name: 'Luxor airport', rate_currency: 'EGP', vehicles: [{ key: 'sedan', rate_eur: 3000, rate_non_eur: null, capacity_min: 1, capacity_max: 3 }] },
+    ], 'USD', { getRates: fx })
+    const [r] = normalizeRates('transportation', rows, 2)
+    expect(r).toMatchObject({ rate_eur: 60, entered_currency: 'EGP' })
+    expect(src('app/api/rates/transportation/route.ts')).toContain("rowsInRateCurrency('transportation_rates', rows,")
+  })
+})
+
 describe('picker rows in the company rate currency (#1)', () => {
   it('a 600 EGP row in a USD company is about $12, not $600', async () => {
     const [row] = await rowsInRateCurrency('meal_rates', [{ id: 'm', base_rate_eur: 600, base_rate_non_eur: 600, rate_currency: 'EGP' }], 'USD', { getRates: fx })

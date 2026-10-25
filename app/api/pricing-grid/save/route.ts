@@ -24,6 +24,7 @@ import { applyStoredPrices, storedUnitPrice, type StoredPrice, type StoredServic
 import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
 import type { ExchangeRates } from '@/lib/currency-service'
 import { loadGridRateOptions } from '../rate-options'
+import { paidFieldsWith } from '@/lib/paid-currency'
 
 /**
  * What a slot SELLS — the lines the save writes, and so the stored total:
@@ -268,7 +269,7 @@ export async function POST(request: NextRequest) {
       return inactivePartnerResponse()
     }
 
-    const { rates: gridRates, rateCurrency, fixedCosts } = await loadGridRateOptions(supabase, callerOrgId, null)
+    const { rates: gridRates, rateCurrency, fixedCosts, fxFor } = await loadGridRateOptions(supabase, callerOrgId, null)
     // A line of the trip being re-saved that has no current rate (none
     // stored, or since deleted or switched off) keeps the price it was saved
     // with — read here from ITS row of THIS trip, never from the request
@@ -424,6 +425,58 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // What each picked rate was ENTERED in (an EGP guide), read from its row
+    // here — never from the request — so its line can say what the supplier
+    // is paid in (lib/paid-currency). Kept apart from the supplier lookup
+    // above: these tables add only a currency. Non-fatal, like it: a failed
+    // read leaves the lines in the rate currency, as before.
+    const enteredTables: Record<string, string> = {
+      ...slotToRateTable,
+      airport_services: 'airport_staff_rates',
+      hotel_services: 'hotel_staff_rates',
+      flights: 'flight_rates',
+    }
+    const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    const enteredIdsByTable = new Map<string, Set<string>>()
+    for (const day of days) {
+      for (const slot of (day.slots || [])) {
+        const tbl = enteredTables[slot.slotId]
+        if (!tbl) continue
+        for (const item of (slot.selectedItems || [])) {
+          // An add-on under a hotel pick is priced from the hotel's row.
+          const id = item.rateId ? baseRateId(String(item.rateId)) : ''
+          if (!UUID.test(id)) continue
+          if (!enteredIdsByTable.has(tbl)) enteredIdsByTable.set(tbl, new Set())
+          enteredIdsByTable.get(tbl)!.add(id)
+        }
+      }
+    }
+    const enteredByRateId = new Map<string, string>()
+    for (const [tbl, ids] of enteredIdsByTable) {
+      const { data: rows, error: enteredErr } = await supabase
+        .from(tbl)
+        .select('id, rate_currency')
+        .eq('org_id', callerOrgId)
+        .in('id', Array.from(ids))
+      if (enteredErr) {
+        console.warn(`[pricing-grid save] rate_currency lookup on ${tbl} failed:`, enteredErr.message)
+        continue
+      }
+      for (const r of (rows || [])) if (r.rate_currency) enteredByRateId.set(r.id, r.rate_currency)
+    }
+    // The factor each entered currency was converted with, fetched once.
+    const factorByCurrency = new Map<string, number | null>()
+    for (const cur of new Set(enteredByRateId.values())) {
+      factorByCurrency.set(cur, fxFor ? await fxFor(cur) : null)
+    }
+    // A grid trip is in the rate currency (currency: rateCurrency below), so
+    // 1 unit of it is 1 of the trip's.
+    const paidForItem = (rateId: unknown, runTotal: number) => paidFieldsWith(
+      [{ rate_currency: rateId ? enteredByRateId.get(baseRateId(String(rateId))) ?? null : null }],
+      { runTotal, runCurrency: rateCurrency, tripCurrency: rateCurrency, runToTrip: 1 },
+      cur => factorByCurrency.get(cur),
+    )
+
     // Flat list (for sanitization + total reconciliation) plus a grouping by
     // day_number for the RPC payload. The SAME object reference is pushed into
     // both, so the sanitization pass below mutates them once. The RPC resolves
@@ -492,6 +545,8 @@ export async function POST(request: NextRequest) {
               ? (storedSupplierIds.get(item.serviceId) ?? null)
               : item.rateId ? (supplierIdByRateId.get(baseRateId(item.rateId)) ?? null) : null,
             notes: `__grid:slot:${slot.slotId}|rate_id:${item.rateId}`,
+            // A line kept at its saved price was not priced from today's rate.
+            ...(item.savedPrice ? {} : paidForItem(item.rateId, Number(supplierCost) || 0)),
           })
         }
       }

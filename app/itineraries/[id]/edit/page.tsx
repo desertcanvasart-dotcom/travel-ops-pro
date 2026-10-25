@@ -59,6 +59,7 @@ import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { useRole } from '@/hooks/useRole'
 import { editorFxRate, editorSaveTotals, repriceEditorLine } from '@/lib/itineraries/editor-pricing'
+import { paidFieldsWith } from '@/lib/paid-currency'
 import { frozenToExchangeRates, parseFrozenFx } from '@/lib/itinerary-fx'
 import { LegCityOptions, useAirports } from '@/app/components/AirportOptions'
 
@@ -187,6 +188,10 @@ interface ItineraryService {
   supplier_currency?: string | null
   supplier_cost_original?: number | null
   exchange_rate_used?: number | null
+  // What the supplier is paid in, for a rate entered in another currency (lib/paid-currency)
+  paid_currency?: string | null
+  paid_amount?: number | null
+  paid_rate?: number | null
 }
 
 interface Supplier {
@@ -839,7 +844,15 @@ export default function ItineraryEditorPage() {
    *  moved with it (lib/itineraries/editor-pricing). Refused, with a message,
    *  when the exchange rate is not known — a rate-currency number must never
    *  be written as a trip-currency one. */
-  const repriceService = (service: ItineraryService, change: { quantity: number; rate_eur: number; rate_non_eur: number }, extra: Partial<ItineraryService> = {}) => {
+  const repriceService = (
+    service: ItineraryService,
+    change: { quantity: number; rate_eur: number; rate_non_eur: number },
+    extra: Partial<ItineraryService> = {},
+    // A picked rate: the currency it was entered in, so the line says what
+    // the supplier is paid in — or, for a rate in the rate currency, that it
+    // is paid in that (the old pick's paid fields are cleared).
+    picked?: { entered_currency?: string | null; entered_fx?: number | null },
+  ) => {
     if (!itinerary) return
     const priced = repriceEditorLine(service, change, {
       rateCurrency,
@@ -851,7 +864,14 @@ export default function ItineraryEditorPage() {
       dialog.alert(tCommon('error'), t('fxUnavailable', { from: rateCurrency, to: itinerary.currency }), 'warning')
       return
     }
-    updateService(service.id, { ...extra, ...priced })
+    const paid = picked
+      ? paidFieldsWith(
+          [{ rate_currency: picked.entered_currency }],
+          { runTotal: Number(priced.supplier_cost_original) || 0, runCurrency: rateCurrency, tripCurrency: itinerary.currency, runToTrip: Number(priced.exchange_rate_used) || 0 },
+          () => picked.entered_fx,
+        )
+      : {}
+    updateService(service.id, { ...extra, ...priced, ...paid })
   }
 
   const calculateServiceTotal = (service: ItineraryService) => {
@@ -2051,7 +2071,8 @@ export default function ItineraryEditorPage() {
                                               repriceService(
                                                 { ...service, exchange_rate_used: null, client_price: service.client_price },
                                                 { quantity: service.quantity, rate_eur: rate.rate_eur, rate_non_eur: rate.rate_non_eur },
-                                                { service_name: rate.service_name, supplier_id: rate.supplier_id, supplier_name: rate.supplier_name }
+                                                { service_name: rate.service_name, supplier_id: rate.supplier_id, supplier_name: rate.supplier_name },
+                                                { entered_currency: rate.entered_currency, entered_fx: rate.entered_fx }
                                               )
                                             }}
                                           />
