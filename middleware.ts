@@ -1,5 +1,6 @@
 import { createServerClient } from '@supabase/ssr'
 import { canonicalRedirectOrigin } from '@/lib/http/canonical-host'
+import { siteMovedRedirect } from '@/lib/http/site-moved'
 import { clientIp } from '@/lib/client-ip'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
@@ -395,6 +396,13 @@ const STAFF_ONLY_API_PREFIXES = [
 ]
 
 export async function middleware(request: NextRequest, event: NextFetchEvent) {
+  // An install that has MOVED (SITE_MOVED_TO, lib/http/site-moved): every
+  // request goes to the same path on the new origin, before anything else —
+  // portal and share links already sent keep working. /api/version still
+  // answers here, so the old copy can be told apart from the new one.
+  const moved = siteMovedRedirect(request.nextUrl.pathname, request.nextUrl.search, process.env.SITE_MOVED_TO)
+  if (moved) return NextResponse.redirect(moved, 308)
+
   // www.<domain> → <domain> before anything else (lib/http/canonical-host).
   // 308 keeps the method and body, so a POST is redirected as a POST.
   // Pages only: an API caller (Twilio's webhook and status callback, OAuth
