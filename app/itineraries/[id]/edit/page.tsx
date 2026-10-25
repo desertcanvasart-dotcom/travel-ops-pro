@@ -60,6 +60,7 @@ import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { useRole } from '@/hooks/useRole'
 import { editorFxRate, editorSaveTotals, repriceEditorLine } from '@/lib/itineraries/editor-pricing'
 import { paidFieldsWith } from '@/lib/paid-currency'
+import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { frozenToExchangeRates, parseFrozenFx } from '@/lib/itinerary-fx'
 import { LegCityOptions, useAirports } from '@/app/components/AirportOptions'
 
@@ -78,6 +79,8 @@ interface Attraction {
   city: string
   base_rate_eur: number
   base_rate_non_eur: number
+  /** The currency the rate was entered in; null = the rate currency. */
+  rate_currency?: string | null
   source: 'entrance' | 'activity'
 }
 
@@ -580,14 +583,14 @@ export default function ItineraryEditorPage() {
       const [entranceRes, activityRes] = await Promise.all([
         supabase
           .from('entrance_fees')
-          .select('id, attraction_name, city, eur_rate, non_eur_rate')
+          .select('id, attraction_name, city, eur_rate, non_eur_rate, rate_currency')
           .eq('org_id', tripOrgId)
           .neq('is_active', false)
           .order('city')
           .order('attraction_name'),
         supabase
           .from('activity_rates')
-          .select('id, activity_name, city, base_rate_eur, base_rate_non_eur')
+          .select('id, activity_name, city, base_rate_eur, base_rate_non_eur, rate_currency')
           .eq('org_id', tripOrgId)
           .eq('is_active', true)
           .order('city')
@@ -604,6 +607,7 @@ export default function ItineraryEditorPage() {
         city: ef.city,
         base_rate_eur: ef.eur_rate || 0,
         base_rate_non_eur: ef.non_eur_rate || 0,
+        rate_currency: ef.rate_currency ?? null,
         source: 'entrance' as const,
       }))
 
@@ -2502,7 +2506,8 @@ export default function ItineraryEditorPage() {
                         <div className="text-xs text-gray-500 mt-0.5">📍 {attr.city}</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-sm font-semibold text-[#647C47]">{rateSymbol}{attr.base_rate_eur} / {rateSymbol}{attr.base_rate_non_eur}</div>
+                        <div className="text-sm font-semibold text-[#647C47]">{/* In the currency the rate was entered in: an EGP 450 entrance read "$450". */}
+                          {formatRateInRowCurrency(attr.base_rate_eur, attr, n => `${rateSymbol}${n}`)} / {formatRateInRowCurrency(attr.base_rate_non_eur, attr, n => `${rateSymbol}${n}`)}</div>
                         <div className="text-[11px] text-gray-500">{t('eurNonEur')}</div>
                       </div>
                     </div>
