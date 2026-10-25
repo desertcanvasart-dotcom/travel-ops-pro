@@ -46,17 +46,18 @@ describe('supplierLinesFromServices', () => {
     ])
   })
 
-  it("falls back to the trip's currency and total_cost for mixed currencies or a stale original", () => {
+  it("falls back to the trip's currency and total_cost for mixed currencies; an edited line keeps its own", () => {
     const mixed = supplierLinesFromServices([
       { supplier_id: 't1', supplier_name: 'Car', service_type: 'transport', total_cost: 100, supplier_currency: 'EGP', supplier_cost_original: 3000, exchange_rate_used: 1 / 30, ...day(1) },
       { supplier_id: 't1', supplier_name: 'Car', service_type: 'transport', total_cost: 50, supplier_currency: 'USD', supplier_cost_original: 55, exchange_rate_used: 50 / 55, ...day(1) },
     ], null, 'eur')
     expect(mixed[0]).toMatchObject({ quoted_cost: 150, cost_currency: 'EUR' })
-    // edited from 2 rooms to 3 after pricing: the original no longer agrees
-    const stale = supplierLinesFromServices([
+    // edited from 2 rooms to 3 after pricing: the original no longer agrees,
+    // so the cost is the current total at the line's own rate — still EGP
+    const edited = supplierLinesFromServices([
       { supplier_id: 'h1', supplier_name: 'Hotel', service_type: 'hotel', total_cost: 67500, supplier_currency: 'EGP', supplier_cost_original: 15000, exchange_rate_used: 3, ...day(1) },
     ], null, 'JPY')
-    expect(stale[0]).toMatchObject({ quoted_cost: 67500, cost_currency: 'JPY' })
+    expect(edited[0]).toMatchObject({ quoted_cost: 22500, cost_currency: 'EGP' })
     // trip currency unknown: nothing is "foreign", the row is the booking's
     const unknown = supplierLinesFromServices([
       { supplier_id: 'g1', supplier_name: 'Ahmed', service_type: 'guide', total_cost: 9000, supplier_currency: 'EGP', supplier_cost_original: 3000, exchange_rate_used: 3, ...day(1) },
@@ -120,9 +121,13 @@ describe('booking creation and Sync from itinerary cost rows by the shared rule'
     const src = readFileSync(join(process.cwd(), 'app/bookings/[id]/page.tsx'), 'utf8')
     expect(src).toContain('{supplierCostCurrency(supplier, booking.currency)}</span>')
     expect(src).toContain('quoted {supplierCostCurrency(supplier, booking.currency)} {Number(supplier.quoted_cost).toFixed(2)}')
-    // saving a confirmed cost never rewrites the row's currency
+    // saving a confirmed cost never rewrites the row's currency: only a new
+    // row (added by hand, with its currency picker) sets it
     const api = readFileSync(join(process.cwd(), 'app/api/bookings/[id]/suppliers/route.ts'), 'utf8')
-    expect(api).not.toMatch(/cost_currency/)
+    const [updateBranch, createBranch] = api.split('// Create new supplier entry')
+    expect(updateBranch).not.toMatch(/cost_currency/)
+    expect(createBranch).toContain('cost_currency: costCurrency,')
+    expect(src).toContain('cost_currency: supplierForm.cost_currency || null')
   })
 
   it("the docs say booking-supplier expenses are in the supplier's own currency, converted at the expense date", () => {

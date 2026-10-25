@@ -16,10 +16,14 @@ describe('voucherMoney', () => {
     ], 'JPY')
     expect(m).toEqual({ currency: 'EGP', total: 16000, lineAmounts: [15000, 1000] })
   })
-  it('never states a stale original: a line edited after it was priced uses its current total', () => {
-    // Created at 2 rooms (EGP 15,000 = ¥45,000); edited to 3 rooms (¥67,500).
+  it('never states a stale original: a line edited after it was priced stays in its own currency at its current total', () => {
+    // Created at 2 rooms (EGP 15,000 = ¥45,000); edited to 3 rooms (¥67,500):
+    // ¥67,500 at the line's own rate of 3 is EGP 22,500, not the stale 15,000.
     const m = voucherMoney([{ total_cost: 67500, supplier_currency: 'EGP', supplier_cost_original: 15000, exchange_rate_used: 3 }], 'JPY')
-    expect(m).toEqual({ currency: 'JPY', total: 67500, lineAmounts: [67500] })
+    expect(m).toEqual({ currency: 'EGP', total: 22500, lineAmounts: [22500] })
+    // With no rate to run backwards, it stays in the trip's currency.
+    expect(voucherMoney([{ total_cost: 67500, supplier_currency: 'EGP', supplier_cost_original: 15000, exchange_rate_used: null }], 'JPY'))
+      .toEqual({ currency: 'JPY', total: 67500, lineAmounts: [67500] })
   })
   it("stays in the trip's currency when the lines mix currencies, lack the original, or are already in it", () => {
     expect(voucherMoney([

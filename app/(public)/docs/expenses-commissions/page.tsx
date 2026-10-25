@@ -80,7 +80,7 @@ export default function ExpensesCommissionsPage() {
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Expenses from booking suppliers</h3>
         <p className="text-gray-600 mb-3">
-          Confirming a supplier with a cost on a booking&rsquo;s Suppliers tab creates a Pending expense for it. The expense is in the <strong>supplier&rsquo;s own currency</strong> when the booking&rsquo;s supplier row is (for example EGP for a guide, USD for a Nile cruise), not in the trip&rsquo;s quoted currency, so the amount is what you actually pay. Otherwise it is in the row&rsquo;s currency, which for rows added by hand is the booking&rsquo;s. Reports that convert, such as Profit &amp; Loss, convert it into the trip&rsquo;s currency at the exchange rate on the expense date.
+          Confirming a supplier with a cost on a booking&rsquo;s Suppliers tab creates a Pending expense for it. The expense is in the <strong>supplier&rsquo;s own currency</strong> when the booking&rsquo;s supplier row is (for example EGP for a guide, USD for a Nile cruise), not in the trip&rsquo;s quoted currency, so the amount is what you actually pay. Otherwise it is in the row&rsquo;s currency; a row added by hand is in the currency picked when it was added (the booking&rsquo;s unless you chose another). Reports that convert, such as Profit &amp; Loss, convert it into the trip&rsquo;s currency at the exchange rate on the expense date.
         </p>
         <Tip>
           Link every trip-related expense to its trip, otherwise it never shows in the trip&rsquo;s Profit &amp; Loss.
