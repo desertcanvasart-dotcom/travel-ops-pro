@@ -18,6 +18,9 @@ const state: { rpcDays: any[]; totalUpdate: number | null; inserted: any; season
 const tipRoles: Record<string, string> = {}
 const MENA = '55555555-5555-4555-8555-555555555555'
 const HOTEL_CITY: Record<string, string> = { [MENA]: 'Cairo' }
+// What a rate was entered in (rate_currency), as its row says.
+const EGP_GUIDE = '66666666-6666-4666-8666-666666666666'
+const ENTERED: Record<string, string> = { [EGP_GUIDE]: 'EGP' }
 
 // The office's addresses, as the own-address loader reads them.
 const OFFICE: Record<string, any[]> = {
@@ -50,7 +53,9 @@ function fakeDb() {
         select() {
           // Every rate here is the caller's (org-1): the foreign-rate check
           // (.neq('org_id', …)) finds none; the org-filtered reads find them.
-          const rowsFor = (ids: string[]) => table === 'tipping_rates'
+          const rowsFor = (ids: string[]) => table === 'guide_rates'
+            ? ids.filter(id => ENTERED[id]).map(id => ({ id, rate_currency: ENTERED[id] }))
+            : table === 'tipping_rates'
             ? ids.filter(id => tipRoles[id]).map(id => ({ id, role_type: tipRoles[id] }))
             : table === 'accommodation_rates'
               ? ids.filter(id => HOTEL_CITY[id]).map(id => ({ id, city: HOTEL_CITY[id] }))
@@ -82,7 +87,8 @@ vi.mock('@/lib/org-default-margin', () => ({ getOrgDefaultMargin: async () => 0,
 // The company's rate options, as the grid lists them.
 const RATES = vi.hoisted(() => ({ current: {} as Record<string, any[]> }))
 vi.mock('@/app/api/pricing-grid/rate-options', () => ({
-  loadGridRateOptions: async () => ({ rates: RATES.current, rateCurrency: 'EUR' }),
+  // 1 EUR = 50 EGP: the factor the rates were converted with.
+  loadGridRateOptions: async () => ({ rates: RATES.current, rateCurrency: 'EUR', fxFor: async (c: string) => (c === 'EGP' ? 1 / 50 : c === 'EUR' ? 1 : null) }),
 }))
 
 import { POST } from '@/app/api/pricing-grid/save/route'
@@ -102,7 +108,7 @@ const DEC_PERIODS = [
   { from: '2026-12-01', to: '2027-01-31', rateEur: 160, rateNonEur: 170, name: 'Winter' },
 ]
 const ratesNow = () => ({
-  guide: [{ id: 'g1', name: 'Guide', rateEur: 75, rateNonEur: 75 }],
+  guide: [{ id: 'g1', name: 'Guide', rateEur: 75, rateNonEur: 75 }, { id: EGP_GUIDE, name: 'Ahmed (EGP)', rateEur: 30, rateNonEur: 30 }],
   tipping: [
     { id: GUIDE_TIP, name: 'Guide tip', rateEur: 10, rateNonEur: 10 },
     { id: DRIVER_TIP, name: 'Driver tip', rateEur: 5, rateNonEur: 5 },
@@ -228,5 +234,31 @@ describe('where each night is', () => {
     expect(state.rpcDays.map((d: any) => [d.city, d.overnight_city])).toEqual([
       ['Cairo', 'Cairo'], ['Alexandria', 'Cairo'], ['Cairo', ''],
     ])
+  })
+})
+
+describe('what each line\'s supplier is paid in', () => {
+  // The guide rate was entered as EGP 1,500 and converted to €30 for pricing.
+  const days = [{ dayNumber: 1, slots: [
+    slot('guide', [{ rateId: EGP_GUIDE, name: 'Ahmed (EGP)', rateEur: 30, rateNonEur: 30 }]),
+    slot('tipping', [{ rateId: DRIVER_TIP, name: 'Driver tip', rateEur: 5, rateNonEur: 5, tipRole: 'driver' }]),
+  ] }]
+
+  it('a line priced from an EGP rate says EGP 1,500, read from the rate row; its price stays €30', async () => {
+    const services = await save(days)
+    const guide = services.find((s: any) => s.service_name === 'Ahmed (EGP)')
+    expect(guide).toMatchObject({ total_cost: 30, paid_currency: 'EGP', paid_amount: 1500, paid_rate: 0.02 })
+    expect(state.totalUpdate).toBe(35)
+  })
+
+  it('a line priced from a rate in the rate currency sends the keys as null (a re-pick clears an old EGP)', async () => {
+    const services = await save(days)
+    expect(services.find((s: any) => s.service_name === 'Driver tip')).toMatchObject({ paid_currency: null, paid_amount: null, paid_rate: null })
+  })
+
+  it('the browser cannot say what a rate was entered in', async () => {
+    const posted = [{ dayNumber: 1, slots: [slot('guide', [{ rateId: 'g1', name: 'Guide', rateEur: 75, rateNonEur: 75, rate_currency: 'EGP', paid_currency: 'EGP' }])] }]
+    const [guide] = await save(posted)
+    expect(guide).toMatchObject({ paid_currency: null, paid_amount: null })
   })
 })

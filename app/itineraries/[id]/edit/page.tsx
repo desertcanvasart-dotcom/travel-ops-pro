@@ -59,6 +59,8 @@ import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { useRole } from '@/hooks/useRole'
 import { editorFxRate, editorSaveTotals, repriceEditorLine } from '@/lib/itineraries/editor-pricing'
+import { paidFieldsWith } from '@/lib/paid-currency'
+import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { frozenToExchangeRates, parseFrozenFx } from '@/lib/itinerary-fx'
 import { LegCityOptions, useAirports } from '@/app/components/AirportOptions'
 
@@ -77,6 +79,8 @@ interface Attraction {
   city: string
   base_rate_eur: number
   base_rate_non_eur: number
+  /** The currency the rate was entered in; null = the rate currency. */
+  rate_currency?: string | null
   source: 'entrance' | 'activity'
 }
 
@@ -187,6 +191,10 @@ interface ItineraryService {
   supplier_currency?: string | null
   supplier_cost_original?: number | null
   exchange_rate_used?: number | null
+  // What the supplier is paid in, for a rate entered in another currency (lib/paid-currency)
+  paid_currency?: string | null
+  paid_amount?: number | null
+  paid_rate?: number | null
 }
 
 interface Supplier {
@@ -575,14 +583,14 @@ export default function ItineraryEditorPage() {
       const [entranceRes, activityRes] = await Promise.all([
         supabase
           .from('entrance_fees')
-          .select('id, attraction_name, city, eur_rate, non_eur_rate')
+          .select('id, attraction_name, city, eur_rate, non_eur_rate, rate_currency')
           .eq('org_id', tripOrgId)
           .neq('is_active', false)
           .order('city')
           .order('attraction_name'),
         supabase
           .from('activity_rates')
-          .select('id, activity_name, city, base_rate_eur, base_rate_non_eur')
+          .select('id, activity_name, city, base_rate_eur, base_rate_non_eur, rate_currency')
           .eq('org_id', tripOrgId)
           .eq('is_active', true)
           .order('city')
@@ -599,6 +607,7 @@ export default function ItineraryEditorPage() {
         city: ef.city,
         base_rate_eur: ef.eur_rate || 0,
         base_rate_non_eur: ef.non_eur_rate || 0,
+        rate_currency: ef.rate_currency ?? null,
         source: 'entrance' as const,
       }))
 
@@ -839,7 +848,15 @@ export default function ItineraryEditorPage() {
    *  moved with it (lib/itineraries/editor-pricing). Refused, with a message,
    *  when the exchange rate is not known — a rate-currency number must never
    *  be written as a trip-currency one. */
-  const repriceService = (service: ItineraryService, change: { quantity: number; rate_eur: number; rate_non_eur: number }, extra: Partial<ItineraryService> = {}) => {
+  const repriceService = (
+    service: ItineraryService,
+    change: { quantity: number; rate_eur: number; rate_non_eur: number },
+    extra: Partial<ItineraryService> = {},
+    // A picked rate: the currency it was entered in, so the line says what
+    // the supplier is paid in — or, for a rate in the rate currency, that it
+    // is paid in that (the old pick's paid fields are cleared).
+    picked?: { entered_currency?: string | null; entered_fx?: number | null },
+  ) => {
     if (!itinerary) return
     const priced = repriceEditorLine(service, change, {
       rateCurrency,
@@ -851,7 +868,14 @@ export default function ItineraryEditorPage() {
       dialog.alert(tCommon('error'), t('fxUnavailable', { from: rateCurrency, to: itinerary.currency }), 'warning')
       return
     }
-    updateService(service.id, { ...extra, ...priced })
+    const paid = picked
+      ? paidFieldsWith(
+          [{ rate_currency: picked.entered_currency }],
+          { runTotal: Number(priced.supplier_cost_original) || 0, runCurrency: rateCurrency, tripCurrency: itinerary.currency, runToTrip: Number(priced.exchange_rate_used) || 0 },
+          () => picked.entered_fx,
+        )
+      : {}
+    updateService(service.id, { ...extra, ...priced, ...paid })
   }
 
   const calculateServiceTotal = (service: ItineraryService) => {
@@ -2051,7 +2075,8 @@ export default function ItineraryEditorPage() {
                                               repriceService(
                                                 { ...service, exchange_rate_used: null, client_price: service.client_price },
                                                 { quantity: service.quantity, rate_eur: rate.rate_eur, rate_non_eur: rate.rate_non_eur },
-                                                { service_name: rate.service_name, supplier_id: rate.supplier_id, supplier_name: rate.supplier_name }
+                                                { service_name: rate.service_name, supplier_id: rate.supplier_id, supplier_name: rate.supplier_name },
+                                                { entered_currency: rate.entered_currency, entered_fx: rate.entered_fx }
                                               )
                                             }}
                                           />
@@ -2481,7 +2506,8 @@ export default function ItineraryEditorPage() {
                         <div className="text-xs text-gray-500 mt-0.5">📍 {attr.city}</div>
                       </div>
                       <div className="text-right">
-                        <div className="text-sm font-semibold text-[#647C47]">{rateSymbol}{attr.base_rate_eur} / {rateSymbol}{attr.base_rate_non_eur}</div>
+                        <div className="text-sm font-semibold text-[#647C47]">{/* In the currency the rate was entered in: an EGP 450 entrance read "$450". */}
+                          {formatRateInRowCurrency(attr.base_rate_eur, attr, n => `${rateSymbol}${n}`)} / {formatRateInRowCurrency(attr.base_rate_non_eur, attr, n => `${rateSymbol}${n}`)}</div>
                         <div className="text-[11px] text-gray-500">{t('eurNonEur')}</div>
                       </div>
                     </div>

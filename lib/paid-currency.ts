@@ -53,34 +53,59 @@ export function roundPaid(amount: number, currency: string): number {
   return WHOLE_UNITS.has(currency) ? Math.round(amount) : Math.round(amount * 100) / 100
 }
 
+/** The one currency every source was entered in, when the line needs paid
+ *  fields for it (neither the rate nor the trip currency); else null. */
+function paidCurrencyOf(
+  sources: Array<{ rate_currency?: unknown } | null | undefined>,
+  runCurrency: string,
+  tripCurrency: string,
+): string | null {
+  const run = normaliseRateCurrency(runCurrency)
+  const trip = String(tripCurrency || '').trim().toUpperCase()
+  if (!run || sources.length === 0) return null
+  const currencies = new Set(sources.map(s => normaliseRateCurrency(s?.rate_currency) ?? run))
+  if (currencies.size !== 1) return null
+  const [cur] = [...currencies]
+  return cur === run || cur === trip ? null : cur
+}
+
 /**
  * The paid fields for a line priced from `sources` (the converted rate rows,
- * which keep their rate_currency). Stamped only when every source was entered
- * in ONE currency that is neither the rate currency nor the trip's, the line
- * has a cost, and both factors are known; otherwise NO_PAID — the line is
- * paid in the rate or trip currency, which the existing columns already say.
+ * which keep their rate_currency), with the factors already in hand: `factorOf`
+ * gives 1 unit of a currency in the rate currency (RateNormalizer.fxFor's
+ * answer). Stamped only when every source was entered in ONE currency that is
+ * neither the rate currency nor the trip's, the line has a cost, and both
+ * factors are known; otherwise NO_PAID — the line is paid in the rate or trip
+ * currency, which the existing columns already say.
  */
-export async function paidFieldsFor(
+export function paidFieldsWith(
   sources: Array<{ rate_currency?: unknown } | null | undefined>,
   line: { runTotal: number; runCurrency: string; tripCurrency: string; runToTrip: number },
-  fxFor: (currency: string) => Promise<number | null>,
-): Promise<PaidFields> {
-  const run = normaliseRateCurrency(line.runCurrency)
-  const trip = String(line.tripCurrency || '').trim().toUpperCase()
-  if (!run || sources.length === 0) return NO_PAID
-  const currencies = new Set(sources.map(s => normaliseRateCurrency(s?.rate_currency) ?? run))
-  if (currencies.size !== 1) return NO_PAID
-  const [cur] = [...currencies]
-  if (cur === run || cur === trip) return NO_PAID
+  factorOf: (currency: string) => number | null | undefined,
+): PaidFields {
+  const cur = paidCurrencyOf(sources, line.runCurrency, line.tripCurrency)
+  if (!cur) return NO_PAID
   if (!Number.isFinite(line.runTotal) || line.runTotal <= 0) return NO_PAID
   if (!Number.isFinite(line.runToTrip) || line.runToTrip <= 0) return NO_PAID
-  const factor = await fxFor(cur)
+  const factor = factorOf(cur)
   if (!factor || !Number.isFinite(factor) || factor <= 0) return NO_PAID
   return {
     paid_currency: cur,
     paid_amount: roundPaid(line.runTotal / factor, cur),
     paid_rate: factor * line.runToTrip,
   }
+}
+
+/** paidFieldsWith, asking the normaliser for the one factor it needs. */
+export async function paidFieldsFor(
+  sources: Array<{ rate_currency?: unknown } | null | undefined>,
+  line: { runTotal: number; runCurrency: string; tripCurrency: string; runToTrip: number },
+  fxFor: (currency: string) => Promise<number | null>,
+): Promise<PaidFields> {
+  const cur = paidCurrencyOf(sources, line.runCurrency, line.tripCurrency)
+  if (!cur) return NO_PAID
+  const factor = await fxFor(cur)
+  return paidFieldsWith(sources, line, () => factor)
 }
 
 /**

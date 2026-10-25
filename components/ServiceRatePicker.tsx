@@ -20,7 +20,18 @@ interface RateItem {
   supplier_name: string | null
   details: string
   vehicleType?: string
+  /** The currency the rate was entered in and its factor into the rate
+   *  currency (lib/rates/rows-in-rate-currency), so the line can say what
+   *  the supplier is paid in (lib/paid-currency). */
+  entered_currency?: string | null
+  entered_fx?: number | null
 }
+
+/** A row's entered currency, as the list route returned it. */
+const entered = (r: { entered_currency?: string | null; entered_fx?: number | null }) => ({
+  entered_currency: r.entered_currency ?? null,
+  entered_fx: r.entered_fx ?? null,
+})
 
 interface ServiceRatePickerProps {
   serviceType: 'meal' | 'transportation' | 'guide' | 'entrance' | 'activity'
@@ -33,6 +44,8 @@ interface ServiceRatePickerProps {
     rate_non_eur: number
     supplier_id: string | null
     supplier_name: string | null
+    entered_currency?: string | null
+    entered_fx?: number | null
   }) => void
 }
 
@@ -51,11 +64,12 @@ export function normalizeRates(serviceType: string, data: any[], paxCount: numbe
         rate_non_eur: r.base_rate_non_eur || r.base_rate_eur || 0,
         supplier_id: r.supplier_id || null,
         supplier_name: r.supplier_name || r.supplier?.name || null,
-        details: [r.cuisine_type, r.meal_type, r.per_person_rate === false ? 'per group' : null].filter(Boolean).join(' · ')
+        details: [r.cuisine_type, r.meal_type, r.per_person_rate === false ? 'per group' : null].filter(Boolean).join(' · '),
+        ...entered(r)
       }))
 
     case 'transportation':
-      return data.map(r => {
+      return data.filter(convertible).map(r => {
         const resolved = getTransportRateForPax(r, paxCount)
         return {
           id: r.id,
@@ -66,6 +80,7 @@ export function normalizeRates(serviceType: string, data: any[], paxCount: numbe
           supplier_id: r.supplier_id || null,
           supplier_name: r.supplier_name || r.supplier?.name || null,
           details: [r.service_type, r.area, resolved?.vehicleType].filter(Boolean).join(' · '),
+          ...entered(r),
           vehicleType: resolved?.vehicleType
         }
       }).filter(r => r.rate_eur > 0)
@@ -79,7 +94,8 @@ export function normalizeRates(serviceType: string, data: any[], paxCount: numbe
         rate_non_eur: r.base_rate_non_eur || r.base_rate_eur || 0,
         supplier_id: r.supplier_id || null,
         supplier_name: r.supplier_name || r.supplier?.name || null,
-        details: [r.guide_type, r.tour_duration].filter(Boolean).join(' · ')
+        details: [r.guide_type, r.tour_duration].filter(Boolean).join(' · '),
+        ...entered(r)
       }))
 
     case 'entrance':
@@ -91,7 +107,8 @@ export function normalizeRates(serviceType: string, data: any[], paxCount: numbe
         rate_non_eur: r.non_eur_rate || r.eur_rate || 0,
         supplier_id: r.supplier_id || null,
         supplier_name: r.supplier_name || null,
-        details: [r.category, r.is_addon ? 'Add-on' : null].filter(Boolean).join(' · ')
+        details: [r.category, r.is_addon ? 'Add-on' : null].filter(Boolean).join(' · '),
+        ...entered(r)
       }))
 
     case 'activity':
@@ -103,7 +120,8 @@ export function normalizeRates(serviceType: string, data: any[], paxCount: numbe
         rate_non_eur: r.base_rate_non_eur || r.base_rate_eur || 0,
         supplier_id: r.supplier_id || null,
         supplier_name: r.supplier_name || r.supplier?.name || null,
-        details: [r.activity_category, r.pricing_type].filter(Boolean).join(' · ')
+        details: [r.activity_category, r.pricing_type].filter(Boolean).join(' · '),
+        ...entered(r)
       }))
 
     default:
@@ -118,7 +136,7 @@ export function normalizeRates(serviceType: string, data: any[], paxCount: numbe
 export function getApiUrl(serviceType: string): string {
   switch (serviceType) {
     case 'meal': return '/api/rates/meals?active_only=true&in_rate_currency=true'
-    case 'transportation': return '/api/rates/transportation'
+    case 'transportation': return '/api/rates/transportation?in_rate_currency=true'
     case 'guide': return '/api/rates/guides?active_only=true&in_rate_currency=true'
     case 'entrance': return '/api/rates/attractions?active_only=true&in_rate_currency=true'
     case 'activity': return '/api/rates/activities?active_only=true&in_rate_currency=true'
@@ -271,7 +289,9 @@ export default function ServiceRatePicker({
       rate_eur: rate.rate_eur,
       rate_non_eur: rate.rate_non_eur,
       supplier_id: rate.supplier_id,
-      supplier_name: rate.supplier_name
+      supplier_name: rate.supplier_name,
+      entered_currency: rate.entered_currency ?? null,
+      entered_fx: rate.entered_fx ?? null,
     })
     setIsOpen(false)
     setSearch('')

@@ -2,7 +2,7 @@
 // a rate entered in EGP is converted to the rate currency for pricing, and the
 // line remembers EGP — for booking supplier rows, vouchers and expenses only.
 import { describe, it, expect } from 'vitest'
-import { NO_PAID, paidFieldsFor, paidMoney, paidRateAfterReprice, roundPaid } from '@/lib/paid-currency'
+import { NO_PAID, paidFieldsFor, paidFieldsWith, paidMoney, paidRateAfterReprice, roundPaid } from '@/lib/paid-currency'
 import { supplierOwnMoney } from '@/lib/supplier-own-currency'
 import { supplierLinesFromServices } from '@/lib/bookings/supplier-lines'
 import { voucherMoney } from '@/lib/documents/plan-documents'
@@ -42,6 +42,14 @@ describe('paidFieldsFor', () => {
     // a rate-currency (grid) trip: still EGP, at 1 to the trip
     expect(await paidFieldsFor([{ rate_currency: 'EGP' }], { runCurrency: 'USD', tripCurrency: 'USD', runToTrip: 1, runTotal: 30 }, fxFor))
       .toEqual({ paid_currency: 'EGP', paid_amount: 1500, paid_rate: 0.02 })
+  })
+})
+
+describe('paidFieldsWith', () => {
+  it('the same answer with the factor already in hand (the grid save and the editor)', () => {
+    expect(paidFieldsWith([{ rate_currency: 'EGP' }], { ...ON_YEN_TRIP, runTotal: 30 }, c => (c === 'EGP' ? 1 / 50 : null)))
+      .toEqual({ paid_currency: 'EGP', paid_amount: 1500, paid_rate: 3 })
+    expect(paidFieldsWith([{ rate_currency: 'EGP' }], { ...ON_YEN_TRIP, runTotal: 30 }, () => undefined)).toEqual(NO_PAID)
   })
 })
 
