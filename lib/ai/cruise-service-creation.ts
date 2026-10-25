@@ -14,7 +14,9 @@ import {
   findCruiseTransportRule,
   getCruiseTransportRate,
 } from '@/lib/auto-pricing-service'
-import { createRateNormalizer } from '@/lib/rates/rate-currency'
+import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
+import { normaliseRateCurrency } from '@/lib/org-rate-currency'
+import { paidFieldsWith } from '@/lib/paid-currency'
 import {
   getItemizedTippingRates,
   determineTipRolesForDay,
@@ -37,7 +39,9 @@ export async function fetchGuideRate(
   /** Whose guide rates (guide_rates.org_id). */
   orgId: string | null | undefined,
   tier: string,
-  language: string
+  language: string,
+  /** Converts a guide rate entered in another currency into the run currency. */
+  normalizer?: RateNormalizer
 ): Promise<{
   guidePerDay: number
   guideName: string | null
@@ -48,15 +52,19 @@ export async function fetchGuideRate(
   // fallback `guides` registry table is used (separate from suppliers).
   // Added Phase 3 step 1 to stop dropping the supplier FK.
   guideSupplierId: string | null
+  /** The currency the guide rate was entered in (null = the rate currency) — lib/paid-currency. */
+  guideRateCurrency?: string | null
 }> {
   // PRIORITY 1: Check guide_rates table (managed via Rates > Tour Guides UI)
-  const { data: guideRates } = await supabase
+  const { data: rawGuideRates } = await supabase
     .from('guide_rates')
     .select('*')
     .eq('org_id', orgId ?? NO_ORG)
     .eq('is_active', true)
     .eq('guide_language', language)
     .limit(1)
+  // In the run currency: an EGP guide rate was priced as that many euros.
+  const guideRates = rawGuideRates && normalizer ? await normalizer.normalize('guide_rates', rawGuideRates) : rawGuideRates
 
   if (guideRates?.length) {
     const rate = toNumber(guideRates[0].base_rate_eur, 0)
@@ -67,6 +75,7 @@ export async function fetchGuideRate(
       guideName: name,
       guideId: guideRates[0].id,
       guideSupplierId: guideRates[0].supplier_id || null,
+      guideRateCurrency: guideRates[0].rate_currency ?? null,
     }
   }
 
@@ -205,7 +214,29 @@ export async function createCruiseItineraryServices(
   // Insert helper: a failed service insert must NOT count toward totals —
   // previously all six insert sites ignored the returned error, so saved
   // itinerary totals could exceed the sum of the stored services.
-  const insertService = async (dayNumber: number, payload: Record<string, unknown>): Promise<boolean> => {
+  // What each line's supplier is PAID in (lib/paid-currency): a line whose
+  // rates were entered in another currency (an EGP entrance fee) says so, at
+  // the factor they were converted with. __paidFrom never reaches the table.
+  const paidFactors = new Map<string, number | null>()
+  const withPaidFields = async ({ __paidFrom, ...payload }: Record<string, unknown> & { __paidFrom?: Array<{ rate_currency?: string | null }> }): Promise<Record<string, unknown>> => {
+    for (const src of __paidFrom ?? []) {
+      const cur = normaliseRateCurrency(src?.rate_currency)
+      if (cur && !paidFactors.has(cur)) paidFactors.set(cur, await cruiseNormalizer.fxFor(cur))
+    }
+    const runTotal = Number(payload.supplier_cost_original) || 0
+    return {
+      ...payload,
+      ...paidFieldsWith(__paidFrom ?? [], {
+        runTotal,
+        runCurrency: rateCurrency,
+        tripCurrency: currency,
+        runToTrip: runTotal > 0 ? Number(payload.total_cost) / runTotal : 0,
+      }, cur => paidFactors.get(cur)),
+    }
+  }
+
+  const insertService = async (dayNumber: number, line: Record<string, unknown>): Promise<boolean> => {
+    const payload = await withPaidFields(line)
     const { error } = await supabase.from('itinerary_services').insert(payload)
     if (error) {
       console.error(`❌ Error creating ${payload.service_type} service on day ${dayNumber}:`, error)
@@ -239,7 +270,7 @@ export async function createCruiseItineraryServices(
   }
 
   // 2. Guide rate (guide_rates table → guides table fallback)
-  const guideResult = await fetchGuideRate(supabase, orgId, tier, guideLanguage)
+  const guideResult = await fetchGuideRate(supabase, orgId, tier, guideLanguage, cruiseNormalizer)
   if (!guideResult.guidePerDay) {
     warnings.push(`No guide rate found for ${guideLanguage} (${tier} tier) — guide will be €0`)
   }
@@ -253,7 +284,9 @@ export async function createCruiseItineraryServices(
   }
 
   // 4. Entrance fees
-  const { data: entranceFees } = await supabase.from('entrance_fees').select('*').eq('org_id', orgId ?? NO_ORG).eq('is_active', true)
+  // In the run currency, like the land path: an EGP entrance fee was priced as that many euros.
+  const { data: rawEntranceFees } = await supabase.from('entrance_fees').select('*').eq('org_id', orgId ?? NO_ORG).eq('is_active', true)
+  const entranceFees = rawEntranceFees ? await cruiseNormalizer.normalize('entrance_fees', rawEntranceFees) : rawEntranceFees
   if (!entranceFees?.length) {
     warnings.push('No entrance fees found — entrance fees will be €0')
   }
@@ -263,7 +296,8 @@ export async function createCruiseItineraryServices(
   // previously priced at €0 because this module skipped the activity_rates
   // fallback that the land path uses. Mirror it here so cruise quotes don't
   // systematically under-charge for activity-priced items.
-  const { data: activityRates } = await supabase.from('activity_rates').select('*').eq('org_id', orgId ?? NO_ORG).eq('is_active', true)
+  const { data: rawActivityRates } = await supabase.from('activity_rates').select('*').eq('org_id', orgId ?? NO_ORG).eq('is_active', true)
+  const activityRates = rawActivityRates ? await cruiseNormalizer.normalize('activity_rates', rawActivityRates) : rawActivityRates
 
   // 5. Water rate
   const fixedCosts = await getFixedDailyCosts(orgId, cruiseNormalizer)
@@ -344,6 +378,7 @@ export async function createCruiseItineraryServices(
         supplier_id: cruiseRate.supplierId,
         quantity: totalPax,
         rate_eur: cruiseRate.totalPerNight / totalPax,
+        __paidFrom: [{ rate_currency: cruiseRate.rate_currency ?? null }],
         rate_non_eur: cruiseRate.totalPerNight / totalPax,
         total_cost: toTarget(nightCost),
         client_price: toTarget(withMargin(nightCost)),
@@ -394,6 +429,7 @@ export async function createCruiseItineraryServices(
         supplier_id: guideResult.guideSupplierId,
         quantity: 1,
         rate_eur: guideResult.guidePerDay,
+        __paidFrom: [{ rate_currency: guideResult.guideRateCurrency ?? null }],
         rate_non_eur: guideResult.guidePerDay,
         total_cost: toTarget(guideResult.guidePerDay),
         client_price: toTarget(withMargin(guideResult.guidePerDay)),
@@ -448,6 +484,8 @@ export async function createCruiseItineraryServices(
     if (dayData.attractions?.length > 0) {
       let dayEntranceTotal = 0
       const matchedAttractions: string[] = []
+      // The rates charged on this line: it is paid in one currency only when they all are.
+      const entranceSources: Array<{ rate_currency?: string | null }> = []
       // G2.2: attribute the entrance row to the antiquities authority
       // (entrance_fees.supplier_id); null if only activity-rate fallbacks matched.
       let entranceSupplierId: string | null = null
@@ -486,6 +524,7 @@ export async function createCruiseItineraryServices(
           const feePerPerson = isEuroPassport ? toNumber(fee.eur_rate, 0) : toNumber(fee.non_eur_rate, fee.eur_rate || 0)
           dayEntranceTotal += feePerPerson * totalPax
           matchedAttractions.push(fee.attraction_name)
+          entranceSources.push(fee)
           if (fee.supplier_id && !entranceSupplierId) entranceSupplierId = fee.supplier_id
           continue
         }
@@ -504,6 +543,7 @@ export async function createCruiseItineraryServices(
             : toNumber(activityMatch.base_rate_non_eur || activityMatch.non_eur_rate, activityMatch.base_rate_eur || activityMatch.eur_rate || 0)
           dayEntranceTotal += activityRate * totalPax
           matchedAttractions.push(activityMatch.activity_name || attractionName)
+          entranceSources.push(activityMatch)
         } else {
           warnings.push(`Day ${dayData.day_number}: No entrance fee or activity rate found for "${attractionName}"`)
         }
@@ -518,6 +558,7 @@ export async function createCruiseItineraryServices(
           supplier_id: entranceSupplierId,
           quantity: totalPax,
           rate_eur: dayEntranceTotal / totalPax,
+          __paidFrom: entranceSources,
           rate_non_eur: dayEntranceTotal / totalPax,
           total_cost: toTarget(dayEntranceTotal),
           client_price: toTarget(withMargin(dayEntranceTotal)),

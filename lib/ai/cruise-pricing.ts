@@ -23,6 +23,8 @@ export interface CruiseRate {
   totalPerNight: number       // supplier cost for all cabins per night
   totalSupplierCost: number   // totalPerNight × nights
   nights: number
+  /** The currency the ship's rates were entered in (null = the rate currency) — lib/paid-currency. */
+  rate_currency?: string | null
 }
 
 /**
@@ -273,7 +275,8 @@ export async function getCruiseRate(
       cabinAllocation: bestAllocation,
       totalPerNight,
       totalSupplierCost: totalPerNight * nights,
-      nights
+      nights,
+      rate_currency: ship.rate_currency ?? null,
     }
 
   } catch (err) {
