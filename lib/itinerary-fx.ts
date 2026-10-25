@@ -18,6 +18,7 @@
 //   - re-pricing recomputes each line from its preserved original
 //     (supplier_cost_original × new rate) — the originals are never touched.
 
+import { paidRateAfterReprice } from '@/lib/paid-currency'
 import { fetchExchangeRates, getExchangeRate, type ExchangeRates } from '@/lib/currency-service'
 import { roundToCurrency } from '@/lib/currency-totals'
 
@@ -69,6 +70,8 @@ export interface RepriceLineInput {
   supplier_cost_original: number | string | null
   exchange_rate_used: number | string | null
   total_cost: number | string | null
+  paid_currency?: string | null
+  paid_rate?: number | string | null
 }
 
 export interface RepriceLineChange {
@@ -77,6 +80,9 @@ export interface RepriceLineChange {
   new_rate: number
   old_total: number
   new_total: number
+  /** The line's paid_rate under the new total (lib/paid-currency), so what
+   *  the supplier is paid stays put; null when the line carries none. */
+  new_paid_rate: number | null
 }
 
 export interface RepriceResult {
@@ -137,6 +143,7 @@ export function computeFxReprice(
         new_rate: rate,
         old_total: oldTotal,
         new_total: newTotal,
+        new_paid_rate: paidRateAfterReprice(line, oldTotal, newTotal),
       })
     }
   }

@@ -20,8 +20,15 @@
 // booking's supplier rows (lib/bookings/supplier-lines), so a voucher and the
 // expense for the same supplier agree. The SQL backfill in
 // migrations/20270101_booking_supplier_currency.sql applies the same rule.
+//
+// A line priced from a rate entered in another currency (an EGP guide) also
+// says what its supplier is PAID in (paid_currency, lib/paid-currency). When
+// every line of the group does, in one currency that is not the trip's, that
+// is the money — before any of the above.
 
-export interface OwnCurrencyLine {
+import { paidMoney, roundPaid, type PaidLine } from '@/lib/paid-currency'
+
+export interface OwnCurrencyLine extends PaidLine {
   total_cost?: number | string | null
   supplier_currency?: string | null
   supplier_cost_original?: number | string | null
@@ -56,13 +63,21 @@ export function ownCost(s: OwnCurrencyLine): number | null {
 
 /**
  * The money for a group of one supplier's lines: `own` is true when it is in
- * the supplier's own currency (one foreign currency, every line's rate known).
+ * the supplier's own currency — the one it is paid in, else the one its
+ * lines were converted from (one foreign currency, every line's rate known).
  */
 export function supplierOwnMoney(
   services: OwnCurrencyLine[],
   tripCurrency: string,
 ): { currency: string; total: number; lineAmounts: number[]; own: boolean } {
   const trip = String(tripCurrency || '').trim().toUpperCase()
+  const paid = services.map(paidMoney)
+  const paidCurrencies = new Set(paid.map(p => p?.currency))
+  const [paidIn] = [...paidCurrencies]
+  if (services.length > 0 && paid.every(Boolean) && paidCurrencies.size === 1 && paidIn && paidIn !== trip) {
+    const lineAmounts = paid.map(p => p!.amount)
+    return { currency: paidIn, total: roundPaid(lineAmounts.reduce((a, b) => a + b, 0), paidIn), lineAmounts, own: true }
+  }
   const currencies = new Set(services.map(s => String(s.supplier_currency ?? '').trim().toUpperCase()))
   const [only] = [...currencies]
   const own = services.length > 0

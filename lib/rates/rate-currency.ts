@@ -101,6 +101,14 @@ export interface RateNormalizer {
   normalize<T extends Record<string, unknown>>(table: RateCurrencyTable, rows: T[] | null | undefined): Promise<T[] | null | undefined>
   /** Every row neutralised because no FX rate could back its conversion. */
   readonly misses: RateCurrencyMiss[]
+  /**
+   * 1 unit of `currency` in the run currency — the factor normalize() used
+   * for a row entered in it (the same rates, fetched once). 1 for the run
+   * currency; null when unknown or unconvertible. A converted row keeps its
+   * rate_currency, so a line priced from it can say what the supplier is
+   * paid in (lib/paid-currency.ts).
+   */
+  fxFor(currency: unknown): Promise<number | null>
 }
 
 /**
@@ -216,6 +224,14 @@ export function createRateNormalizer(runCurrency: string, deps?: {
 
   return {
     misses,
+    async fxFor(currency) {
+      const cur = normaliseRateCurrency(currency)
+      if (cur === null) return null
+      if (cur === run) return 1
+      const rates = await loadRates()
+      const factor = rates ? getExchangeRate(cur, run, rates) : null
+      return factor && Number.isFinite(factor) && factor > 0 ? factor : null
+    },
     async normalize(table, rows) {
       if (!rows || rows.length === 0) return rows
       // Fast path: nothing to convert → the very same array back.

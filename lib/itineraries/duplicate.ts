@@ -49,6 +49,7 @@ export const SERVICE_COPY_COLUMNS = [
   'supplier_name', 'notes', 'client_price', 'supplier_id', 'is_preferred_supplier', 'commission_rate',
   'commission_amount', 'vehicle_type', 'pickup_location', 'dropoff_location', 'pickup_time',
   'supplier_currency', 'supplier_cost_original', 'exchange_rate_used', 'sold_by_supplier_id',
+  'paid_currency', 'paid_amount', 'paid_rate',
 ] as const
 
 /** The trip's text in each language. The staff notes go with the staff. */

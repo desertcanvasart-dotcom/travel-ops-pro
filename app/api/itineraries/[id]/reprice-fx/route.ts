@@ -70,7 +70,7 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
 
     const linesQuery = await supabaseAdmin
       .from('itinerary_services')
-      .select('id, supplier_currency, supplier_cost_original, exchange_rate_used, total_cost')
+      .select('id, supplier_currency, supplier_cost_original, exchange_rate_used, total_cost, paid_currency, paid_rate')
       .in('itinerary_day_id', dayIds.length ? dayIds : ['00000000-0000-0000-0000-000000000000'])
     const lines = linesQuery.data
 
@@ -82,7 +82,12 @@ export async function POST(request: NextRequest, { params }: { params: Promise<{
     for (const change of result.changes) {
       const { error: lineError } = await supabaseAdmin
         .from('itinerary_services')
-        .update({ exchange_rate_used: change.new_rate, total_cost: change.new_total })
+        .update({
+          exchange_rate_used: change.new_rate,
+          total_cost: change.new_total,
+          // What the supplier is paid stays what it charges (lib/paid-currency).
+          ...(change.new_paid_rate !== null ? { paid_rate: change.new_paid_rate } : {}),
+        })
         .eq('id', change.id)
         .in('itinerary_day_id', dayIds)
       if (lineError) {

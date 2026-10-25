@@ -51,6 +51,10 @@ export interface PlanService {
   supplier_cost_original?: number | string | null
   /** The rate total_cost was converted at (supplier currency → trip currency). */
   exchange_rate_used?: number | string | null
+  /** What the supplier is paid in when its rate was entered in another currency (lib/paid-currency). */
+  paid_currency?: string | null
+  paid_amount?: number | string | null
+  paid_rate?: number | string | null
   supplier_id?: string | null
   supplier_name?: string | null
   city?: string | null
@@ -99,6 +103,9 @@ export interface PlannedService {
   supplier_currency?: string | null
   supplier_cost_original?: number | string | null
   exchange_rate_used?: number | string | null
+  paid_currency?: string | null
+  paid_amount?: number | string | null
+  paid_rate?: number | string | null
 }
 
 export interface PlannedDocument {
@@ -269,6 +276,9 @@ export function planDocuments(input: {
           supplier_currency: raw.supplier_currency ?? null,
           supplier_cost_original: raw.supplier_cost_original ?? null,
           exchange_rate_used: raw.exchange_rate_used ?? null,
+          paid_currency: raw.paid_currency ?? null,
+          paid_amount: raw.paid_amount ?? null,
+          paid_rate: raw.paid_rate ?? null,
         },
       })
     }
@@ -456,7 +466,7 @@ export function staleDocuments(
  * with a booking's supplier rows so the voucher and the expense agree.
  */
 export function voucherMoney(
-  services: Array<Pick<PlannedService, 'total_cost' | 'supplier_currency' | 'supplier_cost_original' | 'exchange_rate_used'>>,
+  services: Array<Pick<PlannedService, 'total_cost' | 'supplier_currency' | 'supplier_cost_original' | 'exchange_rate_used'> & Partial<Pick<PlannedService, 'paid_currency' | 'paid_amount' | 'paid_rate'>>>,
   tripCurrency: string
 ): { currency: string; total: number; lineAmounts: number[] } {
   const { currency, total, lineAmounts } = supplierOwnMoney(services, tripCurrency)
