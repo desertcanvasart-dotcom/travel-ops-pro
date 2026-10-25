@@ -61,6 +61,7 @@ import { withReturnTo } from '@/lib/nav/return-to'
 import { useRole } from '@/hooks/useRole'
 import { vatOnLiveNet } from '@/lib/vat'
 import { VatToken } from '@/app/components/Vat'
+import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 
 type TabType = 'overview' | 'suppliers' | 'payments' | 'passengers' | 'notes'
 
@@ -134,7 +135,9 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
     supplier_name: '',
     service_description: '',
     service_date: '',
-    quoted_cost: ''
+    quoted_cost: '',
+    // '' = the booking's currency
+    cost_currency: ''
   })
 
   useEffect(() => {
@@ -319,7 +322,8 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           supplier_name: supplierForm.supplier_name,
           service_description: supplierForm.service_description || null,
           service_date: supplierForm.service_date || null,
-          quoted_cost: supplierForm.quoted_cost ? parseFloat(supplierForm.quoted_cost) : null
+          quoted_cost: supplierForm.quoted_cost ? parseFloat(supplierForm.quoted_cost) : null,
+          cost_currency: supplierForm.cost_currency || null
         })
       })
 
@@ -331,7 +335,8 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
           supplier_name: '',
           service_description: '',
           service_date: '',
-          quoted_cost: ''
+          quoted_cost: '',
+          cost_currency: ''
         })
         fetchBooking()
       }
@@ -1126,15 +1131,33 @@ export default function BookingDetailPage({ params }: { params: Promise<{ id: st
                   />
                 </div>
                 <div>
-                  {/* A row added by hand is in the booking's currency (cost_currency null). */}
-                  <label className="block text-sm font-medium text-gray-700 mb-1">{t('fields.quotedCost')} ({booking.currency || 'EUR'})</label>
-                  <input
-                    type="number"
-                    value={supplierForm.quoted_cost}
-                    onChange={(e) => setSupplierForm({ ...supplierForm, quoted_cost: e.target.value })}
-                    placeholder="0.00"
-                    className="w-full border rounded-lg px-3 py-2"
-                  />
+                  {/* A row added by hand is in the currency the supplier is paid in
+                      (EGP for a guide, USD for a cruise); its expense follows it.
+                      The booking's currency is stored as null. */}
+                  <label htmlFor="supplier_quoted_cost" className="block text-sm font-medium text-gray-700 mb-1">{t('fields.quotedCost')}</label>
+                  <div className="flex gap-2">
+                    <select
+                      aria-label="Currency the supplier is paid in"
+                      value={supplierForm.cost_currency || (booking.currency || 'EUR').toUpperCase()}
+                      onChange={(e) => setSupplierForm({
+                        ...supplierForm,
+                        cost_currency: e.target.value === (booking.currency || 'EUR').toUpperCase() ? '' : e.target.value,
+                      })}
+                      className="border rounded-lg px-2 py-2 text-sm"
+                    >
+                      {[...new Set([(booking.currency || 'EUR').toUpperCase(), ...RATE_CURRENCIES])].map(code => (
+                        <option key={code} value={code}>{code}</option>
+                      ))}
+                    </select>
+                    <input
+                      id="supplier_quoted_cost"
+                      type="number"
+                      value={supplierForm.quoted_cost}
+                      onChange={(e) => setSupplierForm({ ...supplierForm, quoted_cost: e.target.value })}
+                      placeholder="0.00"
+                      className="min-w-0 flex-1 border rounded-lg px-3 py-2"
+                    />
+                  </div>
                 </div>
               </div>
             </div>

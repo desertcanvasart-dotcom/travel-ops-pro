@@ -9,6 +9,7 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { syncSupplierExpense } from '@/lib/bookings/supplier-expense'
 import { recordsInOrg } from '@/lib/org-refs'
 import { supplierBacking } from '@/lib/bookings/supplier-backing'
+import { normaliseRateCurrency } from '@/lib/org-rate-currency'
 
 const SUPPLIER_STATUSES = ['pending', 'requested', 'confirmed', 'waitlist', 'rejected', 'cancelled']
 
@@ -93,7 +94,7 @@ export async function POST(
     // could insert a supplier row against another org's booking_id.
     const { data: parentBooking } = await supabaseAdmin
       .from('bookings')
-      .select('id')
+      .select('id, currency')
       .eq('id', id)
       .eq('org_id', orgId)
       .maybeSingle()
@@ -171,6 +172,19 @@ export async function POST(
       return NextResponse.json({ success: false, error: 'Supplier not found' }, { status: 404 })
     }
 
+    // A row added by hand may be in the supplier's own currency (EGP for a
+    // guide, USD for a cruise): its expense is then recorded in it
+    // (lib/bookings/supplier-expense). The booking's own currency, or none,
+    // stores null — "the booking's".
+    let costCurrency: string | null = null
+    if (body.cost_currency !== undefined && body.cost_currency !== null && body.cost_currency !== '') {
+      const code = normaliseRateCurrency(body.cost_currency)
+      if (!code) {
+        return NextResponse.json({ success: false, error: 'cost_currency must be one of USD, EUR, GBP, EGP, JPY' }, { status: 400 })
+      }
+      if (code !== String(parentBooking.currency || '').trim().toUpperCase()) costCurrency = code
+    }
+
     const { data: supplier, error } = await supabaseAdmin
       .from('booking_supplier_status')
       .insert({
@@ -184,6 +198,7 @@ export async function POST(
         contact_email: body.contact_email || null,
         contact_phone: body.contact_phone || null,
         quoted_cost: body.quoted_cost || null,
+        cost_currency: costCurrency,
         status: 'pending'
       })
       .select()

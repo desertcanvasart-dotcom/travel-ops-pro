@@ -87,9 +87,11 @@ export default function BookingsPage() {
             <strong>Sync from Itinerary</strong> adds new ones. Each row&apos;s cost is in the{' '}
             <strong>supplier&apos;s own currency</strong> when its services were priced in it (EGP for a guide, driver or
             entrance tickets, USD for a hotel or Nile cruise, for example): the amount the supplier quoted, shown with its
-            currency code beside the cost box. When the row&apos;s services are in more than one currency, or a service
-            was edited after it was priced so its own-currency amount is out of date, the row is in the trip&apos;s
-            currency at the trip-currency cost instead. A row you add by hand is in the booking&apos;s currency.
+            currency code beside the cost box. A service edited after it was priced stays in the supplier&apos;s
+            currency, at its new cost converted back at the rate it was priced with. When the row&apos;s services are
+            in more than one currency, or a service has no exchange rate recorded, the row is in the trip&apos;s
+            currency at the trip-currency cost instead. When you add a row by hand, pick the currency the supplier is
+            paid in next to the quoted cost; it starts as the booking&apos;s currency.
           </li>
           <li>
             The cost box is the <strong>confirmed cost</strong>; type it in the currency shown. When it differs from the

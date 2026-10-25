@@ -8,10 +8,12 @@
 // "¥45,xxx".
 //
 // supplier_cost_original is written when the line is created and NOT kept in
-// step when the line is edited (2 rooms → 3 changes total_cost only). So a
-// line's own-currency cost is used only while it still agrees with total_cost
-// at the rate it was converted at; a stale amount is never stated. When every
-// line is in one foreign currency and agrees, the money is in that currency;
+// step by every edit (the single-service PUT changes total_cost only). A
+// stale original is never stated: while it still agrees with total_cost at
+// the rate the line was converted at, it is the cost; once an edit has moved
+// total_cost, the cost is total_cost ÷ that same rate — the conversion run
+// backwards, so an edited EGP line stays an EGP line. When every line is in
+// one foreign currency and has a known rate, the money is in that currency;
 // otherwise it stays in the trip's, at total_cost.
 //
 // Used by vouchers (lib/documents/plan-documents voucherMoney) and by a
@@ -42,9 +44,19 @@ export function ownCostIsCurrent(s: OwnCurrencyLine): boolean {
   return Math.abs(original * rate - total) <= Math.max(0.01, Math.abs(total) * 0.005)
 }
 
+/** The line's cost in its supplier currency: the stored original while it is
+ *  current, else total_cost at the line's own rate; null with no rate. */
+export function ownCost(s: OwnCurrencyLine): number | null {
+  if (ownCostIsCurrent(s)) return num(s.supplier_cost_original)
+  const rate = num(s.exchange_rate_used)
+  const total = num(s.total_cost)
+  if (rate === null || rate <= 0 || total === null) return null
+  return Math.round((total / rate) * 100) / 100
+}
+
 /**
  * The money for a group of one supplier's lines: `own` is true when it is in
- * the supplier's own currency (every line agrees, one foreign currency).
+ * the supplier's own currency (one foreign currency, every line's rate known).
  */
 export function supplierOwnMoney(
   services: OwnCurrencyLine[],
@@ -57,8 +69,8 @@ export function supplierOwnMoney(
     && currencies.size === 1
     && !!only
     && only !== trip
-    && services.every(ownCostIsCurrent)
-  const lineAmounts = services.map(s => (own ? num(s.supplier_cost_original) : num(s.total_cost)) ?? 0)
+    && services.every(s => ownCost(s) !== null)
+  const lineAmounts = services.map(s => (own ? ownCost(s) : num(s.total_cost)) ?? 0)
   const total = Math.round(lineAmounts.reduce((a, b) => a + b, 0) * 100) / 100
   return { currency: own ? only : tripCurrency, total, lineAmounts, own }
 }
