@@ -2,7 +2,7 @@ import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { NextRequest, NextResponse } from 'next/server'
 import { getTieredActivityRate, applyActivityTiers } from '@/lib/rates/activity-tiers'
-import { createRateNormalizer } from '@/lib/rates/rate-currency'
+import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
 import { makeDayTourVehicleFinder } from '@/lib/rates/day-tour-vehicle'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { loadSeasonWindows } from '@/lib/auto-pricing-service'
@@ -84,19 +84,21 @@ async function selectGuideFromB2CTable(orgId: string | null, language: string = 
   }
 }
 
-// This company's entrance fee.
-async function getEntranceFee(orgId: string, attractionName: string, isEurPassport: boolean): Promise<{ rate: number; name: string; id: string } | null> {
-  const { data: fees, error } = await supabaseAdmin
+// This company's entrance fee, in the rate currency the quote is built in
+// (an EGP 500 fee was priced as 500 of it).
+async function getEntranceFee(orgId: string, attractionName: string, isEurPassport: boolean, normalizer: RateNormalizer): Promise<{ rate: number; name: string; id: string; rate_currency: string | null } | null> {
+  const { data: rawFees, error } = await supabaseAdmin
     .from('entrance_fees')
-    .select('id, attraction_name, eur_rate, non_eur_rate')
+    .select('id, attraction_name, eur_rate, non_eur_rate, rate_currency')
     .eq('org_id', orgId)
     .eq('is_active', true)
     .ilike('attraction_name', `%${attractionName}%`)
     .limit(1)
 
-  if (error || !fees || fees.length === 0) return null
-
-  const fee = fees[0]
+  if (error || !rawFees || rawFees.length === 0) return null
+  const fees = await normalizer.normalize('entrance_fees', rawFees)
+  const fee = fees?.[0]
+  if (!fee) return null
   const rate = isEurPassport
     ? usableRate(fee.eur_rate)
     : usableRate(fee.non_eur_rate) ?? usableRate(fee.eur_rate)
@@ -105,7 +107,8 @@ async function getEntranceFee(orgId: string, attractionName: string, isEurPasspo
   return {
     rate,
     name: fee.attraction_name,
-    id: fee.id
+    id: fee.id,
+    rate_currency: fee.rate_currency ?? null,
   }
 }
 
@@ -396,7 +399,7 @@ export async function POST(request: NextRequest) {
             rateSource = 'activity_tiers'
           } else {
             // Try entrance_fees table
-            const fee = await getEntranceFee(orgId, serviceName, is_eur_passport)
+            const fee = await getEntranceFee(orgId, serviceName, is_eur_passport, activityNormalizer)
             if (fee) {
               unitCost = fee.rate
               lineTotal = fee.rate * numPax

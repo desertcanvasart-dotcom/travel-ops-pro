@@ -29,7 +29,7 @@ import { priceByBasis, toPricingBasis, unitsFor, type PricingBasis } from '@/lib
 import { createClient } from '@supabase/supabase-js'
 import { PACKAGE_TYPE_CONFIGS } from '@/lib/package-types'
 import { roundToCurrency } from '@/lib/currency-totals'
-import { DEFAULT_RATE_CURRENCY } from '@/lib/org-rate-currency'
+import { DEFAULT_RATE_CURRENCY, normaliseRateCurrency } from '@/lib/org-rate-currency'
 import {
   seasonForDate,
   type SeasonMatch,
@@ -292,6 +292,10 @@ export interface PaxPricingResult {
   }
 }
 
+/** The currency a rate row was entered in, from a row typed loosely. */
+const rowCurrency = (row: unknown): string | null =>
+  (row as { rate_currency?: string | null } | null | undefined)?.rate_currency ?? null
+
 // Service line item
 export interface PricedService {
   id: string
@@ -319,6 +323,12 @@ export interface PricedService {
    *  service row as supplier_name so the itinerary, PDF and share page can
    *  name the overnight (lib/itineraries/overnight-property). */
   propertyName?: string
+  /** The currency the rate(s) behind this line were entered in (an EGP
+   *  guide), null = the rate currency; and 1 unit of it in the rate currency,
+   *  the factor it was converted with — so the trip's line can say what the
+   *  supplier is paid in (lib/paid-currency). Never priced. */
+  enteredCurrency?: string | null
+  enteredFx?: number | null
 }
 
 // Complete pricing result
@@ -377,6 +387,8 @@ interface TransportRate {
   /** The vehicles list (20261005) — every vehicle the row prices, read
    *  through lib/rates/vehicle-bands.ts. */
   vehicles?: unknown
+  /** The currency the row was entered in (null = the rate currency). */
+  rate_currency?: string | null
 }
 
 // Cruise transport pricing rule from b2b_pricing_rules
@@ -427,6 +439,8 @@ export interface CruisePackageInfo {
   includes: string | null
   /** The sailing this package is for. */
   sailing?: Sailing
+  /** The currency the package was entered in (null = the rate currency). */
+  rate_currency?: string | null
 }
 
 // ============================================
@@ -2113,7 +2127,7 @@ export async function getGuideRate(
     /** Rows already fetched (fetchGuideRows) — one query for a whole trip. */
     rows?: Record<string, any>[]
   }
-): Promise<{ id: string; name: string; dailyRate: number } | null> {
+): Promise<{ id: string; name: string; dailyRate: number; rate_currency?: string | null } | null> {
   const grade = opts?.grade ?? 'egyptologist'
   const duration = opts?.duration ?? 'full_day'
   // A rate is for spot or throughout guiding (guide_rates.guide_mode, 20261018);
@@ -2146,7 +2160,8 @@ export async function getGuideRate(
         return {
           id: guideRate.id,
           name: `${guideLanguageWord(language)} Speaking Guide`,
-          dailyRate
+          dailyRate,
+          rate_currency: guideRate.rate_currency ?? null,
         }
       }
     }
@@ -2709,6 +2724,7 @@ export function cruisePackagesFor(
       vehicleType: priced.vehicleType,
       includes: pkg.includes || pkg.notes || null,
       sailing,
+      rate_currency: (pkg as { rate_currency?: string | null }).rate_currency ?? null,
     }
   })
 }
@@ -3020,12 +3036,12 @@ export async function calculateDayBasedPricing(
   const resolveAirportServiceRate = (
     airportCode: string,
     direction: 'arrival' | 'departure'
-  ): { rate: number | null; rowExists: boolean; basis: PricingBasis; capacity: number | null } => {
+  ): { rate: number | null; rowExists: boolean; basis: PricingBasis; capacity: number | null; rate_currency?: string | null } => {
     // By service type for the tier, then a fixed order (lib/pricing/airport-service-pick):
     // the first row in fetch order could be the VIP row on a standard trip.
     const row: any = pickAirportServiceRow(airportStaffRows as any[], airportCode, direction, getTierCategory(tier))
     if (!row) return { rate: null, rowExists: false, basis: 'flat', capacity: null }
-    return { rate: usableRate(row.rate_eur), rowExists: true, ...basisOf(row) }
+    return { rate: usableRate(row.rate_eur), rowExists: true, ...basisOf(row), rate_currency: row.rate_currency ?? null }
   }
   // Hotel assistance is modelled in the rate table as ONE full-service row
   // per category (an assistant who handles both ends of the stay), but the
@@ -3046,17 +3062,17 @@ export async function calculateDayBasedPricing(
   const resolveHotelServiceRate = (
     serviceType: 'checkin_assist' | 'checkout_assist' | 'porter' | 'full_service',
     city?: string | null
-  ): { rate: number | null; rowExists: boolean; via: 'dedicated' | 'porter' | 'full_service'; basis: PricingBasis; capacity: number | null } => {
+  ): { rate: number | null; rowExists: boolean; via: 'dedicated' | 'porter' | 'full_service'; basis: PricingBasis; capacity: number | null; rate_currency?: string | null } => {
     const matches = (type: string): any => pickHotelServiceRow(hotelStaffRows as any[], type, hotelServiceCats, city)
     const dedicated = matches(serviceType)
-    if (dedicated) return { rate: usableRate(dedicated.rate_eur), rowExists: true, via: 'dedicated', ...basisOf(dedicated) }
+    if (dedicated) return { rate: usableRate(dedicated.rate_eur), rowExists: true, via: 'dedicated', ...basisOf(dedicated), rate_currency: dedicated.rate_currency ?? null }
     if (serviceType === 'checkout_assist') {
       const porter = matches('porter')
-      if (porter) return { rate: usableRate(porter.rate_eur), rowExists: true, via: 'porter', ...basisOf(porter) }
+      if (porter) return { rate: usableRate(porter.rate_eur), rowExists: true, via: 'porter', ...basisOf(porter), rate_currency: porter.rate_currency ?? null }
     }
     if (serviceType !== 'full_service') {
       const full = matches('full_service')
-      if (full) return { rate: usableRate(full.rate_eur), rowExists: true, via: 'full_service', ...basisOf(full) }
+      if (full) return { rate: usableRate(full.rate_eur), rowExists: true, via: 'full_service', ...basisOf(full), rate_currency: full.rate_currency ?? null }
     }
     return { rate: null, rowExists: false, via: 'dedicated', basis: 'flat', capacity: null }
   }
@@ -3081,16 +3097,16 @@ export async function calculateDayBasedPricing(
     : null
 
   /** One day's guide rate: that day's city and date, the duration it asks. */
-  const dayGuideRate = async (day: ItineraryDay, duration: GuideAskDuration): Promise<{ id: string; name: string; dailyRate: number } | null> => {
+  const dayGuideRate = async (day: ItineraryDay, duration: GuideAskDuration): Promise<{ id: string; name: string; dailyRate: number; rate_currency?: string | null } | null> => {
     const raw = pickGuideRate(guideRows, { language, grade: guideGrade, duration, mode: guideMode, city: day.city, date: priceDateFor(day.day) })
     if (!raw) return null
     const row = (await rateNormalizer.normalize('guide_rates', [raw]))?.[0] as Record<string, any> | undefined
     const dailyRate = Number(row?.base_rate_eur || row?.rate_eur) || 0
-    return row && dailyRate > 0 ? { id: row.id, name: `${guideLanguageWord(language)} Speaking Guide`, dailyRate } : null
+    return row && dailyRate > 0 ? { id: row.id, name: `${guideLanguageWord(language)} Speaking Guide`, dailyRate, rate_currency: row.rate_currency ?? null } : null
   }
   /** A guiding day's rate: the half-day rate when the trip marks the day half
    *  (isHalfDayGuiding) and one exists, else the full day — and say so. */
-  const sightseeingGuideRate = async (day: ItineraryDay): Promise<{ rate: { id: string; name: string; dailyRate: number } | null; note?: string }> => {
+  const sightseeingGuideRate = async (day: ItineraryDay): Promise<{ rate: { id: string; name: string; dailyRate: number; rate_currency?: string | null } | null; note?: string }> => {
     if (isHalfDayGuiding(day, tourType)) {
       const half = await dayGuideRate(day, 'half_day')
       if (half) return { rate: half, note: 'Half day' }
@@ -3236,6 +3252,7 @@ export async function calculateDayBasedPricing(
           unitCost: todaysGuide.dailyRate,
           lineTotal: todaysGuide.dailyRate,
           rateSource: 'guides',
+          enteredCurrency: todaysGuide.rate_currency ?? null,
           isPerPax: false,
           isOptional: false,
           ...(sightseeingGuide.note ? { notes: sightseeingGuide.note } : {}),
@@ -3252,6 +3269,7 @@ export async function calculateDayBasedPricing(
           unitCost: meetGreetToday.dailyRate,
           lineTotal: meetGreetToday.dailyRate,
           rateSource: 'guides',
+          enteredCurrency: meetGreetToday.rate_currency ?? null,
           isPerPax: false,
           isOptional: false
         })
@@ -3274,6 +3292,7 @@ export async function calculateDayBasedPricing(
         unitCost: todaysGuide.dailyRate,
         lineTotal: todaysGuide.dailyRate,
         rateSource: 'guides',
+        enteredCurrency: todaysGuide.rate_currency ?? null,
         isPerPax: false,
         isOptional: false,
         ...(sightseeingGuide.note ? { notes: sightseeingGuide.note } : {}),
@@ -3363,6 +3382,7 @@ export async function calculateDayBasedPricing(
           id, dayNumber: day.day, serviceType: 'airport_service', serviceName: name(code),
           ...priced,
           rateSource: 'airport_staff_rates', isOptional: false,
+          enteredCurrency: found.rate_currency ?? null,
         })
       } else {
         listUnpriced({ id, dayNumber: day.day, serviceType: 'airport_service', serviceName: name(code), isPerPax: false }, {
@@ -3408,6 +3428,7 @@ export async function calculateDayBasedPricing(
           serviceName: `Airport Meet & Greet (${airportCode})`,
           ...priced,
           rateSource: 'airport_staff_rates',
+          enteredCurrency: found.rate_currency ?? null,
           isOptional: false
         })
       } else {
@@ -3437,6 +3458,7 @@ export async function calculateDayBasedPricing(
           serviceName: `Airport Departure Assist (${airportCode})`,
           ...priced,
           rateSource: 'airport_staff_rates',
+          enteredCurrency: found.rate_currency ?? null,
           isOptional: false
         })
       } else {
@@ -3475,6 +3497,7 @@ export async function calculateDayBasedPricing(
           serviceName: found.via === 'full_service' ? 'Hotel Assistance — check-in (full service)' : 'Hotel Check-in Assistance',
           ...priced,
           rateSource: 'hotel_staff_rates',
+          enteredCurrency: found.rate_currency ?? null,
           isOptional: false
         })
       } else {
@@ -3507,6 +3530,7 @@ export async function calculateDayBasedPricing(
             : 'Hotel Check-out Assistance',
           ...priced,
           rateSource: 'hotel_staff_rates',
+          enteredCurrency: found.rate_currency ?? null,
           isOptional: false
         })
       } else {
@@ -3539,6 +3563,7 @@ export async function calculateDayBasedPricing(
           ...line,
           ...priced,
           rateSource: 'hotel_staff_rates',
+          enteredCurrency: found.rate_currency ?? null,
           isOptional: false,
           notes: event === 'embark' ? 'Priced at the hotel check-in assistance rate' : 'Priced at the hotel check-out assistance rate',
         })
@@ -3602,6 +3627,7 @@ export async function calculateDayBasedPricing(
           unitCost: nightly.ppdNight,
           lineTotal: nightly.ppdNight,
           rateSource: 'accommodation_rates',
+          enteredCurrency: rowCurrency(hotelRate.row),
           isPerPax: true,
           isOptional: false,
           // Where the number came from, so the operator can check it against
@@ -3653,6 +3679,7 @@ export async function calculateDayBasedPricing(
             unitCost: supp.night,
             lineTotal: supp.night,
             rateSource: 'accommodation_rates',
+            enteredCurrency: rowCurrency(hotelRate.row),
             isPerPax: true,
             isOptional: false,
             notes: nightly.seasonName ? `Per person per night — ${nightly.seasonName}` : 'Per person per night'
@@ -3687,6 +3714,7 @@ export async function calculateDayBasedPricing(
             unitCost: guideBed,
             lineTotal: guideBed,
             rateSource: 'accommodation_rates',
+            enteredCurrency: rowCurrency(hotelRate.row),
             isPerPax: false,
             isOptional: false
           })
@@ -3759,6 +3787,7 @@ export async function calculateDayBasedPricing(
           unitCost: n.ppdNight,
           lineTotal: n.ppdNight,
           rateSource: 'nile_cruises',
+          enteredCurrency: rowCurrency(cruiseRates.row),
           isOptional: false,
           // No currency symbol: the result carries the org's rate currency.
           notes: rateSourceNote({
@@ -3817,6 +3846,7 @@ export async function calculateDayBasedPricing(
           unitCost: total / nightsAsked,
           lineTotal: total,
           rateSource: 'nile_cruises',
+          enteredCurrency: rowCurrency(cruiseRates.row),
           isPerPax: true,
           isOptional: false,
           notes: `Per person per night × ${nightsAsked} nights`
@@ -3853,6 +3883,7 @@ export async function calculateDayBasedPricing(
           unitCost: guideCabinTotal / cruiseNights,
           lineTotal: guideCabinTotal,
           rateSource: 'nile_cruises',
+          enteredCurrency: rowCurrency(cruiseRates.row),
           isPerPax: false,
           isOptional: false
         })
@@ -3984,6 +4015,7 @@ export async function calculateDayBasedPricing(
           serviceName: `${flightLabel(fromAirports[0], toAirports[0])} ${routeLabel} (${pick.row.airline ?? 'economy'})`,
           quantity: 1, quantityMode: 'per_pax', unitCost: fare, lineTotal: fare,
           rateSource: 'flight_rates', isPerPax: true, isOptional: false,
+          enteredCurrency: pick.row.rate_currency ?? null,
           notes: money(pick.row.tax_eur) > 0 ? 'Fare incl. tax, per person' : 'Per person',
         })
         if (guideMode === 'throughout') {
@@ -3998,6 +4030,7 @@ export async function calculateDayBasedPricing(
             serviceName: `Throughout Guide — flight ${routeLabel}`,
             quantity: 1, quantityMode: 'fixed', unitCost: gFare, lineTotal: gFare,
             rateSource: 'flight_rates', isPerPax: false, isOptional: false,
+            enteredCurrency: pick.row.rate_currency ?? null,
             notes: guideFare != null ? 'Guide fare' : 'Customer fare (no guide fare entered)',
           })
         }
@@ -4051,6 +4084,7 @@ export async function calculateDayBasedPricing(
           serviceName: `Train ${routeLabel}${pick.row.class_type ? ` (${pick.row.class_type})` : ''}`,
           quantity: 1, quantityMode: 'per_pax', unitCost: fare, lineTotal: fare,
           rateSource: 'train_rates', isPerPax: true, isOptional: false,
+          enteredCurrency: pick.row.rate_currency ?? null,
           notes: pick.row.operator_name ? `Per person — ${pick.row.operator_name}` : 'Per person',
         })
         if (guideMode === 'throughout') {
@@ -4063,6 +4097,7 @@ export async function calculateDayBasedPricing(
             serviceName: `Throughout Guide — train ${routeLabel}`,
             quantity: 1, quantityMode: 'fixed', unitCost: gFare, lineTotal: gFare,
             rateSource: 'train_rates', isPerPax: false, isOptional: false,
+            enteredCurrency: pick.row.rate_currency ?? null,
             notes: guideFare != null ? 'Guide fare' : 'Customer fare (no guide fare entered)',
           })
         }
@@ -4136,6 +4171,7 @@ export async function calculateDayBasedPricing(
         serviceName: `Sleeping Train ${routeLabel} (Half Twin)`,
         quantity: 1, quantityMode: 'per_pax', unitCost: htFare, lineTotal: htFare,
         rateSource: 'sleeping_train_rates', isPerPax: true, isOptional: false,
+        enteredCurrency: halfTwin.rate_currency ?? null,
         notes: 'Per person sharing — the ticket is the night\'s bed',
       })
       if (!single) warnings.push(`No Single-cabin rate for the sleeping train ${routeLabel} — solo supplement (and the guide's cabin) priced from Half Twin.`)
@@ -4148,6 +4184,7 @@ export async function calculateDayBasedPricing(
           serviceName: `Throughout Guide — sleeping train ${routeLabel} (Single)`,
           quantity: 1, quantityMode: 'fixed', unitCost: gFare, lineTotal: gFare,
           rateSource: 'sleeping_train_rates', isPerPax: false, isOptional: false,
+          enteredCurrency: guideRow.rate_currency ?? null,
           notes: guideRow.guide_rate != null ? 'Guide fare' : 'Customer fare (no guide fare entered)',
         })
       }
@@ -4205,6 +4242,8 @@ export async function calculateDayBasedPricing(
   // To): next year's price takes over on its date, an expired one stops.
   const feeDate = priceDateFor(1)
   const feesOnDate = entranceFeeCache.filter(f => rateValidOn(f, feeDate))
+  // What each fee was entered in, for its line's paid currency (lib/paid-currency).
+  const feeCurrency = new Map(feesOnDate.map(f => [String(f.id), (f as { rate_currency?: string | null }).rate_currency ?? null]))
   const resolved = resolveAttractions(itinerary, feesOnDate, attractionAliases, isEurPassport)
   for (const fee of resolved.tickets) {
     processedAttractions.add(fee.name.toLowerCase())
@@ -4228,6 +4267,7 @@ export async function calculateDayBasedPricing(
       unitCost: fee.rate,
       lineTotal: fee.rate,
       rateSource: 'entrance_fees',
+      enteredCurrency: feeCurrency.get(String(fee.id)) ?? null,
       isPerPax: true,
       isOptional: false,
       notes: isEurPassport ? 'EUR rate' : 'non-EUR rate'
@@ -4293,6 +4333,7 @@ export async function calculateDayBasedPricing(
           unitCost: picked.rate,
           lineTotal: picked.rate,
           rateSource: 'meal_rates',
+          enteredCurrency: picked.row.rate_currency ?? null,
           isOptional: false,
           notes: `${picked.row.restaurant_name ?? 'Restaurant'} — per group`,
         })
@@ -4305,6 +4346,7 @@ export async function calculateDayBasedPricing(
           unitCost: picked.rate,
           lineTotal: picked.rate,
           rateSource: 'meal_rates',
+          enteredCurrency: picked.row.rate_currency ?? null,
           isOptional: false,
           ...(picked.row.restaurant_name ? { notes: String(picked.row.restaurant_name) } : {}),
         })
@@ -4341,6 +4383,7 @@ export async function calculateDayBasedPricing(
           unitCost: rate,
           lineTotal: rate,
           rateSource: 'meal_rates',
+          enteredCurrency: picked.row.rate_currency ?? null,
           isPerPax: false,
           isOptional: false,
           notes: 'Group of 3 or fewer — the guide\'s meal is charged'
@@ -4537,6 +4580,7 @@ export async function calculateDayBasedPricing(
         unitCost: usable,
         lineTotal: usable,
         rateSource: 'transportation_rates',
+        enteredCurrency: rate.rate_currency ?? null,
         isPerPax: false,
         isOptional: false,
         notes: `${needs.serviceType} | ${needs.duration}${needs.area ? ` | ${needs.area}` : ''}`
@@ -4592,6 +4636,7 @@ export async function calculateDayBasedPricing(
           unitCost: info.packageRate,
           lineTotal: info.packageRate,
           rateSource: 'b2b_transport_packages',
+          enteredCurrency: info.rate_currency ?? null,
           isPerPax: false,
           isOptional: false,
           notes: `${info.durationDays}D cruise transport package (${sailing.nights} nights aboard, ${info.vehicleType}) - includes: ${info.includes || 'car, carriage, felucca, motorboat'}`
@@ -4703,6 +4748,21 @@ export async function calculateDayBasedPricing(
   const complete = holes.length === 0
   if (!complete) {
     console.warn(`⚠️ Pricing INCOMPLETE — ${holes.length} hole(s): ${holes.map(h => h.kind).join(', ')}`)
+  }
+
+  // Each line entered in another currency carries the factor it was
+  // converted with, fetched once per currency from the run's normaliser
+  // (lib/paid-currency). A line in the rate currency carries none.
+  const enteredFactors = new Map<string, number | null>()
+  for (const svc of services) {
+    const cur = normaliseRateCurrency(svc.enteredCurrency)
+    if (!cur || cur === normaliseRateCurrency(params.rateCurrency ?? DEFAULT_RATE_CURRENCY)) {
+      delete svc.enteredCurrency
+      continue
+    }
+    if (!enteredFactors.has(cur)) enteredFactors.set(cur, await rateNormalizer.fxFor(cur))
+    svc.enteredCurrency = cur
+    svc.enteredFx = enteredFactors.get(cur) ?? null
   }
 
   return {

@@ -21,7 +21,7 @@ vi.mock('@/lib/auth/current-org', () => ({
   noOrgResponse: () => new Response(JSON.stringify({ error: 'no org' }), { status: 403 }),
 }))
 vi.mock('@/lib/auto-pricing-service', () => ({ loadSeasonWindows: async () => [] }))
-vi.mock('@/lib/org-rate-currency', () => ({ getOrgRateCurrency: async () => 'JPY' }))
+vi.mock('@/lib/org-rate-currency', async (orig) => ({ ...(await orig<typeof import('@/lib/org-rate-currency')>()), getOrgRateCurrency: async () => 'JPY' }))
 vi.mock('@/lib/accounting', () => ({ syncInvoice: async () => undefined }))
 vi.mock('@/lib/org-refs', () => ({ recordsInOrg: async () => true }))
 vi.mock('@/lib/document-numbering', () => ({

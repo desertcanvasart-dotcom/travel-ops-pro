@@ -12,7 +12,7 @@ vi.mock('@/lib/auth/current-org', () => ({
   getCurrentUserId: async () => 'user-1',
   noOrgResponse: () => new Response(JSON.stringify({ error: 'no org' }), { status: 403 }),
 }))
-vi.mock('@/lib/org-rate-currency', () => ({ getOrgRateCurrency: async () => 'USD' }))
+vi.mock('@/lib/org-rate-currency', async (orig) => ({ ...(await orig<typeof import('@/lib/org-rate-currency')>()), getOrgRateCurrency: async () => 'USD' }))
 // Pinned rates: no network in tests (EUR base → USD→JPY = 150).
 const fxRates = { base: 'EUR', date: '2026-10-23', rates: { EUR: 1, USD: 1.1, JPY: 165 } as Record<string, number> }
 vi.mock('@/lib/rates/fx-source', () => ({ fetchRunExchangeRates: async () => fxRates }))

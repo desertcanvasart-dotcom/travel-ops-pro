@@ -81,7 +81,7 @@ vi.mock('@/lib/vocabulary-server', () => ({
   tierLadderForCurrentOrg: vi.fn(async () => ['budget', 'standard', 'deluxe', 'luxury']),
   activeKeysForOrg: vi.fn(async () => []),
 }))
-vi.mock('@/lib/org-rate-currency', () => ({ DEFAULT_RATE_CURRENCY: 'EUR', getOrgRateCurrency: async () => 'EUR' }))
+vi.mock('@/lib/org-rate-currency', async (orig) => ({ ...(await orig<typeof import('@/lib/org-rate-currency')>()), DEFAULT_RATE_CURRENCY: 'EUR', getOrgRateCurrency: async () => 'EUR' }))
 vi.mock('@/lib/auto-pricing-service', async (orig) => {
   const real = await orig<typeof import('@/lib/auto-pricing-service')>()
   // Cost 1000, plus the margin the route hands the engine.

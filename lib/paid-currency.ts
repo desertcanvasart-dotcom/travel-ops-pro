@@ -53,6 +53,22 @@ export function roundPaid(amount: number, currency: string): number {
   return WHOLE_UNITS.has(currency) ? Math.round(amount) : Math.round(amount * 100) / 100
 }
 
+/**
+ * What a quote's services_snapshot line keeps of the rate behind it: the
+ * currency it was entered in and its factor into the rate currency, so the
+ * trip made from the quote can say what the supplier is paid in
+ * (serviceLineForItinerary). Nothing for a rate in the rate currency.
+ */
+export function snapshotPaidFields(
+  enteredCurrency: string | null | undefined,
+  enteredFx: number | null | undefined,
+): { paid_currency?: string; paid_fx?: number } {
+  const cur = normaliseRateCurrency(enteredCurrency)
+  // A factor of 1 is the rate currency itself (RateNormalizer.fxFor).
+  if (!cur || !enteredFx || !Number.isFinite(enteredFx) || enteredFx <= 0 || enteredFx === 1) return {}
+  return { paid_currency: cur, paid_fx: enteredFx }
+}
+
 /** The one currency every source was entered in, when the line needs paid
  *  fields for it (neither the rate nor the trip currency); else null. */
 function paidCurrencyOf(

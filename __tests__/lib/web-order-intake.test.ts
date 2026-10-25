@@ -9,7 +9,7 @@ import { OPTIONAL_TOUR_MAIL, PACKAGE_TOUR_MAIL, REAL_TOUR_MAIL } from '../fixtur
 // The engine is canned here (its own tests price); this proves the intake's
 // decisions.
 
-vi.mock('@/lib/org-rate-currency', () => ({ getOrgRateCurrency: async () => 'USD' }))
+vi.mock('@/lib/org-rate-currency', async (orig) => ({ ...(await orig<typeof import('@/lib/org-rate-currency')>()), getOrgRateCurrency: async () => 'USD' }))
 // Pinned rates: no network in tests (EUR base → USD→JPY = 150).
 const fxRates = { base: 'EUR', date: '2026-10-23', rates: { EUR: 1, USD: 1.1, JPY: 165 } as Record<string, number> }
 vi.mock('@/lib/rates/fx-source', () => ({ fetchRunExchangeRates: async () => fxRates }))

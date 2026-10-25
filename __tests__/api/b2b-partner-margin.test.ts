@@ -27,7 +27,7 @@ vi.mock('@/lib/auth/current-org', () => ({
   getCurrentUserRole: async () => 'agent',
   noOrgResponse: () => new Response(JSON.stringify({ error: 'no org' }), { status: 403 }),
 }))
-vi.mock('@/lib/org-rate-currency', () => ({ getOrgRateCurrency: async () => 'EUR' }))
+vi.mock('@/lib/org-rate-currency', async (orig) => ({ ...(await orig<typeof import('@/lib/org-rate-currency')>()), getOrgRateCurrency: async () => 'EUR' }))
 vi.mock('@/lib/auto-pricing-service', async (orig) => {
   const real = await orig<typeof import('@/lib/auto-pricing-service')>()
   const price = async (p: { marginPercent: number; numPax: number }) => {

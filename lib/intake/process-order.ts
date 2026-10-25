@@ -35,6 +35,7 @@ import { createInitialQuoteRevision } from '@/lib/quotes/initial-revision'
 import { isBookableStatus, seatsFree } from '@/lib/departures/seats'
 import { getExchangeRate } from '@/lib/currency-service'
 import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
+import { snapshotPaidFields } from '@/lib/paid-currency'
 import { WEBSITE_PRICE_CURRENCY, WEBSITE_ORDER_SOURCE, isWebsitePriced, websiteOrderPriceJpy, linesInWebsiteCurrency, websitePricedTotals } from '@/lib/pricing/website-price'
 import { convertTemplateQuote, QUOTE_FOR_CONVERT_SELECT } from '@/lib/b2b/convert-template-quote'
 import { paymentRuleFrom } from '@/lib/payment-schedule'
@@ -230,7 +231,7 @@ export async function processTourUpOrder(
   }
 
   // 3. The quote, lines shaped exactly as the calculator saves them.
-  type QuoteLine = { service_id: string; service_name: string; service_category: string; rate_type: string; rate_source: string | undefined; quantity_mode: string; quantity: number; unit_cost: number; line_total: number; is_optional: boolean; day_number: number | null; pricing_note: string | undefined; unpriced?: boolean; issue?: string }
+  type QuoteLine = { service_id: string; service_name: string; service_category: string; rate_type: string; rate_source: string | undefined; quantity_mode: string; quantity: number; unit_cost: number; line_total: number; is_optional: boolean; day_number: number | null; pricing_note: string | undefined; unpriced?: boolean; issue?: string; paid_currency?: string; paid_fx?: number }
   // Only real services travel into the quote: included meals and unmatched
   // sightseeing notes are breakdown-only (lib/pricing/breakdown-order).
   const lines: QuoteLine[] = priced.services.filter(isBookableLine).map(s => ({
@@ -239,6 +240,8 @@ export async function processTourUpOrder(
     line_total: s.lineTotal, is_optional: s.isOptional, day_number: s.dayNumber, pricing_note: s.notes,
     // The saved record of what could not be priced (lib/pricing/quote-completeness).
     ...(s.unpriced ? { unpriced: true, issue: s.issue } : {}),
+    // What the supplier is paid in, for the trip made from this quote (lib/paid-currency).
+    ...snapshotPaidFields(s.enteredCurrency, s.enteredFx),
   }))
   const rooming = roomingAdjustment(numPax, priced.accommodationNights ?? [])
   if (rooming !== 0) {

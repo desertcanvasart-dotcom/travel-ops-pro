@@ -25,6 +25,8 @@ export interface LinePrice {
   quantityMode: 'per_pax' | 'fixed'
   pricingNote: string
   rateSource: string
+  /** The currency the rate was entered in (null = the rate currency) — lib/paid-currency. */
+  enteredCurrency?: string | null
 }
 
 /** Which meal a line is: the words say dinner, else lunch. */
@@ -50,9 +52,9 @@ export function priceMealLine(
   const total = Math.round(mealCostForGroup(picked, line.numPax) * 100) / 100
   const where = picked.row.restaurant_name ? `${picked.row.restaurant_name}: ` : ''
   if (!picked.perPerson) {
-    return { unitCost: picked.rate, lineTotal: total, quantityMode: 'fixed', pricingNote: `${where}${line.rateSym}${picked.rate} per group`, rateSource: 'meal_rates' }
+    return { unitCost: picked.rate, lineTotal: total, quantityMode: 'fixed', pricingNote: `${where}${line.rateSym}${picked.rate} per group`, rateSource: 'meal_rates', enteredCurrency: picked.row.rate_currency ?? null }
   }
-  return { unitCost: picked.rate, lineTotal: total, quantityMode: 'per_pax', pricingNote: `${where}${line.rateSym}${picked.rate}/pax`, rateSource: 'meal_rates' }
+  return { unitCost: picked.rate, lineTotal: total, quantityMode: 'per_pax', pricingNote: `${where}${line.rateSym}${picked.rate}/pax`, rateSource: 'meal_rates', enteredCurrency: picked.row.rate_currency ?? null }
 }
 
 /**
@@ -77,5 +79,6 @@ export function priceEntranceLine(
     quantityMode: 'per_pax',
     pricingNote: `${fee.attraction_name}: ${line.rateSym}${rate}/pax (${line.isEurPassport ? 'EUR' : 'non-EUR'})`,
     rateSource: 'entrance_fees',
+    enteredCurrency: fee.rate_currency ?? null,
   }
 }

@@ -10,7 +10,7 @@ import { join } from 'node:path'
 vi.mock('@supabase/supabase-js', () => ({ createClient: () => ({}) }))
 vi.mock('@/lib/auth/current-org', () => ({ getCurrentOrgId: async () => 'org-A' }))
 vi.mock('@/lib/org-identity', () => ({ orgIdentity: async () => ({ name: 'Nile Journeys' }) }))
-vi.mock('@/lib/org-rate-currency', () => ({ getOrgRateCurrency: async () => 'EUR' }))
+vi.mock('@/lib/org-rate-currency', async (orig) => ({ ...(await orig<typeof import('@/lib/org-rate-currency')>()), getOrgRateCurrency: async () => 'EUR' }))
 vi.mock('@/lib/pdf-fonts-server', () => ({ getJapaneseFontFace: async () => '' }))
 vi.mock('@/lib/i18n/server-messages', () => ({
   getServerLocale: async () => 'en',
