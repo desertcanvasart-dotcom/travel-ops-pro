@@ -14,7 +14,8 @@ import {
 } from '@/lib/auto-pricing-service'
 import { fetchExchangeRates, convertCurrency, isUsingFallbackRates, getExchangeRate, persistExchangeRate, type ExchangeRates } from '@/lib/currency-service'
 import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
-import { DEFAULT_RATE_CURRENCY } from '@/lib/org-rate-currency'
+import { DEFAULT_RATE_CURRENCY, normaliseRateCurrency } from '@/lib/org-rate-currency'
+import { paidFieldsWith } from '@/lib/paid-currency'
 import { getFixedDailyCosts } from '@/lib/fixed-costs'
 import {
   getItemizedTippingRates,
@@ -179,7 +180,7 @@ function airportServiceLine(
   direction: 'arrival' | 'departure',
   fallbackRate: number,
   pax: number
-): { rate: number; quantity: number; total: number } {
+): { rate: number; quantity: number; total: number; rate_currency: string | null } {
   const found = getAirportServiceRate(allAirportRates, city, direction, fallbackRate)
   const code = CITY_TO_AIRPORT[city.toLowerCase()] || null
   const row = code && allAirportRates?.length
@@ -187,7 +188,9 @@ function airportServiceLine(
       ?? allAirportRates.find((r: any) => r.airport_code === code)
     : null
   const line = priceByBasis(found, toPricingBasis(row?.pricing_type), pax, row?.max_capacity)
-  return { rate: found, quantity: line.quantity, total: line.lineTotal }
+  // The fallback rate is the first row's (getAirportServiceRate).
+  const source = row ?? allAirportRates?.[0] ?? null
+  return { rate: found, quantity: line.quantity, total: line.lineTotal, rate_currency: source?.rate_currency ?? null }
 }
 
 // ============================================
@@ -205,6 +208,7 @@ export interface MealRateRecord {
   service_code?: string
   tier?: string
   is_preferred?: boolean
+  rate_currency?: string | null
 }
 
 export interface PricingRates {
@@ -220,6 +224,11 @@ export interface PricingRates {
   transferServiceCode: string
   transferSupplierName: string | null
   transferSupplierId: string | null
+  /** The currency each rate was entered in (null = the rate currency), so a
+   *  line can say what its supplier is paid in (lib/paid-currency). */
+  vehicleRateCurrency: string | null
+  transferRateCurrency: string | null
+  hotelServiceRateCurrency: string | null
   guidePerDay: number
   selectedGuide: any
   allEntranceFees: any[]
@@ -375,6 +384,7 @@ export async function fetchAllPricingRates(
       // no supplier_id column — selectedGuide.supplierId stays undefined
       // there, which the push site treats as a legitimate NULL.
       supplierId: guideRates[0].supplier_id || null,
+      rate_currency: guideRates[0].rate_currency ?? null,
     }
     console.log(`✅ Guide rate from guide_rates: €${guidePerDay}/day (${language})`)
   }
@@ -516,6 +526,9 @@ export async function fetchAllPricingRates(
     transferServiceCode: transferRates?.[0]?.id || vehicleServiceCode,
     transferSupplierName: transferRates?.[0]?.supplier_name || vehicleSupplierName,
     transferSupplierId: transferRates?.[0]?.supplier_id || vehicleSupplierId,
+    vehicleRateCurrency: transportResult ? transportRates?.[0]?.rate_currency ?? null : null,
+    transferRateCurrency: transferResult ? transferRates?.[0]?.rate_currency ?? null : null,
+    hotelServiceRateCurrency: hotelSvcRow?.rate_currency ?? null,
     guidePerDay,
     selectedGuide,
     allEntranceFees: allEntranceFees || [],
@@ -555,6 +568,8 @@ interface CityTransportRates {
   transferServiceCode: string
   transferSupplierName: string | null
   transferSupplierId: string | null
+  vehicleRateCurrency: string | null
+  transferRateCurrency: string | null
 }
 
 // Per-generation cache to avoid re-fetching for the same city. Created fresh
@@ -621,6 +636,8 @@ async function getTransportRatesForCity(
     transferServiceCode,
     transferSupplierName,
     transferSupplierId,
+    vehicleRateCurrency: dayTourResult ? normDayTour?.[0]?.rate_currency ?? null : primaryRates.vehicleRateCurrency,
+    transferRateCurrency: transferResult ? normTransfer?.[0]?.rate_currency ?? null : null,
   }
   cache.set(cacheKey, result)
   return result
@@ -828,6 +845,34 @@ export async function createLandItineraryServices(
     return Math.round(converted * 100) / 100
   }
 
+  // What each line's supplier is PAID in (lib/paid-currency): a line priced
+  // from rates entered in another currency (an EGP guide) says so, at the
+  // factor those rates were converted with. Its price is unchanged. Lines
+  // name their rates in __paidFrom, which never reaches the table.
+  const paidFrom = (entered: string | null | undefined) => [{ rate_currency: entered ?? null }]
+  const paidFactors = new Map<string, number | null>()
+  const withPaidFields = async <R extends { total_cost: number; supplier_cost_original: number; __paidFrom?: Array<{ rate_currency?: string | null }> }>(rows: R[]) => {
+    for (const row of rows) {
+      for (const src of row.__paidFrom ?? []) {
+        const cur = normaliseRateCurrency(src?.rate_currency)
+        if (cur && !paidFactors.has(cur)) paidFactors.set(cur, await rates.rateNormalizer.fxFor(cur))
+      }
+    }
+    return rows.map(({ __paidFrom, ...row }) => {
+      const runTotal = Number(row.supplier_cost_original) || 0
+      return {
+        ...row,
+        ...paidFieldsWith(__paidFrom ?? [], {
+          runTotal,
+          runCurrency: rateCurrency,
+          tripCurrency: currency,
+          // The factor this line was actually converted at (1 when it was not).
+          runToTrip: runTotal > 0 ? Number(row.total_cost) / runTotal : 0,
+        }, cur => paidFactors.get(cur)),
+      }
+    })
+  }
+
   // Fetch configurable fixed daily costs (water, tips)
   const fixedCosts = await getFixedDailyCosts(orgId, rates.rateNormalizer)
   const waterRatePerPerson = fixedCosts.waterPerPersonPerDay
@@ -841,7 +886,7 @@ export async function createLandItineraryServices(
   // STRICT CITY FILTERING: Only returns restaurants in the requested city.
   // Never falls back to restaurants in other cities — uses a generic flat rate instead.
   // Within each matching step, preferred restaurants (is_preferred=true) are picked first.
-  const findMealRate = (city: string, mealType: 'lunch' | 'dinner'): { rate: number; name: string; code: string; supplierName: string | null; warning: string | null } => {
+  const findMealRate = (city: string, mealType: 'lunch' | 'dinner'): { rate: number; name: string; code: string; supplierName: string | null; warning: string | null; rate_currency?: string | null } => {
     const mealLabel = mealType.charAt(0).toUpperCase() + mealType.slice(1)
     const allMeals = rates.allMealRates || []
     const typeMatches = allMeals.filter(r => r.meal_type?.toLowerCase() === mealType)
@@ -857,6 +902,7 @@ export async function createLandItineraryServices(
       name: `${mealLabel} - ${match.restaurant_name || city}`,
       code: match.service_code || mealType.toUpperCase(),
       supplierName: match.supplier_name || match.restaurant_name || null,
+      rate_currency: match.rate_currency ?? null,
       warning: null
     })
 
@@ -942,6 +988,8 @@ export async function createLandItineraryServices(
       tier,
       recommendedSuppliers: [],
       supabase,
+      // In the rate currency like the cruise path's: an EGP ship was priced as that many of it.
+      normalizer: rates.rateNormalizer,
       totalPax,
       nights: cruiseDayNumbers.length,
       startDate,
@@ -1134,6 +1182,7 @@ export async function createLandItineraryServices(
         service_name: 'Airport Meet & Assist (International)',
         quantity: depAirportRateLine.quantity,
         rate_eur: depAirportRateLine.rate,
+        __paidFrom: paidFrom(depAirportRateLine.rate_currency),
         rate_non_eur: depAirportRateLine.rate,
         total_cost: depAirportRate,
         client_price: withMargin(depAirportRate),
@@ -1150,6 +1199,7 @@ export async function createLandItineraryServices(
         service_name: isCruiseCheckout ? 'Cruise Disembarkation Assistance' : 'Hotel Porterage & Assistance',
         quantity: hotelLine.quantity,
         rate_eur: rates.hotelServiceRate,
+        __paidFrom: paidFrom(rates.hotelServiceRateCurrency),
         rate_non_eur: rates.hotelServiceRate,
         total_cost: hotelLine.lineTotal,
         client_price: withMargin(hotelLine.lineTotal),
@@ -1169,6 +1219,7 @@ export async function createLandItineraryServices(
         supplier_id: depTransport.transferSupplierId,
         quantity: 1,
         rate_eur: depTransport.transferRate,
+        __paidFrom: paidFrom(depTransport.transferRateCurrency),
         rate_non_eur: depTransport.transferRate,
         total_cost: depTransport.transferRate,
         client_price: withMargin(depTransport.transferRate),
@@ -1210,7 +1261,7 @@ export async function createLandItineraryServices(
 
       // Insert all departure services (with multi-currency tracking)
       console.log(`📦 Day ${dayNumber} (departure): inserting ${departureServices.length} services for day_id=${day.id}`)
-      const departureRows = departureServices.map(svc => ({
+      const departureRows = await withPaidFields(departureServices.map(svc => ({
         itinerary_day_id: day.id,
         ...svc,
         // Multi-currency: all rates are EUR-based; store original cost + exchange rate
@@ -1220,7 +1271,7 @@ export async function createLandItineraryServices(
         // Convert client-facing prices to target currency
         total_cost: toTargetCurrency(svc.total_cost),
         client_price: toTargetCurrency(svc.client_price),
-      }))
+      })))
       if (departureRows.length > 0) {
         // ONE batched insert (identical payloads); on batch failure fall back
         // to row-by-row to preserve per-row error logging + warnings.
@@ -1261,6 +1312,7 @@ export async function createLandItineraryServices(
           service_name: 'Airport Meet & Assist - Departure (Domestic)',
           quantity: domDepAirportRateLine.quantity,
           rate_eur: domDepAirportRateLine.rate,
+          __paidFrom: paidFrom(domDepAirportRateLine.rate_currency),
           rate_non_eur: domDepAirportRateLine.rate,
           total_cost: domDepAirportRate,
           client_price: withMargin(domDepAirportRate),
@@ -1275,6 +1327,7 @@ export async function createLandItineraryServices(
           service_name: 'Airport Meet & Assist - Arrival (Domestic)',
           quantity: domArrAirportRateLine.quantity,
           rate_eur: domArrAirportRateLine.rate,
+          __paidFrom: paidFrom(domArrAirportRateLine.rate_currency),
           rate_non_eur: domArrAirportRateLine.rate,
           total_cost: domArrAirportRate,
           client_price: withMargin(domArrAirportRate),
@@ -1293,6 +1346,7 @@ export async function createLandItineraryServices(
             service_name: 'Airport Meet & Assist (International Departure)',
             quantity: hybridDepRateLine.quantity,
             rate_eur: hybridDepRateLine.rate,
+            __paidFrom: paidFrom(hybridDepRateLine.rate_currency),
             rate_non_eur: hybridDepRateLine.rate,
             total_cost: hybridDepRate,
             client_price: withMargin(hybridDepRate),
@@ -1310,6 +1364,7 @@ export async function createLandItineraryServices(
             service_name: 'Airport Meet & Assist (International Arrival)',
             quantity: hybridArrRateLine.quantity,
             rate_eur: hybridArrRateLine.rate,
+            __paidFrom: paidFrom(hybridArrRateLine.rate_currency),
             rate_non_eur: hybridArrRateLine.rate,
             total_cost: hybridArrRate,
             client_price: withMargin(hybridArrRate),
@@ -1335,6 +1390,7 @@ export async function createLandItineraryServices(
           supplier_id: flightDepTransport.transferSupplierId,
           quantity: 1,
           rate_eur: flightDepTransport.transferRate,
+          __paidFrom: paidFrom(flightDepTransport.transferRateCurrency),
           rate_non_eur: flightDepTransport.transferRate,
           total_cost: flightDepTransport.transferRate,
           client_price: withMargin(flightDepTransport.transferRate),
@@ -1351,6 +1407,7 @@ export async function createLandItineraryServices(
           supplier_id: flightArrTransport.transferSupplierId,
           quantity: 1,
           rate_eur: flightArrTransport.transferRate,
+          __paidFrom: paidFrom(flightArrTransport.transferRateCurrency),
           rate_non_eur: flightArrTransport.transferRate,
           total_cost: flightArrTransport.transferRate,
           client_price: withMargin(flightArrTransport.transferRate),
@@ -1370,6 +1427,7 @@ export async function createLandItineraryServices(
             supplier_id: hybridDepTransport.transferSupplierId,
             quantity: 1,
             rate_eur: hybridDepTransport.transferRate,
+            __paidFrom: paidFrom(hybridDepTransport.transferRateCurrency),
             rate_non_eur: hybridDepTransport.transferRate,
             total_cost: hybridDepTransport.transferRate,
             client_price: withMargin(hybridDepTransport.transferRate),
@@ -1392,6 +1450,7 @@ export async function createLandItineraryServices(
           service_name: serviceDesc,
           quantity: intlAirportRateLine.quantity,
           rate_eur: intlAirportRateLine.rate,
+          __paidFrom: paidFrom(intlAirportRateLine.rate_currency),
           rate_non_eur: intlAirportRateLine.rate,
           total_cost: intlAirportRate,
           client_price: withMargin(intlAirportRate),
@@ -1414,6 +1473,7 @@ export async function createLandItineraryServices(
         service_name: isCruiseService ? 'Cruise Boarding Assistance' : 'Hotel Porterage & Assistance',
         quantity: hotelLine.quantity,
         rate_eur: rates.hotelServiceRate,
+        __paidFrom: paidFrom(rates.hotelServiceRateCurrency),
         rate_non_eur: rates.hotelServiceRate,
         total_cost: hotelLine.lineTotal,
         client_price: withMargin(hotelLine.lineTotal),
@@ -1445,7 +1505,7 @@ export async function createLandItineraryServices(
       // so this is the only value that returns rows here.
       const { getTransportRateForPax: getIntercityRate } = await import('@/lib/transport-rate-utils')
       // A move: the one-way rate, never the same-day-return one (road-rate-pick.ts).
-      const { data: intercityCandidates } = await supabase
+      const { data: rawIntercityCandidates } = await supabase
         .from('transportation_rates')
         .select('*')
         .eq('org_id', orgScope)
@@ -1454,6 +1514,9 @@ export async function createLandItineraryServices(
         .ilike('origin_city', originCity)
         .ilike('destination_city', destCity)
         .limit(20)
+      // In the rate currency, like every other rate here (lib/rates/rate-currency):
+      // an EGP row was priced as that many of the rate currency.
+      const intercityCandidates = rawIntercityCandidates ? await rates.rateNormalizer.normalize('transportation_rates', rawIntercityCandidates) : rawIntercityCandidates
       const pickedMove = pickRoadRate<any>(intercityCandidates, 'move')
       const intercityRates = pickedMove ? [pickedMove] : []
 
@@ -1462,6 +1525,7 @@ export async function createLandItineraryServices(
       let intercityServiceCode = 'INTERCITY'
       let intercitySupplier: string | null = null
       let intercitySupplierId: string | null = null
+      let intercityRateCurrency: string | null = null
 
       if (intercityRates?.length) {
         const result = getIntercityRate(intercityRates[0], totalPax, isEuroPassport)
@@ -1471,6 +1535,7 @@ export async function createLandItineraryServices(
           intercityServiceCode = intercityRates[0].id || 'INTERCITY'
           intercitySupplier = intercityRates[0].supplier_name || null
           intercitySupplierId = intercityRates[0].supplier_id || null
+          intercityRateCurrency = intercityRates[0].rate_currency ?? null
         }
       }
 
@@ -1482,6 +1547,7 @@ export async function createLandItineraryServices(
         intercityServiceCode = rates.vehicleServiceCode
         intercitySupplier = rates.vehicleSupplierName
         intercitySupplierId = rates.vehicleSupplierId
+        intercityRateCurrency = rates.vehicleRateCurrency
       }
 
       services.push({
@@ -1492,6 +1558,7 @@ export async function createLandItineraryServices(
         supplier_id: intercitySupplierId,
         quantity: 1,
         rate_eur: intercityRate,
+        __paidFrom: paidFrom(intercityRateCurrency),
         rate_non_eur: intercityRate,
         total_cost: intercityRate,
         client_price: withMargin(intercityRate),
@@ -1514,6 +1581,7 @@ export async function createLandItineraryServices(
           service_name: checkoutServiceName,
           quantity: hotelLine.quantity,
           rate_eur: rates.hotelServiceRate,
+          __paidFrom: paidFrom(rates.hotelServiceRateCurrency),
           rate_non_eur: rates.hotelServiceRate,
           total_cost: hotelLine.lineTotal,
           client_price: withMargin(hotelLine.lineTotal),
@@ -1530,6 +1598,7 @@ export async function createLandItineraryServices(
             service_name: 'Hotel Check-in Assistance',
             quantity: hotelLine.quantity,
             rate_eur: rates.hotelServiceRate,
+            __paidFrom: paidFrom(rates.hotelServiceRateCurrency),
             rate_non_eur: rates.hotelServiceRate,
             total_cost: hotelLine.lineTotal,
             client_price: withMargin(hotelLine.lineTotal),
@@ -1556,6 +1625,7 @@ export async function createLandItineraryServices(
         supplier_id: airportCityTransport.transferSupplierId,
         quantity: 1,
         rate_eur: airportCityTransport.transferRate,
+        __paidFrom: paidFrom(airportCityTransport.transferRateCurrency),
         rate_non_eur: airportCityTransport.transferRate,
         total_cost: airportCityTransport.transferRate,
         client_price: withMargin(airportCityTransport.transferRate),
@@ -1593,7 +1663,7 @@ export async function createLandItineraryServices(
       const { getTransportRateForPax: getDayTripRate } = await import('@/lib/transport-rate-utils')
       // The same-day-return rate (a sightseeing variant preferred), never a
       // one-way or overnight-return row for the same road (road-rate-pick.ts).
-      const { data: dayTripCandidates } = await supabase
+      const { data: rawDayTripCandidates } = await supabase
         .from('transportation_rates')
         .select('*')
         .eq('org_id', orgScope)
@@ -1602,6 +1672,9 @@ export async function createLandItineraryServices(
         .ilike('origin_city', overnightCity.charAt(0).toUpperCase() + overnightCity.slice(1))
         .ilike('destination_city', dayTripCity)
         .limit(20)
+      // In the rate currency, like every other rate here (lib/rates/rate-currency):
+      // an EGP row was priced as that many of the rate currency.
+      const dayTripCandidates = rawDayTripCandidates ? await rates.rateNormalizer.normalize('transportation_rates', rawDayTripCandidates) : rawDayTripCandidates
       const pickedDayTrip = pickRoadRate<any>(dayTripCandidates, 'day_trip')
       const dayTripRates = pickedDayTrip ? [pickedDayTrip] : []
 
@@ -1610,6 +1683,7 @@ export async function createLandItineraryServices(
       let dayTripCode = 'DAY-TRIP-TRANSPORT'
       let dayTripSupplier: string | null = null
       let dayTripSupplierId: string | null = null
+      let dayTripRateCurrency: string | null = null
 
       if (dayTripRates?.length) {
         const result = getDayTripRate(dayTripRates[0], totalPax, isEuroPassport)
@@ -1619,6 +1693,7 @@ export async function createLandItineraryServices(
           dayTripCode = dayTripRates[0].id || 'DAY-TRIP-TRANSPORT'
           dayTripSupplier = dayTripRates[0].supplier_name || null
           dayTripSupplierId = dayTripRates[0].supplier_id || null
+          dayTripRateCurrency = dayTripRates[0].rate_currency ?? null
         }
       }
 
@@ -1631,6 +1706,7 @@ export async function createLandItineraryServices(
           supplier_id: dayTripSupplierId,
           quantity: 1,
           rate_eur: dayTripRate,
+          __paidFrom: paidFrom(dayTripRateCurrency),
           rate_non_eur: dayTripRate,
           total_cost: dayTripRate,
           client_price: withMargin(dayTripRate),
@@ -1665,15 +1741,17 @@ export async function createLandItineraryServices(
       let dayTransportCode = rates.vehicleServiceCode
       let dayTransportSupplier = rates.vehicleSupplierName
       let dayTransportSupplierId = rates.vehicleSupplierId
+      let dayTransportRateCurrency = rates.vehicleRateCurrency
       let dayTransferRate = rates.transferRate
       let dayTransferCode = rates.transferServiceCode
       let dayTransferSupplier = rates.transferSupplierName
       let dayTransferSupplierId = rates.transferSupplierId
+      let dayTransferRateCurrency = rates.transferRateCurrency
 
       if (dayCity.toLowerCase() !== effectiveCity.toLowerCase()) {
         // Fetch city-specific transport rates
         const { getTransportRateForPax: getCityTransportRate } = await import('@/lib/transport-rate-utils')
-        const { data: cityDayTourRates } = await supabase
+        const { data: rawCityDayTourRates } = await supabase
           .from('transportation_rates')
           .select('*')
           .eq('org_id', orgScope)
@@ -1681,6 +1759,9 @@ export async function createLandItineraryServices(
           .eq('service_type', 'day_tour')
           .ilike('city', dayCity)
           .limit(1)
+        // In the rate currency, like every other rate here (lib/rates/rate-currency):
+        // an EGP row was priced as that many of the rate currency.
+        const cityDayTourRates = rawCityDayTourRates ? await rates.rateNormalizer.normalize('transportation_rates', rawCityDayTourRates) : rawCityDayTourRates
 
         if (cityDayTourRates?.length) {
           const result = getCityTransportRate(cityDayTourRates[0], totalPax, isEuroPassport)
@@ -1690,6 +1771,7 @@ export async function createLandItineraryServices(
             dayTransportCode = cityDayTourRates[0].id || rates.vehicleServiceCode
             dayTransportSupplier = cityDayTourRates[0].supplier_name || null
             dayTransportSupplierId = cityDayTourRates[0].supplier_id || null
+            dayTransportRateCurrency = cityDayTourRates[0].rate_currency ?? null
             console.log(`🚗 Day ${dayNumber} (${dayCity}): Using city-specific transport rate €${dayTransportRate}`)
           }
         } else {
@@ -1697,7 +1779,7 @@ export async function createLandItineraryServices(
         }
 
         // Also fetch city-specific transfer rate
-        const { data: cityTransferRates } = await supabase
+        const { data: rawCityTransferRates } = await supabase
           .from('transportation_rates')
           .select('*')
           .eq('org_id', orgScope)
@@ -1705,6 +1787,9 @@ export async function createLandItineraryServices(
           .eq('service_type', 'airport_transfer')
           .ilike('city', dayCity)
           .limit(1)
+        // In the rate currency, like every other rate here (lib/rates/rate-currency):
+        // an EGP row was priced as that many of the rate currency.
+        const cityTransferRates = rawCityTransferRates ? await rates.rateNormalizer.normalize('transportation_rates', rawCityTransferRates) : rawCityTransferRates
 
         if (cityTransferRates?.length) {
           const result = getCityTransportRate(cityTransferRates[0], totalPax, isEuroPassport)
@@ -1713,11 +1798,13 @@ export async function createLandItineraryServices(
             dayTransferCode = cityTransferRates[0].id || rates.transferServiceCode
             dayTransferSupplier = cityTransferRates[0].supplier_name || null
             dayTransferSupplierId = cityTransferRates[0].supplier_id || null
+            dayTransferRateCurrency = cityTransferRates[0].rate_currency ?? null
           }
         }
       }
 
       const transportRate = (isTransferOnly && !isIntercityTransfer) ? dayTransferRate : dayTransportRate
+      const transportRateCurrency = (isTransferOnly && !isIntercityTransfer) ? dayTransferRateCurrency : dayTransportRateCurrency
       const transportName = (isTransferOnly && !isIntercityTransfer)
         ? 'Airport/Hotel Transfer'
         : isDayTrip && dayTripCity
@@ -1733,6 +1820,7 @@ export async function createLandItineraryServices(
         supplier_id: (isTransferOnly && !isIntercityTransfer) ? dayTransferSupplierId : dayTransportSupplierId,
         quantity: 1,
         rate_eur: transportRate,
+        __paidFrom: paidFrom(transportRateCurrency),
         rate_non_eur: transportRate,
         total_cost: transportRate,
         client_price: withMargin(transportRate),
@@ -1755,11 +1843,12 @@ export async function createLandItineraryServices(
       let flightDayTourCode = rates.vehicleServiceCode
       let flightDayTourSupplier = rates.vehicleSupplierName
       let flightDayTourSupplierId = rates.vehicleSupplierId
+      let flightDayTourRateCurrency = rates.vehicleRateCurrency
 
       // Fetch city-specific day tour rate if sightseeing is in a different city than the base
       if (flightSightseeingCity.toLowerCase() !== effectiveCity.toLowerCase()) {
         const { getTransportRateForPax: getFlightCityRate } = await import('@/lib/transport-rate-utils')
-        const { data: flightCityRates } = await supabase
+        const { data: rawFlightCityRates } = await supabase
           .from('transportation_rates')
           .select('*')
           .eq('org_id', orgScope)
@@ -1767,6 +1856,9 @@ export async function createLandItineraryServices(
           .eq('service_type', 'day_tour')
           .ilike('city', flightSightseeingCity)
           .limit(1)
+        // In the rate currency, like every other rate here (lib/rates/rate-currency):
+        // an EGP row was priced as that many of the rate currency.
+        const flightCityRates = rawFlightCityRates ? await rates.rateNormalizer.normalize('transportation_rates', rawFlightCityRates) : rawFlightCityRates
 
         if (flightCityRates?.length) {
           const result = getFlightCityRate(flightCityRates[0], totalPax, isEuroPassport)
@@ -1776,6 +1868,7 @@ export async function createLandItineraryServices(
             flightDayTourCode = flightCityRates[0].id || rates.vehicleServiceCode
             flightDayTourSupplier = flightCityRates[0].supplier_name || null
             flightDayTourSupplierId = flightCityRates[0].supplier_id || null
+            flightDayTourRateCurrency = flightCityRates[0].rate_currency ?? null
             console.log(`🚗 Day ${dayNumber} (${flightSightseeingCity}): Using city-specific transport rate €${flightDayTourRate} for domestic flight sightseeing`)
           }
         } else {
@@ -1791,6 +1884,7 @@ export async function createLandItineraryServices(
         supplier_id: flightDayTourSupplierId,
         quantity: 1,
         rate_eur: flightDayTourRate,
+        __paidFrom: paidFrom(flightDayTourRateCurrency),
         rate_non_eur: flightDayTourRate,
         total_cost: flightDayTourRate,
         client_price: withMargin(flightDayTourRate),
@@ -1813,6 +1907,7 @@ export async function createLandItineraryServices(
         supplier_id: rates.selectedGuide?.supplierId ?? null,
         quantity: 1,
         rate_eur: rates.guidePerDay,
+        __paidFrom: paidFrom(rates.selectedGuide?.rate_currency),
         rate_non_eur: rates.guidePerDay,
         total_cost: rates.guidePerDay,
         client_price: withMargin(rates.guidePerDay),
@@ -1860,6 +1955,8 @@ export async function createLandItineraryServices(
     if (entranceAttractions.length > 0 && !isTransferOnly && !isFreeDay) {
       let dayEntranceTotal = 0
       const matchedAttractions: string[] = []
+      // The rates charged on this line: it is paid in one currency only when they all are.
+      const entranceSources: Array<{ rate_currency?: string | null }> = []
       // G2.2: attribute the aggregated entrance row to the antiquities authority
       // (entrance_fees.supplier_id → Supreme Council of Antiquities). Captured
       // from the first matched entrance fee; stays null if only activity-rate
@@ -1920,6 +2017,7 @@ export async function createLandItineraryServices(
             : toNumber(fee.non_eur_rate, fee.eur_rate || 0)
           dayEntranceTotal += feePerPerson * totalPax
           matchedAttractions.push(fee.attraction_name)
+          entranceSources.push(fee)
           if (fee.supplier_id && !entranceSupplierId) entranceSupplierId = fee.supplier_id
           if (matchType === 'exact') {
             console.log(`✅ Day ${dayNumber}: Entrance fee matched: "${attr}" → "${fee.attraction_name}" = €${feePerPerson}/person`)
@@ -1945,6 +2043,7 @@ export async function createLandItineraryServices(
               : toNumber(activityMatch.base_rate_non_eur || activityMatch.non_eur_rate, activityMatch.base_rate_eur || activityMatch.eur_rate || 0)
             dayEntranceTotal += activityRate * totalPax
             matchedAttractions.push(activityMatch.activity_name || attr)
+            entranceSources.push(activityMatch)
             console.log(`✅ Day ${dayNumber}: Activity rate matched: "${attr}" → "${activityMatch.activity_name}" = €${activityRate}/person`)
           } else {
             console.warn(`❌ Day ${dayNumber}: No entrance fee or activity rate found for "${attr}" (normalized: "${normalizedAttr}") — skipping`)
@@ -1965,6 +2064,7 @@ export async function createLandItineraryServices(
           supplier_id: entranceSupplierId,
           quantity: totalPax,
           rate_eur: dayEntranceTotal / totalPax,
+          __paidFrom: entranceSources,
           rate_non_eur: dayEntranceTotal / totalPax,
           total_cost: dayEntranceTotal,
           client_price: withMargin(dayEntranceTotal),
@@ -2009,6 +2109,7 @@ export async function createLandItineraryServices(
         service_name: lunch.name,
         quantity: totalPax,
         rate_eur: lunch.rate,
+        __paidFrom: paidFrom(lunch.rate_currency),
         rate_non_eur: lunch.rate,
         total_cost: lunchCost,
         client_price: withMargin(lunchCost),
@@ -2036,6 +2137,7 @@ export async function createLandItineraryServices(
         service_name: dinner.name,
         quantity: totalPax,
         rate_eur: dinner.rate,
+        __paidFrom: paidFrom(dinner.rate_currency),
         rate_non_eur: dinner.rate,
         total_cost: dinnerCost,
         client_price: withMargin(dinnerCost),
@@ -2107,6 +2209,7 @@ export async function createLandItineraryServices(
           supplier_id: cityHotel.selectedHotel?.supplier_id ?? null,
           quantity: totalPax,
           rate_eur: perPersonRate,
+          __paidFrom: paidFrom(cityHotel.selectedHotel?.rate_currency),
           rate_non_eur: perPersonRate,
           total_cost: hotelCost,
           client_price: withMargin(hotelCost),
@@ -2136,6 +2239,7 @@ export async function createLandItineraryServices(
         supplier_id: hoistedCruiseRate.supplierId,
         quantity: totalPax,
         rate_eur: hoistedCruiseRate.totalPerNight / totalPax,
+        __paidFrom: paidFrom(hoistedCruiseRate.rate_currency),
         rate_non_eur: hoistedCruiseRate.totalPerNight / totalPax,
         total_cost: nightCost,
         client_price: withMargin(nightCost),
@@ -2190,7 +2294,7 @@ export async function createLandItineraryServices(
     // Insert all services (with multi-currency tracking + currency conversion)
     console.log(`📦 Day ${dayNumber}: inserting ${services.length} services for day_id=${day.id}`)
     let insertedCount = 0
-    const serviceRows = services.map(svc => ({
+    const serviceRows = await withPaidFields(services.map(svc => ({
       itinerary_day_id: day.id,
       ...svc,
       // Multi-currency: all rates are EUR-based; store original cost + exchange rate
@@ -2200,7 +2304,7 @@ export async function createLandItineraryServices(
       // Convert client-facing prices to target currency; rate_eur/rate_non_eur stay in EUR
       total_cost: toTargetCurrency(svc.total_cost),
       client_price: toTargetCurrency(svc.client_price),
-    }))
+    })))
     if (serviceRows.length > 0) {
       // ONE batched insert per day (identical row payloads to the old per-row
       // path). On batch failure, retry row-by-row so a single bad row doesn't
