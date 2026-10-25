@@ -41,9 +41,12 @@ describe('both callers apply the one rule', () => {
   const currentOrg = readFileSync(join(process.cwd(), 'lib/auth/current-org.ts'), 'utf8')
 
   it('middleware resolves the role through pickActiveMembership with the active-org cookie', () => {
-    const at = middleware.indexOf('const membershipRole = async')
+    // activeMembership (the org and role, memoised) feeds membershipRole and
+    // the two-factor gate alike.
+    const at = middleware.indexOf('const activeMembership = async')
     expect(at).toBeGreaterThan(-1)
-    const block = middleware.slice(at, middleware.indexOf('return membershipRolePromise', at))
+    const block = middleware.slice(at, middleware.indexOf('return membershipPromise', at))
+    expect(middleware).toContain('const membershipRole = async (userId: string): Promise<string | null> => (await activeMembership(userId))?.role ?? null')
     expect(block, 'the role gate must pick the membership for the ACTIVE workspace').toContain('pickActiveMembership(')
     expect(block).toContain('ACTIVE_ORG_COOKIE')
     expect(block, 'limit(1) on the oldest membership is the bug this test exists for').not.toContain('.limit(1)')

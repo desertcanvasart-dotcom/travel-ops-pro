@@ -8944,6 +8944,7 @@ export interface Database {
           office_email_addresses: string[]
           whatsapp_number: string | null
           vat_rate: number
+          require_two_factor: boolean
         }
         Insert: {
           id?: string
@@ -8976,6 +8977,7 @@ export interface Database {
           office_email_addresses: string[]
           whatsapp_number?: string | null
           vat_rate?: number
+          require_two_factor?: boolean
         }
         Update: {
           id?: string
@@ -9008,6 +9010,7 @@ export interface Database {
           office_email_addresses?: string[]
           whatsapp_number?: string | null
           vat_rate?: number
+          require_two_factor?: boolean
         }
         Relationships: []
       }
