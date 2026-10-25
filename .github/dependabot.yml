@@ -1,0 +1,39 @@
+# Dependency and security-advisory alerts (GitHub Dependabot).
+#
+# Security updates: GitHub opens a PR as soon as an advisory affects a
+# dependency in package-lock.json (enable "Dependabot security updates" under
+# Settings → Code security if it is not on). The weekly runs below also keep
+# versions current, grouped so a week is one or two PRs, not twenty.
+#
+# Nothing merges by itself: each PR runs CI (tests, type-check, build, E2E)
+# and waits for a person. main has no required checks, so never turn on
+# auto-merge for these.
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Asia/Tokyo
+    open-pull-requests-limit: 5
+    groups:
+      # Patch and minor releases of everything, in one PR.
+      minor-and-patch:
+        update-types: [minor, patch]
+    ignore:
+      # Major versions change APIs; they are planned upgrades, not weekly chores.
+      - dependency-name: "*"
+        update-types: ["version-update:semver-major"]
+    labels: [dependencies]
+    commit-message:
+      prefix: "chore(deps)"
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    labels: [dependencies]
+    commit-message:
+      prefix: "ci(deps)"
