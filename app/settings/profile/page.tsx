@@ -22,11 +22,12 @@
 import { useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { User, Lock, Camera, Save, ArrowLeft, Loader2, CheckCircle, AlertCircle } from 'lucide-react'
+import { User, Lock, Camera, Save, ArrowLeft, Loader2, CheckCircle, AlertCircle, ShieldCheck } from 'lucide-react'
 import { createClient } from '@/app/supabase'
 import { useRole } from '@/hooks/useRole'
 import { LanguageSelector } from '@/components/LanguageSelector'
 import { changePassword, MIN_PASSWORD_LENGTH } from '@/lib/settings/password'
+import TwoFactorSettings from '@/components/settings/TwoFactorSettings'
 
 interface Profile {
   id: string
@@ -44,8 +45,9 @@ const readOnlyClass = 'w-full h-9 px-3 text-sm border border-gray-200 rounded-md
 
 export default function ProfilePage() {
   const t = useTranslations('settings')
+  const tf = useTranslations('twoFactor')
   const { role, canManageSettings } = useRole()
-  const [activeTab, setActiveTab] = useState<'profile' | 'password'>('profile')
+  const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'twofactor'>('profile')
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -199,7 +201,7 @@ export default function ProfilePage() {
 
             {/* Tabs */}
             <div className="border-b border-gray-200 flex">
-              {([['profile', User, t('profileInformation')], ['password', Lock, t('changePassword')]] as const).map(([id, Icon, label]) => (
+              {([['profile', User, t('profileInformation')], ['password', Lock, t('changePassword')], ['twofactor', ShieldCheck, tf('tabTitle')]] as const).map(([id, Icon, label]) => (
                 <button
                   key={id}
                   type="button"
@@ -298,6 +300,8 @@ export default function ProfilePage() {
                   </div>
                 </form>
               )}
+
+              {activeTab === 'twofactor' && <TwoFactorSettings />}
             </div>
           </div>
         </div>

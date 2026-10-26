@@ -5,6 +5,7 @@ import { cookies } from 'next/headers'
 import { getCurrentOrgId, noOrgResponse, requireRole } from '@/lib/auth/current-org'
 import { mayManage } from '@/lib/auth/member-management'
 import { recordChange } from '@/lib/activity-log'
+import { verifiedFactors } from '@/lib/auth/two-factor'
 
 const supabaseAdmin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -44,9 +45,23 @@ export async function GET() {
       : { data: [] }
     const byId = new Map((profiles ?? []).map(p => [p.id, p]))
 
+    // Whether each login has two-factor set up (lib/auth/two-factor), for the
+    // Members list and its Reset two-factor action. A failed lookup reads as
+    // unknown (null), never as "off".
+    const twoFactor = new Map<string, boolean | null>(await Promise.all(userIds.map(async (id): Promise<[string, boolean | null]> => {
+      try {
+        const { data: found, error: lookupErr } = await supabaseAdmin.auth.admin.getUserById(id)
+        if (lookupErr || !found?.user) return [id, null]
+        return [id, verifiedFactors(found.user).length > 0]
+      } catch {
+        return [id, null]
+      }
+    })))
+
     const data = (memberships ?? []).map(m => ({
       ...m,
       user: byId.get(m.user_id) ?? null,
+      two_factor: twoFactor.get(m.user_id) ?? null,
     }))
 
     return NextResponse.json({ success: true, data })

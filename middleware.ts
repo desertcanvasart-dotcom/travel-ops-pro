@@ -8,6 +8,7 @@ import { VERIFIED_USER_HEADER, signVerifiedUserHeader } from '@/lib/auth/verifie
 import { ACTIVE_ORG_COOKIE, pickActiveMembership } from '@/lib/auth/active-org'
 import type { NextFetchEvent } from 'next/server'
 import { recordActivity } from '@/lib/activity-log'
+import { TWO_FACTOR_PAGE, TWO_FACTOR_SETUP_PAGE, TWO_FACTOR_ROLES, twoFactorGate, verifiedFactors, type TwoFactorGate } from '@/lib/auth/two-factor'
 
 // Define route permissions - which roles can access which routes
 const ROUTE_PERMISSIONS: Record<string, string[]> = {
@@ -435,10 +436,10 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     return isActivePromise
   }
 
-  let membershipRolePromise: Promise<string | null> | null = null
-  const membershipRole = async (userId: string): Promise<string | null> => {
-    if (!membershipRolePromise) {
-      membershipRolePromise = (async () => {
+  let membershipPromise: Promise<{ org_id: string; role: string } | null> | null = null
+  const activeMembership = async (userId: string): Promise<{ org_id: string; role: string } | null> => {
+    if (!membershipPromise) {
+      membershipPromise = (async () => {
         const { data } = await createClient(
           process.env.NEXT_PUBLIC_SUPABASE_URL!,
           process.env.SUPABASE_SERVICE_ROLE_KEY!,
@@ -459,10 +460,31 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
         return pickActiveMembership(
           (data ?? []) as { org_id: string; role: string; created_at: string | null }[],
           request.cookies.get(ACTIVE_ORG_COOKIE)?.value,
-        )?.role ?? null
+        ) ?? null
       })()
     }
-    return membershipRolePromise
+    return membershipPromise
+  }
+  const membershipRole = async (userId: string): Promise<string | null> => (await activeMembership(userId))?.role ?? null
+
+  // Whether the active company requires two-factor for owners, administrators
+  // and managers (organizations.require_two_factor, migration 20270111). A
+  // failed read is logged and treated as "not required": the switch adds a
+  // requirement on top of the password, and a database blip must not lock
+  // every manager out. Anyone who HAS an authenticator is held to it
+  // regardless (twoFactorGate), with no database read at all.
+  const companyRequiresTwoFactor = async (orgId: string): Promise<boolean> => {
+    const { data, error } = await createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+      { auth: { persistSession: false } }
+    )
+      .from('organizations')
+      .select('require_two_factor')
+      .eq('id', orgId)
+      .maybeSingle()
+    if (error) console.warn('[middleware] require_two_factor read failed:', error.message)
+    return (data as { require_two_factor?: boolean } | null)?.require_two_factor === true
   }
 
   // NEVER trust a client-supplied copy of the internal verified-user header —
@@ -644,6 +666,45 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     ])
     if (!active) {
       return NextResponse.json({ error: 'Account inactive' }, { status: 403 })
+    }
+  }
+
+  // TWO-FACTOR (lib/auth/two-factor). After the password the session is at
+  // aal1; someone with an authenticator must enter its code (aal2) before
+  // any page or API answers, and an owner/administrator/manager of a company
+  // that requires two-factor must set one up first. The two-factor screens
+  // themselves, public pages and self-authenticating APIs are exempt.
+  const pathname0 = request.nextUrl.pathname
+  const onTwoFactorPage = pathname0 === TWO_FACTOR_PAGE || pathname0.startsWith(TWO_FACTOR_PAGE + '/')
+  if (user && !isSelfAuthApi && !onTwoFactorPage && (isApiRoute || !isPublicRoute)) {
+    const hasVerifiedFactor = verifiedFactors(user).length > 0
+    let gate: TwoFactorGate = 'ok'
+    if (hasVerifiedFactor) {
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel()
+      gate = twoFactorGate({ currentLevel: aal?.currentLevel, hasVerifiedFactor, role: null, companyRequires: false })
+    } else {
+      const membership = await activeMembership(user.id)
+      if (membership && (TWO_FACTOR_ROLES as readonly string[]).includes(membership.role)) {
+        gate = twoFactorGate({
+          currentLevel: null,
+          hasVerifiedFactor,
+          role: membership.role,
+          companyRequires: await companyRequiresTwoFactor(membership.org_id),
+        })
+      }
+    }
+    if (gate === 'verify' || gate === 'setup') {
+      if (isApiRoute) {
+        return gate === 'verify'
+          ? NextResponse.json({ error: 'Two-factor verification required', code: 'two_factor_required' }, { status: 401 })
+          : NextResponse.json({ error: 'Set up two-factor login first', code: 'two_factor_setup_required' }, { status: 403 })
+      }
+      const target = new URL(gate === 'verify' ? TWO_FACTOR_PAGE : TWO_FACTOR_SETUP_PAGE, request.url)
+      target.searchParams.set('next', `${pathname0}${request.nextUrl.search}`)
+      const redirect = NextResponse.redirect(target)
+      // Keep any session cookies refreshed during this request.
+      response.cookies.getAll().forEach(cookie => redirect.cookies.set(cookie))
+      return redirect
     }
   }
 

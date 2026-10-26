@@ -147,6 +147,21 @@ export default function UserManagementPage() {
       </section>
 
       <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Two-factor login</h2>
+        <p className="text-gray-600 mb-3">
+          Two-factor login asks for a 6-digit code from an authenticator app on the phone (Google Authenticator,
+          Microsoft Authenticator, 1Password and the like) after the password.
+        </p>
+        <ul className="list-disc pl-6 space-y-2 text-gray-600">
+          <li><strong>Set it up</strong> under <em>Settings → Profile → Two-factor login</em>: scan the QR code and enter the first code. Add a second device as a backup.</li>
+          <li><strong>Once set up, every sign-in asks for the code</strong>, whatever your role. Until the code is entered no page or data opens.</li>
+          <li><strong>Require it for the company</strong>: the owner ticks <em>Require two-factor for owners, administrators and managers</em> under <em>Settings → Organization → Security</em> (after setting up their own). Those roles are then asked to set it up before they continue; agents and viewers may use it but are not made to.</li>
+          <li><strong>Lost phone</strong>: under <em>Settings → Organization → Members</em> the owner resets anyone else&apos;s two-factor, and an administrator a manager&apos;s, agent&apos;s or viewer&apos;s. If the only owner loses theirs, whoever runs the server resets it with <code>node --env-file=.env.local scripts/reset-two-factor.mjs owner@example.com</code>.</li>
+          <li><strong>Changing your password</strong> signs you in again, so the next page asks for a code.</li>
+        </ul>
+      </section>
+
+      <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">User Management vs Team Members</h2>
         <div className="overflow-x-auto">
           <table className="w-full text-sm border border-gray-200 rounded-lg">

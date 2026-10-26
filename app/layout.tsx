@@ -46,6 +46,22 @@ export default function RootLayout({
   // The marketing pages keep the providers — some of them use translations.
   const isCustomerPage = customerPages.includes(pathname) || publicPrefixes.some(p => pathname.startsWith(p))
 
+  // The two-factor screens (/two-factor, /two-factor/setup): signed in, but
+  // not yet allowed any API — the middleware refuses them until the code is
+  // entered. So they mount translations only, never the providers that fetch
+  // /api/notifications and friends on mount (those would 401 in a loop).
+  if (pathname === '/two-factor' || pathname.startsWith('/two-factor/')) {
+    return (
+      <html lang="en" suppressHydrationWarning>
+        <body className={inter.className} suppressHydrationWarning>
+          <IntlClientProvider>
+            <main className="min-h-screen">{children}</main>
+          </IntlClientProvider>
+        </body>
+      </html>
+    )
+  }
+
   if (isCustomerPage) {
     return (
       <html lang={pathname.startsWith('/portal/') || customerPages.includes(pathname) ? 'ja' : 'en'} suppressHydrationWarning>

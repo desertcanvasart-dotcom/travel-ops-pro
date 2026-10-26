@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/app/contexts/AuthContext'
-import { Building2, Users, Mail, Loader2, Save, Trash2, Send, XCircle, CheckCircle, ShieldCheck } from 'lucide-react'
+import { Building2, Users, Mail, Loader2, Save, Trash2, Send, XCircle, CheckCircle, ShieldCheck, KeyRound } from 'lucide-react'
+import { useTranslations } from 'next-intl'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { useRole } from '@/hooks/useRole'
 
@@ -12,6 +13,8 @@ interface OrgInfo {
   created_at: string
   updated_at: string
   member_count: number
+  /** Owners, administrators and managers must use two-factor (lib/auth/two-factor). */
+  require_two_factor?: boolean
 }
 
 interface OrgMember {
@@ -25,7 +28,9 @@ interface OrgMember {
     email: string
     role: string | null
     is_active: boolean | null
-  } | null
+  }
+  /** The login has two-factor set up; null = could not be read. */
+  two_factor?: boolean | null | null
 }
 
 interface Invitation {
@@ -76,6 +81,8 @@ export default function OrganizationSettingsPage() {
   //   remove someone else    owner   (/api/organization/members)
   //   leave                  admin, owner included — but never the last owner
   const { role, isAdmin } = useRole()
+  const tf = useTranslations('twoFactor')
+  const [savingTwoFactor, setSavingTwoFactor] = useState(false)
   const isOwner = role === 'owner'
   const ownerCount = members.filter(m => m.role === 'owner').length
   const canLeave = isAdmin && !(isOwner && ownerCount <= 1)
@@ -180,6 +187,48 @@ export default function OrganizationSettingsPage() {
       await loadAll()
     } catch (err: any) {
       setError(err.message || 'Failed to cancel invitation')
+    }
+  }
+
+  async function setRequireTwoFactor(next: boolean) {
+    setSavingTwoFactor(true)
+    setError(null)
+    setSuccess(null)
+    try {
+      const res = await fetch('/api/organization', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ require_two_factor: next }),
+      })
+      const json = await res.json()
+      if (!res.ok || !json?.success) throw new Error(json?.error || tf('saveFailed'))
+      setOrg(o => (o ? { ...o, require_two_factor: json.data?.require_two_factor } : o))
+      setSuccess(next ? tf('requireOn') : tf('requireOff'))
+    } catch (err: any) {
+      setError(err.message || tf('saveFailed'))
+    } finally {
+      setSavingTwoFactor(false)
+    }
+  }
+
+  // The owner resets anyone else; an admin a manager, agent or viewer (the
+  // route's rule, lib/auth/member-management mayManage).
+  const mayResetTwoFactor = (m: OrgMember) =>
+    m.two_factor === true && m.user_id !== user?.id && (isOwner || (isAdmin && ['manager', 'agent', 'viewer'].includes(m.role)))
+
+  async function resetTwoFactor(m: OrgMember) {
+    const label = m.user?.full_name || m.user?.email || ''
+    if (!(await confirmDialog(tf('resetConfirm', { name: label })))) return
+    setError(null)
+    setSuccess(null)
+    try {
+      const res = await fetch(`/api/organization/members/${encodeURIComponent(m.user_id)}/two-factor`, { method: 'DELETE' })
+      const json = await res.json()
+      if (!res.ok || !json?.success) throw new Error(json?.error || tf('resetFailed'))
+      setSuccess(tf('resetDone', { name: label }))
+      await loadAll()
+    } catch (err: any) {
+      setError(err.message || tf('resetFailed'))
     }
   }
 
@@ -315,6 +364,26 @@ export default function OrganizationSettingsPage() {
         </div>
       </section>
 
+      {/* Security — two-factor (lib/auth/two-factor) */}
+      <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">{tf('securityTitle')}</h2>
+        <p className="text-sm text-gray-500 mb-4">{tf('securityIntro')}</p>
+        <label className={`flex items-start gap-3 ${isOwner ? 'cursor-pointer' : 'opacity-70'}`}>
+          <input
+            type="checkbox"
+            className="mt-1 w-4 h-4 accent-[#647C47]"
+            checked={org?.require_two_factor === true}
+            disabled={!isOwner || savingTwoFactor}
+            onChange={e => void setRequireTwoFactor(e.target.checked)}
+          />
+          <span>
+            <span className="block text-sm font-medium text-gray-900">{tf('requireLabel')}</span>
+            <span className="block text-xs text-gray-500">{isOwner ? tf('requireHint') : tf('requireOwnerOnly')}</span>
+          </span>
+          {savingTwoFactor && <Loader2 className="w-4 h-4 animate-spin text-gray-400" />}
+        </label>
+      </section>
+
       {/* Members */}
       <section className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
@@ -366,6 +435,7 @@ export default function OrganizationSettingsPage() {
                 <th className="py-2 font-medium">Email</th>
                 <th className="py-2 font-medium">Role</th>
                 <th className="py-2 font-medium">Joined</th>
+                <th className="py-2 font-medium">{tf('columnTitle')}</th>
                 <th className="py-2 font-medium"></th>
               </tr>
             </thead>
@@ -387,7 +457,24 @@ export default function OrganizationSettingsPage() {
                   <td className="py-3 text-gray-500">
                     {new Date(m.created_at).toLocaleDateString()}
                   </td>
-                  <td className="py-3 text-right">
+                  <td className="py-3">
+                    {m.two_factor === true
+                      ? <span className="inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-full bg-green-50 text-green-700"><ShieldCheck className="w-3 h-3" />{tf('on')}</span>
+                      : m.two_factor === false
+                        ? <span className="text-xs text-gray-400">{tf('off')}</span>
+                        : <span className="text-xs text-gray-300">—</span>}
+                  </td>
+                  <td className="py-3 text-right whitespace-nowrap">
+                    {mayResetTwoFactor(m) && (
+                      <button
+                        onClick={() => void resetTwoFactor(m)}
+                        className="text-gray-500 hover:text-amber-700 p-1"
+                        title={tf('reset')}
+                        aria-label={tf('reset')}
+                      >
+                        <KeyRound className="w-4 h-4" />
+                      </button>
+                    )}
                     {(m.user_id === user?.id ? canLeave : isOwner) && (
                       <button
                         onClick={() => removeMember(m.user_id)}
@@ -401,7 +488,7 @@ export default function OrganizationSettingsPage() {
                 </tr>
               ))}
               {members.length === 0 && (
-                <tr><td colSpan={5} className="py-6 text-center text-gray-500">No members yet.</td></tr>
+                <tr><td colSpan={6} className="py-6 text-center text-gray-500">No members yet.</td></tr>
               )}
             </tbody>
           </table>
