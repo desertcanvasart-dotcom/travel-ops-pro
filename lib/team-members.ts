@@ -11,8 +11,15 @@ import { orgLoginForEmail } from '@/lib/whatsapp-org'
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (table: string) => any }
 
-/** The job labels the Team page offers. Labels only — not access levels. */
-export const TEAM_ROLES = ['owner', 'manager', 'coordinator', 'sales', 'guide', 'driver', 'staff'] as const
+/**
+ * The job labels the Team page offers. Labels only — not access levels.
+ *
+ * No 'owner': the company's owner is a LOGIN role (organization_members), set
+ * by transferring ownership. As a label any admin or manager could pick it, so
+ * the roster could name someone owner who is not. The Team
+ * page shows each person's real login role beside the label instead.
+ */
+export const TEAM_ROLES = ['manager', 'coordinator', 'sales', 'guide', 'driver', 'staff'] as const
 
 export function isTeamRole(value: unknown): value is (typeof TEAM_ROLES)[number] {
   return typeof value === 'string' && (TEAM_ROLES as readonly string[]).includes(value)
