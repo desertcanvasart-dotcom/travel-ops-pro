@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
-import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
+import { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -10,7 +10,7 @@ import PricingBasisField, { usePricingBasisLabel } from '@/components/rates/Pric
 import { toPricingBasis, type PricingBasis } from '@/lib/pricing/pricing-basis'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
-import { Copy, Plane, Plus, Search, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
+import { Copy, Plane, Plus, Search, Edit, Trash2, AlertCircle, CheckCircle2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
@@ -18,7 +18,8 @@ import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rate
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
-import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
+import { averageRatesByCurrency, formatRateAverages, formatMoney } from '@/lib/currency-totals'
+import { RateFormModal, FormSection, Field, MoneyInput, CurrencyPicker, inputClass } from '@/components/rates/RateFormKit'
 import { useAirports } from '@/app/components/AirportOptions'
 import { airportChoices } from '@/lib/rates/airport-choices'
 
@@ -272,10 +273,6 @@ export default function AirportServicesPage() {
       // value that made two rate rows inert. See usableRate().
       [name]: type === 'number' ? (value === '' ? '' : parseFloat(value)) : value
     }))
-  }
-
-  const handleCheckbox = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.checked }))
   }
 
   const generateCode = () => {
@@ -692,161 +689,83 @@ export default function AirportServicesPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">{editingRate ? t('modal.editTitle') : t('modal.addTitle')}</h2>
-              <button type="button" onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded" title={tCommon('cancel')}>
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form noValidate onSubmit={handleSubmit} className="p-4 space-y-4">
-              <SupplierPicker
-                value={formData.supplier_id}
-                onChange={(supplier_id) => setFormData(prev => ({ ...prev, supplier_id }))}
-                preferredType="airport_assistant"
-                preferredLabel="Airport Assistants"
-              />
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.airport')} *</label>
-                  <select
-                    name="airport_code"
-                    value={formData.airport_code}
-                    onChange={handleChange}
-                    required
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
-                    title={t('form.airport')}
-                  >
-                    <option value="" disabled>{t('form.airport')}</option>
-                    {AIRPORTS.map(a => (
-                      <option key={a.code} value={a.code}>{a.code} - {a.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.serviceType')} *</label>
-                  <select
-                    name="service_type"
-                    value={formData.service_type}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
-                    title={t('form.serviceType')}
-                  >
-                    {serviceOptions.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.direction')} *</label>
-                  <select
-                    name="direction"
-                    value={formData.direction}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
-                    title={t('form.direction')}
-                  >
-                    {directionOptions.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.rateEur')} *</label>
-                  <input
-                    type="number"
-                    name="rate_eur"
-                    value={formData.rate_eur}
-                    onChange={handleChange}
-                    min="0.01"
-                    step="0.01"
-                    required
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
-                    title={t('form.rateEur')}
-                  />
-                </div>
-              </div>
-              <RateCurrencyField
-                value={formData.rate_currency}
-                onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
-              />
-              <PricingBasisField
-                basis={formData.pricing_type}
-                capacity={formData.max_capacity}
-                onChange={next => setFormData(prev => ({ ...prev, ...next }))}
-                focusRing="focus:ring-sky-600"
-              />
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.description')}</label>
-                <input
-                  type="text"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
-                  placeholder={t('form.descriptionPlaceholder')}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.serviceCode')}</label>
-                <input
-                  type="text"
-                  name="service_code"
-                  value={formData.service_code}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600 font-mono"
-                  placeholder={t('form.serviceCodePlaceholder')}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.notes')}</label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleChange}
-                  rows={2}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-sky-600"
-                  placeholder={t('form.notesPlaceholder')}
-                />
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="is_active"
-                  checked={formData.is_active}
-                  onChange={handleCheckbox}
-                  className="w-4 h-4 text-sky-600 rounded focus:ring-sky-500"
-                />
-                <span className="text-sm text-gray-700">{tCommon('active')}</span>
-              </label>
-              {/* Audit Log */}
-              {editingRate && (
-                <RateAuditLog tableName="airport_staff_rates" recordId={editingRate.id} />
-              )}
+        <RateFormModal
+          formId="airport-service-rate-form"
+          title={editingRate ? t('modal.editTitle') : t('modal.addTitle')}
+          code={formData.service_code}
+          onClose={() => setShowModal(false)}
+          onSubmit={handleSubmit}
+          after={editingRate ? <RateAuditLog tableName="airport_staff_rates" recordId={editingRate.id} /> : undefined}
+          summary={[
+            formData.airport_code || null,
+            serviceOptions.find(o => o.value === formData.service_type)?.label,
+            directionOptions.find(o => o.value === formData.direction)?.label,
+            Number(formData.rate_eur) > 0
+              ? `${formatMoney(Number(formData.rate_eur), formData.rate_currency || rateCurrency)} ${pricingLabel(formData.pricing_type, formData.max_capacity || null).toLowerCase()}`
+              : null,
+          ].filter(Boolean).join(' · ')}
+          active={{ checked: formData.is_active, onChange: v => setFormData(prev => ({ ...prev, is_active: v })), label: tCommon('formActive') }}
+          submitLabel={editingRate ? tCommon('update') : tCommon('create')}
+          cancelLabel={tCommon('cancel')}
+        >
+          <FormSection title={tCommon('sectionSupplier')}>
+            <SupplierPicker
+              value={formData.supplier_id}
+              onChange={(supplier_id) => setFormData(prev => ({ ...prev, supplier_id }))}
+              preferredType="airport_assistant"
+              preferredLabel="Airport Assistants"
+            />
+          </FormSection>
 
-              <div className="flex gap-2 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
-                >
-                  {tCommon('cancel')}
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-3 py-2 text-sm bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-medium flex items-center justify-center gap-2"
-                >
-                  <Check className="w-4 h-4" />
-                  {editingRate ? tCommon('update') : tCommon('create')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          <FormSection title={tCommon('basicInformation')}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label={t('form.airport')} required htmlFor="as-airport">
+                <select id="as-airport" name="airport_code" value={formData.airport_code} onChange={handleChange} required className={inputClass}>
+                  <option value="" disabled>{t('form.airport')}</option>
+                  {AIRPORTS.map(a => (
+                    <option key={a.code} value={a.code}>{a.code} - {a.name}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t('form.serviceType')} required htmlFor="as-service">
+                <select id="as-service" name="service_type" value={formData.service_type} onChange={handleChange} className={inputClass}>
+                  {serviceOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t('form.direction')} required htmlFor="as-direction">
+                <select id="as-direction" name="direction" value={formData.direction} onChange={handleChange} className={inputClass}>
+                  {directionOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            <Field label={t('form.description')} htmlFor="as-description">
+              <input id="as-description" type="text" name="description" value={formData.description} onChange={handleChange} placeholder={t('form.descriptionPlaceholder')} className={inputClass} />
+            </Field>
+          </FormSection>
+
+          <FormSection title={tCommon('pricing')}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={t('form.rateEur')} required htmlFor="as-rate">
+                <MoneyInput id="as-rate" name="rate_eur" value={formData.rate_eur} onChange={handleChange} currency={formData.rate_currency || rateCurrency} unit={pricingLabel(formData.pricing_type, formData.max_capacity || null).toLowerCase()} required />
+              </Field>
+              <CurrencyPicker id="as-currency" value={formData.rate_currency} onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))} orgCurrency={rateCurrency} />
+            </div>
+            <PricingBasisField
+              basis={formData.pricing_type}
+              capacity={formData.max_capacity}
+              onChange={next => setFormData(prev => ({ ...prev, ...next }))}
+              focusRing="focus:ring-[#647C47]"
+            />
+          </FormSection>
+
+          <Field label={t('form.notes')} htmlFor="as-notes">
+            <textarea id="as-notes" name="notes" value={formData.notes} onChange={handleChange} rows={2} placeholder={t('form.notesPlaceholder')} className={inputClass} />
+          </Field>
+        </RateFormModal>
       )}
     </div>
   )

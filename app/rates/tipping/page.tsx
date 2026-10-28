@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
-import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
+import { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
+import { RateFormModal, FormSection, Field, MoneyInput, CurrencyPicker, inputClass } from '@/components/rates/RateFormKit'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
-import { Copy, DollarSign, Plus, Search, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
+import { Copy, DollarSign, Plus, Search, Edit, Trash2, AlertCircle, CheckCircle2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
@@ -15,7 +16,7 @@ import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rate
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
-import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
+import { averageRatesByCurrency, formatRateAverages, formatMoney } from '@/lib/currency-totals'
 import CityOptions from '@/app/components/CityOptions'
 import { tipServiceCode } from '@/lib/tipping-utils'
 
@@ -249,10 +250,6 @@ export default function TippingPage() {
       ...prev,
       [name]: type === 'number' ? parseFloat(value) || 0 : value
     }))
-  }
-
-  const handleCheckbox = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setFormData(prev => ({ ...prev, [e.target.name]: e.target.checked }))
   }
 
   // Role, context AND city — the city is part of what makes a tip distinct
@@ -627,160 +624,80 @@ export default function TippingPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-lg w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">{editingRate ? t('modal.editTitle') : t('modal.addTitle')}</h2>
-              <button onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-            <form noValidate onSubmit={handleSubmit} className="p-4 space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.roleType')} *</label>
-                  <select
-                    name="role_type"
-                    value={formData.role_type}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
-                  >
-                    {roleOptions.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.context')}</label>
-                  <select
-                    name="context"
-                    value={formData.context}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
-                  >
-                    <option value="">{t('form.noContext')}</option>
-                    {contextOptions.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div>
-                {/* What a driver is tipped in Cairo is not what a driver is
-                    tipped in Aswan. Blank means the country-wide rate, which
-                    every row meant before this field existed — the engine
-                    prefers a city match and falls back to it. */}
-                <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('city')}</label>
-                <select
-                  name="city"
-                  value={formData.city}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
-                >
-                  <option value="">{t('form.anyCity')}</option>
-                  <CityOptions />
+        <RateFormModal
+          formId="tipping-rate-form"
+          title={editingRate ? t('modal.editTitle') : t('modal.addTitle')}
+          code={formData.service_code || generateCode()}
+          onClose={() => setShowModal(false)}
+          onSubmit={handleSubmit}
+          after={editingRate ? <RateAuditLog tableName="tipping_rates" recordId={editingRate.id} /> : undefined}
+          summary={[
+            roleOptions.find(o => o.value === formData.role_type)?.label,
+            formData.context ? contextOptions.find(o => o.value === formData.context)?.label : null,
+            formData.city || t('form.anyCity'),
+            Number(formData.rate_eur) > 0
+              ? `${formatMoney(Number(formData.rate_eur), formData.rate_currency || rateCurrency)} ${unitOptions.find(o => o.value === formData.rate_unit)?.label ?? ''}`.trim()
+              : null,
+          ].filter(Boolean).join(' · ')}
+          active={{ checked: formData.is_active, onChange: v => setFormData(prev => ({ ...prev, is_active: v })), label: tCommon('formActive') }}
+          submitLabel={editingRate ? tCommon('update') : tCommon('create')}
+          cancelLabel={tCommon('cancel')}
+        >
+          <FormSection title={tCommon('basicInformation')}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={t('form.roleType')} required htmlFor="tip-role">
+                <select id="tip-role" name="role_type" value={formData.role_type} onChange={handleChange} className={inputClass}>
+                  {roleOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
                 </select>
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.rateUnit')} *</label>
-                  <select
-                    name="rate_unit"
-                    value={formData.rate_unit}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
-                  >
-                    {unitOptions.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.amount')} *</label>
-                  <input
-                    type="number"
-                    name="rate_eur"
-                    value={formData.rate_eur}
-                    onChange={handleChange}
-                    min="0"
-                    step="0.5"
-                    required
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
-                  />
-                </div>
-              </div>
-              <RateCurrencyField
-                value={formData.rate_currency}
-                onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
-              />
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.description')}</label>
-                <input
-                  type="text"
-                  name="description"
-                  value={formData.description}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
-                  placeholder={t('form.descriptionPlaceholder')}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('serviceCode')}</label>
-                <input
-                  type="text"
-                  name="service_code"
-                  value={formData.service_code}
-                  onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600 font-mono"
-                  placeholder={t('form.serviceCodePlaceholder')}
-                />
-              </div>
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('notes')}</label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleChange}
-                  rows={2}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-600"
-                  placeholder={tCommon('notesPlaceholder')}
-                />
-              </div>
-              <label className="flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  name="is_active"
-                  checked={formData.is_active}
-                  onChange={handleCheckbox}
-                  className="w-4 h-4 text-green-600 rounded focus:ring-green-500"
-                />
-                <span className="text-sm text-gray-700">{tCommon('active')}</span>
-              </label>
-              {/* Audit Log */}
-              {editingRate && (
-                <RateAuditLog tableName="tipping_rates" recordId={editingRate.id} />
-              )}
+              </Field>
+              <Field label={t('form.context')} htmlFor="tip-context">
+                <select id="tip-context" name="context" value={formData.context} onChange={handleChange} className={inputClass}>
+                  <option value="">{t('form.noContext')}</option>
+                  {contextOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+            {/* What a driver is tipped in Cairo is not what a driver is
+                tipped in Aswan. Blank means the country-wide rate, which
+                every row meant before this field existed — the engine
+                prefers a city match and falls back to it. */}
+            <Field label={tCommon('city')} htmlFor="tip-city">
+              <select id="tip-city" name="city" value={formData.city} onChange={handleChange} className={inputClass}>
+                <option value="">{t('form.anyCity')}</option>
+                <CityOptions />
+              </select>
+            </Field>
+            <Field label={t('form.description')} htmlFor="tip-description">
+              <input id="tip-description" type="text" name="description" value={formData.description} onChange={handleChange} placeholder={t('form.descriptionPlaceholder')} className={inputClass} />
+            </Field>
+          </FormSection>
 
-              <div className="flex gap-2 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 font-medium"
-                >
-                  {tCommon('cancel')}
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium flex items-center justify-center gap-2"
-                >
-                  <Check className="w-4 h-4" />
-                  {editingRate ? tCommon('update') : tCommon('create')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          <FormSection title={tCommon('pricing')}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label={t('form.rateUnit')} required htmlFor="tip-unit">
+                <select id="tip-unit" name="rate_unit" value={formData.rate_unit} onChange={handleChange} className={inputClass}>
+                  {unitOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t('form.amount')} required htmlFor="tip-amount">
+                {/* The unit is whichever the row prices by (per day, per
+                    person, per cruise…), read back from the picker beside it. */}
+                <MoneyInput id="tip-amount" name="rate_eur" value={formData.rate_eur} onChange={handleChange} currency={formData.rate_currency || rateCurrency} unit={unitOptions.find(o => o.value === formData.rate_unit)?.label} required />
+              </Field>
+              <CurrencyPicker id="tip-currency" value={formData.rate_currency} onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))} orgCurrency={rateCurrency} />
+            </div>
+          </FormSection>
+
+          <Field label={tCommon('notes')} htmlFor="tip-notes">
+            <textarea id="tip-notes" name="notes" value={formData.notes} onChange={handleChange} rows={2} placeholder={tCommon('notesPlaceholder')} className={inputClass} />
+          </Field>
+        </RateFormModal>
       )}
     </div>
   )
