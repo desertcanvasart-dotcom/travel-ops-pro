@@ -40,8 +40,10 @@ interface TeamMember {
   updated_at: string
 }
 
+// Job labels (lib/team-members TEAM_ROLES) — never an access level. Who owns
+// or administers the system is the login role, shown on each card from
+// /api/profiles.
 const ROLES = [
-  { value: 'owner', label: 'Owner', icon: '👑', color: 'bg-purple-100 text-purple-700' },
   { value: 'manager', label: 'Manager', icon: '💼', color: 'bg-blue-100 text-blue-700' },
   { value: 'coordinator', label: 'Coordinator', icon: '📋', color: 'bg-green-100 text-green-700' },
   { value: 'sales', label: 'Sales', icon: '💰', color: 'bg-amber-100 text-amber-700' },
@@ -52,6 +54,7 @@ const ROLES = [
 
 export default function TeamMembersPage() {
   const t = useTranslations('teamMembers')
+  const tRoles = useTranslations('roles')
   const confirmDialog = useConfirm()
   const [members, setMembers] = useState<TeamMember[]>([])
   const [loading, setLoading] = useState(true)
@@ -83,7 +86,8 @@ export default function TeamMembersPage() {
   const { isAdmin } = useRole()
   // Why the last load / save / deactivate failed — shown at the top.
   const [pageError, setPageError] = useState<string | null>(null)
-  const [userEmails, setUserEmails] = useState<Set<string>>(new Set())
+  // email → login role (organization_members), for the "System user" chip.
+  const [userEmails, setUserEmails] = useState<Map<string, string>>(new Map())
   const [pendingInviteEmails, setPendingInviteEmails] = useState<Set<string>>(new Set())
   const [inviteTarget, setInviteTarget] = useState<TeamMember | null>(null)
   const [inviteRole, setInviteRole] = useState('agent')
@@ -100,8 +104,10 @@ export default function TeamMembersPage() {
       ])
       if (profilesRes.ok) {
         const body = await profilesRes.json()
-        setUserEmails(new Set(
-          (body.data || []).map((p: any) => (p.email || '').toLowerCase()).filter(Boolean)
+        setUserEmails(new Map(
+          (body.data || [])
+            .map((p: any) => [(p.email || '').toLowerCase(), p.role || ''] as [string, string])
+            .filter(([email]: [string, string]) => Boolean(email))
         ))
       }
       if (invitesRes.ok) {
@@ -156,6 +162,13 @@ export default function TeamMembersPage() {
     if (userEmails.has(email)) return 'user'
     if (pendingInviteEmails.has(email)) return 'invited'
     return 'none'
+  }
+
+  // The login role that gates (owner/admin/manager/agent/viewer), or '' when
+  // the member has no login or the role is not one we can name.
+  const loginRole = (member: TeamMember): string => {
+    const role = userEmails.get((member.email || '').toLowerCase()) || ''
+    return ['owner', 'admin', 'manager', 'agent', 'viewer'].includes(role) ? role : ''
   }
 
   useEffect(() => {
@@ -365,13 +378,17 @@ export default function TeamMembersPage() {
           </div>
           <p className="text-2xl font-semibold text-gray-900">{members.filter(m => m.is_active).length}</p>
         </div>
-        {ROLES.slice(0, 3).map(role => {
+        {([
+          { role: ROLES[0], label: t('roleManagers') },
+          { role: ROLES[1], label: t('roleCoordinators') },
+          { role: ROLES[2], label: t('roleSales') },
+        ]).map(({ role, label }) => {
           const count = members.filter(m => m.role === role.value && m.is_active).length
           return (
             <div key={role.value} className="bg-white border border-gray-200 rounded-lg p-4">
               <div className="flex items-center gap-2 mb-2">
                 <span>{role.icon}</span>
-                <span className="text-xs text-gray-500">{t(`role${role.value.charAt(0).toUpperCase() + role.value.slice(1)}s`)}</span>
+                <span className="text-xs text-gray-500">{label}</span>
               </div>
               <p className="text-2xl font-semibold text-gray-900">{count}</p>
             </div>
@@ -481,6 +498,7 @@ export default function TeamMembersPage() {
                       {accessStatus(member) === 'user' && (
                         <span className="px-2 py-0.5 bg-green-100 text-green-700 rounded-full text-xs font-medium">
                           {t('systemUser')}
+                          {loginRole(member) && ` · ${tRoles(loginRole(member) as 'owner')}`}
                         </span>
                       )}
                       {accessStatus(member) === 'invited' && (
