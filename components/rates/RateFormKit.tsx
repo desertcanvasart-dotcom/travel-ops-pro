@@ -130,7 +130,7 @@ export function monthsBetween(from: string, to: string): number | null {
 
 export function RateFormModal({
   formId, title, code, onClose, onSubmit, children, after, summary,
-  active, submitLabel, cancelLabel, maxWidth = 'max-w-2xl',
+  active, submitLabel, cancelLabel, maxWidth = 'max-w-2xl', submitting = false,
 }: {
   formId: string
   title: string
@@ -147,6 +147,8 @@ export function RateFormModal({
   submitLabel: string
   cancelLabel: string
   maxWidth?: string
+  /** True while the save is in flight: Save is disabled, so a double click saves once. */
+  submitting?: boolean
 }) {
   const t = useTranslations('rates.common')
   return (
@@ -173,7 +175,7 @@ export function RateFormModal({
             {active ? <SwitchField id={`${formId}-active`} checked={active.checked} onChange={active.onChange} label={active.label} /> : <span />}
             <div className="flex items-center gap-2">
               <button type="button" onClick={onClose} className="rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm text-gray-700 hover:bg-gray-50">{cancelLabel}</button>
-              <button type="submit" form={formId} className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700">
+              <button type="submit" form={formId} disabled={submitting} className="flex items-center gap-2 rounded-lg bg-primary-600 px-4 py-2 text-sm font-medium text-white hover:bg-primary-700 disabled:cursor-not-allowed disabled:opacity-60">
                 <Check className="h-4 w-4" />{submitLabel}
               </button>
             </div>
@@ -246,7 +248,7 @@ export function CurrencyPicker({ id, value, onChange, orgCurrency }: {
 }
 
 /** Valid from / to, with the length in months and a warning when reversed. */
-export function ValidityFields({ idPrefix, from, to, onChange, fromLabel, toLabel, fromName = 'rate_valid_from', toName = 'rate_valid_to' }: {
+export function ValidityFields({ idPrefix, from, to, onChange, fromLabel, toLabel, fromName = 'rate_valid_from', toName = 'rate_valid_to', required = false }: {
   idPrefix: string
   from: string
   to: string
@@ -255,21 +257,23 @@ export function ValidityFields({ idPrefix, from, to, onChange, fromLabel, toLabe
   toLabel: string
   fromName?: string
   toName?: string
+  required?: boolean
 }) {
   const t = useTranslations('rates.common')
   const months = monthsBetween(from, to)
   const backwards = months !== null && to < from
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <Field label={fromLabel} htmlFor={`${idPrefix}-from`}>
-        <input id={`${idPrefix}-from`} type="date" name={fromName} value={from} onChange={onChange} className={inputClass} />
+      <Field label={fromLabel} required={required} htmlFor={`${idPrefix}-from`}>
+        <input id={`${idPrefix}-from`} type="date" name={fromName} value={from} onChange={onChange} required={required} className={inputClass} />
       </Field>
       <Field
         label={toLabel}
+        required={required}
         htmlFor={`${idPrefix}-to`}
         hint={backwards ? <span className="text-red-700">{t('validBackwards')}</span> : months !== null ? t('validMonths', { count: months }) : undefined}
       >
-        <input id={`${idPrefix}-to`} type="date" name={toName} value={to} onChange={onChange} className={inputClass} />
+        <input id={`${idPrefix}-to`} type="date" name={toName} value={to} onChange={onChange} required={required} className={inputClass} />
       </Field>
     </div>
   )

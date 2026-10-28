@@ -1,6 +1,8 @@
 'use client'
 
-import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { RateFormModal, FormSection, Field, MoneyInput, CurrencyPicker, inputClass } from '@/components/rates/RateFormKit'
+import { formatMoney } from '@/lib/currency-totals'
 import { RATE_CURRENCIES } from '@/lib/org-rate-currency'
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
@@ -446,70 +448,52 @@ export default function FixedCostsPage() {
         )}
       </div>
 
-      {/* Add New Cost Modal */}
+      {/* Add New Cost Modal — this page has no <form>; the modal's form
+          submits to the same save the old Add button called. */}
       {showAddForm && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
-            <h2 className="text-lg font-bold text-gray-900 mb-4">Add Fixed Daily Cost</h2>
+        <RateFormModal
+          submitting={saving}
+          formId="fixed-cost-form"
+          title="Add Fixed Daily Cost"
+          onClose={() => setShowAddForm(false)}
+          onSubmit={e => {
+            e.preventDefault()
+            // The form is noValidate (RateFormModal), so point at the empty
+            // required field instead of a Save that silently does nothing.
+            if (!e.currentTarget.reportValidity()) return
+            if (saving) return
+            void handleAddNew()
+          }}
+          summary={[
+            newCostType.trim(),
+            Number(newCostRate) > 0
+              ? `${formatMoney(Number(newCostRate), newCostCurrency || rateCurrency)} /person/day`
+              : null,
+          ].filter(Boolean).join(' · ')}
+          submitLabel="Add Cost"
+          cancelLabel={tRates('cancel')}
+          maxWidth="max-w-md"
+        >
+          <FormSection title={tRates('basicInformation')}>
+            <Field label="Cost Type" required htmlFor="fc-type">
+              <input id="fc-type" type="text" required value={newCostType} onChange={(e) => setNewCostType(e.target.value)} placeholder="e.g., Water Bottle" className={inputClass} />
+            </Field>
+            <Field label="Description" htmlFor="fc-description">
+              <input id="fc-description" type="text" value={newCostDescription} onChange={(e) => setNewCostDescription(e.target.value)} placeholder="Optional description..." className={inputClass} />
+            </Field>
+          </FormSection>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Cost Type *</label>
-                <input
-                  type="text"
-                  value={newCostType}
-                  onChange={(e) => setNewCostType(e.target.value)}
-                  placeholder="e.g., Water Bottle"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47]"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Rate ({rateCurrency} per person per day) *</label>
-                <input
-                  type="number"
-                  value={newCostRate}
-                  onChange={(e) => setNewCostRate(e.target.value)}
-                  min="0"
-                  step="0.5"
-                  placeholder="e.g., 2.00"
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47]"
-                />
-              </div>
-              <RateCurrencyField
-                value={newCostCurrency}
-                onChange={setNewCostCurrency}
-                className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47]"
-              />
-              <div>
-                <label className="block text-sm font-medium text-gray-600 mb-1">Description</label>
-                <input
-                  type="text"
-                  value={newCostDescription}
-                  onChange={(e) => setNewCostDescription(e.target.value)}
-                  placeholder="Optional description..."
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#647C47]"
-                />
-              </div>
+          <FormSection title={tRates('pricing')}>
+            {/* One column: this modal is narrow (max-w-md), and side by side the
+                rate box left no room to type. */}
+            <div className="grid grid-cols-1 gap-3">
+              <Field label="Rate" required htmlFor="fc-rate">
+                <MoneyInput id="fc-rate" value={newCostRate} onChange={(e) => setNewCostRate(e.target.value)} currency={newCostCurrency || rateCurrency} unit="/person/day" required placeholder="0.00" />
+              </Field>
+              <CurrencyPicker id="fc-currency" value={newCostCurrency} onChange={setNewCostCurrency} orgCurrency={rateCurrency} />
             </div>
-
-            <div className="flex justify-end gap-2 mt-6">
-              <button
-                onClick={() => setShowAddForm(false)}
-                className="px-4 py-2 text-sm text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleAddNew}
-                disabled={saving || !newCostType.trim() || !newCostRate}
-                className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-lg hover:bg-[#566b3c] disabled:opacity-50 flex items-center gap-2"
-              >
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
-                Add Cost
-              </button>
-            </div>
-          </div>
-        </div>
+          </FormSection>
+        </RateFormModal>
       )}
     </div>
   )

@@ -1,18 +1,19 @@
 'use client'
 
 import { todayLocal } from '@/lib/today'
-import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
+import { averageRatesByCurrency, formatRateAverages, formatMoney } from '@/lib/currency-totals'
 import { useEffect, useState } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
-import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { RateFormModal, FormSection, Field, MoneyInput, CurrencyPicker, ValidityFields, inputClass, shortDate } from '@/components/rates/RateFormKit'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
-import { Copy, Search, Plus, Edit, Trash2, X, Check, AlertCircle, CheckCircle2,
+import { Copy, Search, Plus, Edit, Trash2, AlertCircle, CheckCircle2,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Building2, Sparkles
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
@@ -961,337 +962,204 @@ export default function AttractionsContent() {
 
       {/* Add/Edit Modal - UPDATED with Add-on fields */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-gray-900">
-                {editingAttraction ? t('editAttraction') : t('addNewAttraction')}
-              </h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="p-1 text-gray-400 hover:text-gray-600 rounded"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form noValidate onSubmit={handleSubmit} className="p-4">
-              {/* Basic Information */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3">{t('form.basicInfo')}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('form.attractionName')} *
-                    </label>
-                    <input
-                      type="text"
-                      name="attraction_name"
-                      value={formData.attraction_name}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                      placeholder="e.g., Pyramids of Giza"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('form.serviceCode')}
-                    </label>
-                    <input
-                      type="text"
-                      name="service_code"
-                      value={formData.service_code}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm bg-gray-50"
-                      placeholder="Auto-generated"
-                    />
-                  </div>
-
-                  {/* SUPPLIER FIELD */}
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      <span className="flex items-center gap-1">
-                        <Building2 className="w-3.5 h-3.5" />
-                        {t('form.supplier')}
-                      </span>
-                    </label>
-                    <select
-                      name="supplier_id"
-                      value={formData.supplier_id}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                    >
-                      <option value="">{t('form.noSupplierLinked')}</option>
-                      {suppliers.map(supplier => (
-                        <option key={supplier.id} value={supplier.id}>
-                          {supplier.name} {supplier.city && `(${supplier.city})`}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">{t('form.linkSupplierDesc')}</p>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('form.city')} *
-                    </label>
-                    <select
-                      name="city"
-                      value={formData.city}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                    >
-                      <option value="">{t('form.selectCity')}</option>
-                      <CityOptions />
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('form.category')}
-                    </label>
-                    <select
-                      name="category"
-                      value={formData.category}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                    >
-                      <option value="">{t('form.selectCategory')}</option>
-                      {categoryOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('form.feeType')}
-                    </label>
-                    <select
-                      name="fee_type"
-                      value={formData.fee_type}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                    >
-                      {feeTypeOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('form.season')}
-                    </label>
-                    <select
-                      name="season"
-                      value={formData.season}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                    >
-                      {seasonOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>{seasonLabel(opt.value, t(`seasons.${opt.value}`))}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Pricing Information */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3">{t('form.pricing')}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('form.eurRate')} *
-                    </label>
-                    <input
-                      type="number"
-                      name="eur_rate"
-                      value={formData.eur_rate}
-                      onChange={handleChange}
-                      step="0.01"
-                      min="0"
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                      placeholder="0.00"
-                    />
-                  </div>
-
-                  {/* One price. An entrance fee does not vary by passport —
-                      the EU/non-EU split is real only for hotels and cruises
-                      (operator, 2026-08-30). Both columns are written with
-                      the same value so the pricing engine's passport lookup
-                      keeps working unchanged. */}
-                  <RateCurrencyField
-                    value={formData.rate_currency}
-                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                  />
-
-                  {/* No Egyptian-resident rate: the office does not sell to
-                      Egyptian passport holders (operator, 2026-09-03). The
-                      column stays for the importer; the form writes 0. */}
-                </div>
-              </div>
-
-              {/* No child or student discount here: no price ever read them.
-                  Children are priced at the engine's fixed child rate
-                  (lib/auto-pricing-service CHILD_DISCOUNT_PERCENT) and there
-                  is no student price. A stored value is kept as it was. */}
-
-              {/* Validity Period */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3">{t('form.validityPeriod')}</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('form.validFrom')} *
-                    </label>
-                    <input
-                      type="date"
-                      name="rate_valid_from"
-                      value={formData.rate_valid_from}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('form.validTo')} *
-                    </label>
-                    <input
-                      type="date"
-                      name="rate_valid_to"
-                      value={formData.rate_valid_to}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* NEW: Add-on Settings */}
-              <div className="mb-4 p-4 bg-orange-50 rounded-lg border border-orange-200">
-                <h3 className="text-base font-semibold text-orange-800 mb-3 flex items-center gap-2">
-                  <Sparkles className="w-4 h-4" />
-                  {t('form.addonSettings')}
-                </h3>
-                <div className="space-y-3">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="is_addon"
-                      checked={formData.is_addon}
-                      onChange={handleCheckboxChange}
-                      className="w-5 h-5 mt-0.5 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
-                    />
-                    <div>
-                      <span className="text-sm font-medium text-gray-900">{t('form.isAddon')}</span>
-                      <p className="text-xs text-gray-600 mt-0.5">
-                        {t('form.addonDescription')}
-                      </p>
-                    </div>
-                  </label>
-
-                  {/* Two decisions, deliberately separate (operator, 1 Sep):
-                      whether the engine prices it, and whether we sell it.
-                      One flag meant both, so protecting a price silently put
-                      the site on the customer's booking page. */}
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="is_sellable_extra"
-                      checked={formData.is_sellable_extra || false}
-                      onChange={handleCheckboxChange}
-                      className="w-5 h-5 mt-0.5 text-orange-600 border-gray-300 rounded focus:ring-orange-500"
-                    />
-                    <div>
-                      <span className="text-sm font-medium text-gray-900">{t('form.isSellableExtra')}</span>
-                      <p className="text-xs text-gray-600 mt-0.5">
-                        {t('form.sellableExtraDescription')}
-                      </p>
-                    </div>
-                  </label>
-
-                  {formData.is_addon && (
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        {t('form.addonNote')}
-                      </label>
-                      <input
-                        type="text"
-                        name="addon_note"
-                        value={formData.addon_note}
-                        onChange={handleChange}
-                        className="w-full px-3 py-2 text-sm border border-orange-300 rounded-lg focus:ring-2 focus:ring-orange-500 focus:border-transparent shadow-sm bg-white"
-                        placeholder={t('form.addonNotePlaceholder')}
-                      />
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              {/* Notes */}
-              <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  {t('form.notes')}
-                </label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
+        <RateFormModal
+          formId="attraction-rate-form"
+          title={editingAttraction ? t('editAttraction') : t('addNewAttraction')}
+          code={formData.service_code}
+          onClose={() => setShowModal(false)}
+          onSubmit={handleSubmit}
+          after={editingAttraction ? <RateAuditLog tableName="entrance_fees" recordId={editingAttraction.id} /> : undefined}
+          summary={[
+            formData.attraction_name || null,
+            formData.city || null,
+            formData.category ? categoryOptions.find(o => o.value === formData.category)?.label : null,
+            feeTypeOptions.find(o => o.value === formData.fee_type)?.label,
+            Number(formData.eur_rate) > 0
+              ? `${formatMoney(Number(formData.eur_rate), formData.rate_currency || rateCurrency)} ${tCommon('perPerson')}`
+              : null,
+            formData.rate_valid_from && formData.rate_valid_to ? `${shortDate(formData.rate_valid_from)} – ${shortDate(formData.rate_valid_to)}` : null,
+          ].filter(Boolean).join(' · ')}
+          active={{ checked: formData.is_active, onChange: v => setFormData(prev => ({ ...prev, is_active: v })), label: tCommon('formActive') }}
+          submitLabel={editingAttraction ? t('form.update') : t('form.create')}
+          cancelLabel={t('form.cancel')}
+        >
+          <FormSection title={t('form.basicInfo')}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={t('form.attractionName')} required htmlFor="at-name">
+                <input
+                  id="at-name"
+                  type="text"
+                  name="attraction_name"
+                  value={formData.attraction_name}
                   onChange={handleChange}
-                  rows={3}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                  placeholder={t('form.notesPlaceholder')}
+                  required
+                  className={inputClass}
+                  placeholder="e.g., Pyramids of Giza"
                 />
-              </div>
+              </Field>
+              <Field label={t('form.city')} required htmlFor="at-city">
+                <select
+                  id="at-city"
+                  name="city"
+                  value={formData.city}
+                  onChange={handleChange}
+                  required
+                  className={inputClass}
+                >
+                  <option value="">{t('form.selectCity')}</option>
+                  <CityOptions />
+                </select>
+              </Field>
+              <Field label={t('form.category')} htmlFor="at-category">
+                <select
+                  id="at-category"
+                  name="category"
+                  value={formData.category}
+                  onChange={handleChange}
+                  className={inputClass}
+                >
+                  <option value="">{t('form.selectCategory')}</option>
+                  {categoryOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t('form.feeType')} htmlFor="at-fee-type">
+                <select
+                  id="at-fee-type"
+                  name="fee_type"
+                  value={formData.fee_type}
+                  onChange={handleChange}
+                  className={inputClass}
+                >
+                  {feeTypeOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t('form.season')} htmlFor="at-season">
+                <select
+                  id="at-season"
+                  name="season"
+                  value={formData.season}
+                  onChange={handleChange}
+                  className={inputClass}
+                >
+                  {seasonOptions.map(opt => (
+                    <option key={opt.value} value={opt.value}>{seasonLabel(opt.value, t(`seasons.${opt.value}`))}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          </FormSection>
 
-              {/* Active Status */}
-              <div className="mb-4">
-                <label className="flex items-center gap-2 cursor-pointer">
+          <FormSection title={tCommon('sectionSupplier')}>
+            <Field label={t('form.supplier')} htmlFor="at-supplier" hint={t('form.linkSupplierDesc')}>
+              <select
+                id="at-supplier"
+                name="supplier_id"
+                value={formData.supplier_id}
+                onChange={handleChange}
+                className={inputClass}
+              >
+                <option value="">{t('form.noSupplierLinked')}</option>
+                {suppliers.map(supplier => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name} {supplier.city && `(${supplier.city})`}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </FormSection>
+
+          <FormSection title={t('form.pricing')}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {/* One price. An entrance fee does not vary by passport —
+                  the EU/non-EU split is real only for hotels and cruises
+                  (operator, 2026-08-30). Both columns are written with
+                  the same value so the pricing engine's passport lookup
+                  keeps working unchanged. */}
+              <Field label={t('form.eurRate')} required htmlFor="at-rate">
+                <MoneyInput id="at-rate" name="eur_rate" value={formData.eur_rate} onChange={handleChange} currency={formData.rate_currency || rateCurrency} unit={tCommon('perPerson')} required />
+              </Field>
+              <CurrencyPicker id="at-currency" value={formData.rate_currency} onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))} orgCurrency={rateCurrency} />
+              {/* No Egyptian-resident rate: the office does not sell to
+                  Egyptian passport holders (operator, 2026-09-03). The
+                  column stays for the importer; the form writes 0. */}
+            </div>
+          </FormSection>
+
+          {/* No child or student discount here: no price ever read them.
+              Children are priced at the engine's fixed child rate
+              (lib/auto-pricing-service CHILD_DISCOUNT_PERCENT) and there
+              is no student price. A stored value is kept as it was. */}
+
+          <FormSection title={t('form.validityPeriod')}>
+            <ValidityFields idPrefix="at" from={formData.rate_valid_from} to={formData.rate_valid_to} onChange={handleChange} fromLabel={t('form.validFrom')} toLabel={t('form.validTo')} required />
+          </FormSection>
+
+          <FormSection title={t('form.addonSettings')}>
+            <div className="flex flex-col gap-3">
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  name="is_addon"
+                  checked={formData.is_addon}
+                  onChange={handleCheckboxChange}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#647C47] focus:ring-[#647C47]"
+                />
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium text-gray-900">{t('form.isAddon')}</span>
+                  <span className="text-xs leading-snug text-gray-500">{t('form.addonDescription')}</span>
+                </span>
+              </label>
+
+              {/* Two decisions, deliberately separate (operator, 1 Sep):
+                  whether the engine prices it, and whether we sell it.
+                  One flag meant both, so protecting a price silently put
+                  the site on the customer's booking page. */}
+              <label className="flex cursor-pointer items-start gap-3">
+                <input
+                  type="checkbox"
+                  name="is_sellable_extra"
+                  checked={formData.is_sellable_extra || false}
+                  onChange={handleCheckboxChange}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-[#647C47] focus:ring-[#647C47]"
+                />
+                <span className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium text-gray-900">{t('form.isSellableExtra')}</span>
+                  <span className="text-xs leading-snug text-gray-500">{t('form.sellableExtraDescription')}</span>
+                </span>
+              </label>
+
+              {formData.is_addon && (
+                <Field label={t('form.addonNote')} htmlFor="at-addon-note">
                   <input
-                    type="checkbox"
-                    name="is_active"
-                    checked={formData.is_active}
-                    onChange={handleCheckboxChange}
-                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    id="at-addon-note"
+                    type="text"
+                    name="addon_note"
+                    value={formData.addon_note}
+                    onChange={handleChange}
+                    className={inputClass}
+                    placeholder={t('form.addonNotePlaceholder')}
                   />
-                  <span className="text-sm font-medium text-gray-700">{t('form.activeStatus')}</span>
-                </label>
-              </div>
-
-              {/* Audit Log */}
-              {editingAttraction && (
-                <RateAuditLog tableName="entrance_fees" recordId={editingAttraction.id} />
+                </Field>
               )}
+            </div>
+          </FormSection>
 
-              {/* Buttons */}
-              <div className="flex gap-2 pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
-                >
-                  {t('form.cancel')}
-                </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors flex items-center justify-center gap-2"
-                >
-                  <Check className="w-4 h-4" />
-                  {editingAttraction ? t('form.update') : t('form.create')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+          <Field label={t('form.notes')} htmlFor="at-notes">
+            <textarea
+              id="at-notes"
+              name="notes"
+              value={formData.notes}
+              onChange={handleChange}
+              rows={3}
+              className={inputClass}
+              placeholder={t('form.notesPlaceholder')}
+            />
+          </Field>
+        </RateFormModal>
       )}
     </div>
   )

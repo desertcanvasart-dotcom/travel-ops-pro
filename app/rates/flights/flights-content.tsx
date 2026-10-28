@@ -9,7 +9,9 @@ import { flightGuideFare } from '@/lib/rates/ticket-guide-fare'
 import { useDestinationCities } from '@/app/components/useDestinationCities'
 import { flightTypeForRoute } from '@/lib/rates/flight-type'
 import { firstInvalidMessage } from '@/lib/form-guard'
-import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { RateFormModal, FormSection, Field, CurrencyPicker, inputClass } from '@/components/rates/RateFormKit'
+import { formatMoney } from '@/lib/currency-totals'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
@@ -23,16 +25,13 @@ import { Copy, Search,
   Plus,
   Edit2,
   Trash2,
-  X,
   Plane,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronsLeft,
   ChevronsRight,
-  Building2,
   Clock,
-  Luggage,
   ArrowRight
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
@@ -989,385 +988,282 @@ export default function FlightsContent() {
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white flex items-center justify-between px-6 py-4 border-b border-gray-200">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {editingRate ? t('editRate') : t('addRate')}
-              </h2>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
-              >
-                <X className="h-5 w-5" />
-              </button>
+        <RateFormModal
+          submitting={saving}
+          formId="flight-rate-form"
+          title={editingRate ? t('editRate') : t('addRate')}
+          code={formData.service_code}
+          onClose={() => setIsModalOpen(false)}
+          onSubmit={handleSubmit}
+          after={editingRate ? <RateAuditLog tableName="flight_rates" recordId={editingRate.id} /> : undefined}
+          summary={(() => {
+            const firstFare = Number(formData.seasons.find(s => Number(s.rates?.base_rate_eur) > 0)?.rates?.base_rate_eur) || 0
+            return [
+              formData.route_from && formData.route_to ? `${formData.route_from} → ${formData.route_to}` : null,
+              formData.airline || null,
+              formData.cabin_class ? flightCabinLabel(formData.cabin_class, formData.cabin_class.charAt(0).toUpperCase() + formData.cabin_class.slice(1)) : null,
+              formData.flight_number || null,
+              firstFare > 0 ? `${formatMoney(firstFare, formData.rate_currency || rateCurrency)} ${tCommon('perPerson')}` : null,
+            ].filter(Boolean).join(' · ')
+          })()}
+          active={{ checked: formData.is_active, onChange: v => setFormData(prev => ({ ...prev, is_active: v })), label: tCommon('formActive') }}
+          submitLabel={saving ? t('saving') : editingRate ? t('updateRate') : t('addRate')}
+          cancelLabel={tCommon('cancel')}
+        >
+          {error && (
+            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
+
+          {/* Quick-select: the routes this agency's own rates already fly. */}
+          {!editingRate && quickRoutes.length > 0 && (
+            <div className="flex flex-col gap-2">
+              <span className="text-xs font-medium text-gray-700">{t('quickSelectRoute')}</span>
+              <div className="flex flex-wrap gap-2">
+                {quickRoutes.map(route => (
+                  <button
+                    key={`${route.from}→${route.to}`}
+                    type="button"
+                    onClick={() => applyPopularRoute(route.from, route.to)}
+                    className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
+                      formData.route_from === route.from && formData.route_to === route.to
+                        ? 'bg-sky-100 border-sky-300 text-sky-700'
+                        : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
+                    }`}
+                  >
+                    {route.from} → {route.to}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* The airline is a supplier with the air-carrier role — the
+              same model as hotels, cruises and trains. The two-letter
+              code lives on the rate and builds the service code. */}
+          <FormSection title={t('supplierSection')}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="flex min-w-0 flex-col gap-1 sm:col-span-2">
+                <SupplierPicker
+                  value={formData.supplier_id}
+                  onChange={handleAirlinePick}
+                  preferredType="air_carrier"
+                  preferredLabel={t('airlines')}
+                  label={`${t('airline')} *`}
+                />
+                {!formData.supplier_id && (
+                  <p className="text-xs leading-snug text-gray-500">{t('airlineHint')}</p>
+                )}
+              </div>
+              <Field label={t('airlineCode')} htmlFor="fl-airline-code">
+                <input
+                  id="fl-airline-code"
+                  type="text"
+                  value={formData.airline_code}
+                  onChange={(e) => handleAirlineCodeChange(e.target.value)}
+                  maxLength={3}
+                  placeholder="MS"
+                  className={`${inputClass} font-mono uppercase`}
+                />
+              </Field>
+            </div>
+          </FormSection>
+
+          <FormSection title={t('routeInfo')}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={t('from')} required htmlFor="fl-from">
+                <select
+                  id="fl-from"
+                  value={formData.route_from}
+                  onChange={(e) => handleRouteChange('route_from', e.target.value)}
+                  required
+                  className={inputClass}
+                >
+                  <option value="">{t('selectDepartureCity')}</option>
+                  <AirportOptions airports={airports} />
+                </select>
+              </Field>
+              <Field label={t('to')} required htmlFor="fl-to">
+                <select
+                  id="fl-to"
+                  value={formData.route_to}
+                  onChange={(e) => handleRouteChange('route_to', e.target.value)}
+                  required
+                  className={inputClass}
+                >
+                  <option value="">{t('selectArrivalCity')}</option>
+                  <AirportOptions airports={airports} exclude={formData.route_from} />
+                </select>
+              </Field>
             </div>
 
-            <form noValidate onSubmit={handleSubmit} className="p-6 space-y-6">
-              {error && (
-                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm">
-                  {error}
-                </div>
-              )}
-
-              {/* Quick-select: the routes this agency's own rates already fly. */}
-              {!editingRate && quickRoutes.length > 0 && (
-                <div className="space-y-2">
-                  <label className="block text-sm font-medium text-gray-600">{t('quickSelectRoute')}</label>
-                  <div className="flex flex-wrap gap-2">
-                    {quickRoutes.map(route => (
-                      <button
-                        key={`${route.from}→${route.to}`}
-                        type="button"
-                        onClick={() => applyPopularRoute(route.from, route.to)}
-                        className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                          formData.route_from === route.from && formData.route_to === route.to
-                            ? 'bg-sky-100 border-sky-300 text-sky-700'
-                            : 'bg-gray-50 border-gray-200 text-gray-600 hover:bg-gray-100'
-                        }`}
-                      >
-                        {route.from} → {route.to}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Supplier Selection */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2 flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-cyan-600" />
-                  {t('supplierSection')}
-                </h3>
-
-                {/* The airline is a supplier with the air-carrier role — the
-                    same model as hotels, cruises and trains. The two-letter
-                    code lives on the rate and builds the service code. */}
-                <div className="grid grid-cols-3 gap-4">
-                  <div className="col-span-2">
-                    <SupplierPicker
-                      value={formData.supplier_id}
-                      onChange={handleAirlinePick}
-                      preferredType="air_carrier"
-                      preferredLabel={t('airlines')}
-                      label={`${t('airline')} *`}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    />
-                    {!formData.supplier_id && (
-                      <p className="text-xs text-gray-500 mt-1">{t('airlineHint')}</p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('airlineCode')}
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.airline_code}
-                      onChange={(e) => handleAirlineCodeChange(e.target.value)}
-                      maxLength={3}
-                      placeholder="MS"
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md font-mono uppercase focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    />
-                  </div>
-                </div>
+            {formData.route_from && formData.route_to && (
+              <div className="flex items-center gap-2 rounded-md border border-sky-100 bg-sky-50 px-3 py-2">
+                <Plane className="h-4 w-4 text-sky-600" />
+                <span className="text-sm text-sky-700">
+                  {t('route')}: <strong>{formData.route_from}</strong> → <strong>{formData.route_to}</strong>
+                </span>
+                <span className={`ml-auto px-2 py-0.5 rounded text-xs font-medium ${
+                  formData.flight_type === 'domestic'
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'bg-purple-100 text-purple-700'
+                }`}>
+                  {flightTypeLabelFor(formData.flight_type)}
+                </span>
               </div>
+            )}
 
-              {/* Route */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2 flex items-center gap-2">
-                  <Plane className="h-4 w-4 text-sky-600" />
-                  {t('routeInfo')}
-                </h3>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('from')} <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.route_from}
-                      onChange={(e) => handleRouteChange('route_from', e.target.value)}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    >
-                      <option value="">{t('selectDepartureCity')}</option>
-                      <AirportOptions airports={airports} />
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('to')} <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.route_to}
-                      onChange={(e) => handleRouteChange('route_to', e.target.value)}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    >
-                      <option value="">{t('selectArrivalCity')}</option>
-                      <AirportOptions airports={airports} exclude={formData.route_from} />
-                    </select>
-                  </div>
-                </div>
-
-                {formData.route_from && formData.route_to && (
-                  <div className="flex items-center gap-2 px-3 py-2 bg-sky-50 border border-sky-100 rounded-md">
-                    <Plane className="h-4 w-4 text-sky-600" />
-                    <span className="text-sm text-sky-700">
-                      {t('route')}: <strong>{formData.route_from}</strong> → <strong>{formData.route_to}</strong>
-                    </span>
-                    <span className={`ml-auto px-2 py-0.5 rounded text-xs font-medium ${
-                      formData.flight_type === 'domestic'
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'bg-purple-100 text-purple-700'
-                    }`}>
-                      {flightTypeLabelFor(formData.flight_type)}
-                    </span>
-                  </div>
-                )}
-
-                {/* The agency's Flight types (Settings → Vocabulary). Pre-filled
-                    from the destinations when the route is picked; choosing one
-                    here makes it stick for the rest of this form. */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1.5">{t('flightType')}</label>
-                  <select
-                    value={formData.flight_type}
-                    onChange={(e) => { typeChosenByHand.current = true; setFormData(prev => ({ ...prev, flight_type: e.target.value as FlightRate['flight_type'] })) }}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                  >
-                    {!flightTypeOptions.some(o => o.value === formData.flight_type) && formData.flight_type && (
-                      <option value={formData.flight_type}>{flightTypeLabelFor(formData.flight_type)}</option>
-                    )}
-                    {flightTypeOptions.map(o => (
-                      <option key={o.value} value={o.value}>{o.label}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('flightNumber')}
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.flight_number}
-                      onChange={(e) => setFormData(prev => ({ ...prev, flight_number: e.target.value.toUpperCase() }))}
-                      placeholder="e.g., MS091"
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] font-mono"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('cabinClass')} <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.cabin_class}
-                      onChange={(e) => handleCabinClassChange(e.target.value as 'economy' | 'business' | 'first')}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    >
-                      {!cabinClassOptions.some(o => o.value === formData.cabin_class) && formData.cabin_class && (
-                        <option value={formData.cabin_class}>{flightCabinLabel(formData.cabin_class, formData.cabin_class)}</option>
-                      )}
-                      {cabinClassOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('serviceCode')}
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.service_code}
-                      onChange={(e) => setFormData(prev => ({ ...prev, service_code: e.target.value }))}
-                      placeholder={t('autoGenerated')}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-gray-50 font-mono"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Schedule */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2 flex items-center gap-2">
-                  <Clock className="h-4 w-4 text-orange-600" />
-                  {t('scheduleSection')}
-                </h3>
-
-                <div className="grid grid-cols-4 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('departureTime')}
-                    </label>
-                    <input
-                      type="time"
-                      value={formData.departure_time}
-                      onChange={(e) => setFormData(prev => ({ ...prev, departure_time: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('arrivalTime')}
-                    </label>
-                    <input
-                      type="time"
-                      value={formData.arrival_time}
-                      onChange={(e) => setFormData(prev => ({ ...prev, arrival_time: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('durationMin')}
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.duration_minutes || ''}
-                      onChange={(e) => setFormData(prev => ({ ...prev, duration_minutes: parseInt(e.target.value) || 0 }))}
-                      placeholder="e.g., 80"
-                      min="0"
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('frequency')}
-                    </label>
-                    <select
-                      value={formData.frequency}
-                      onChange={(e) => setFormData(prev => ({ ...prev, frequency: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    >
-                      {!frequencyOptions.some(o => o.value === formData.frequency) && formData.frequency && (
-                        <option value={formData.frequency}>{flightFrequencyLabel(formData.frequency, formData.frequency)}</option>
-                      )}
-                      {frequencyOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* The contract, not the price.
-                  The fare, its tax and the guide's seat used to be typed HERE
-                  as well as in each period — two boxes for one number, and the
-                  save silently kept the period's: legacyColumnMirror writes the
-                  first period over these columns, so whatever was typed up here
-                  was discarded the moment a period existed. A field that takes
-                  a number and throws it away is worse than no field.
-                  What is left is what belongs to the whole contract rather than
-                  to one of its dated blocks. */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">{t('pricingSection')}</h3>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <RateCurrencyField
-                    value={formData.rate_currency}
-                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                  />
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5 flex items-center gap-1">
-                      <Luggage className="h-3.5 w-3.5" />
-                      {t('baggage')}
-                    </label>
-                    <input
-                      type="number"
-                      value={formData.baggage_kg}
-                      onChange={(e) => setFormData(prev => ({ ...prev, baggage_kg: parseInt(e.target.value) || 0 }))}
-                      min="0"
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Validity — dated periods, the way a hotel's rate card works.
-                  This was ONE window plus a hardcoded Low/High/Peak dropdown,
-                  so a route sold across four seasons meant four near-identical
-                  rows, and no agency outside Egypt could call a season
-                  "Golden Week". The shared editor takes the season word from
-                  Settings → Vocabulary → Rate seasons. */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">{t('validitySection')}</h3>
-                <RateSeasonsEditor
-                  entity="flight"
-                  seasons={formData.seasons}
-                  currency={rateCurrency}
-                  onChange={(seasons) => setFormData(prev => ({ ...prev, seasons }))}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              {/* The agency's Flight types (Settings → Vocabulary). Pre-filled
+                  from the destinations when the route is picked; choosing one
+                  here makes it stick for the rest of this form. */}
+              <Field label={t('flightType')} htmlFor="fl-type">
+                <select
+                  id="fl-type"
+                  value={formData.flight_type}
+                  onChange={(e) => { typeChosenByHand.current = true; setFormData(prev => ({ ...prev, flight_type: e.target.value as FlightRate['flight_type'] })) }}
+                  className={inputClass}
+                >
+                  {!flightTypeOptions.some(o => o.value === formData.flight_type) && formData.flight_type && (
+                    <option value={formData.flight_type}>{flightTypeLabelFor(formData.flight_type)}</option>
+                  )}
+                  {flightTypeOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t('flightNumber')} htmlFor="fl-number">
+                <input
+                  id="fl-number"
+                  type="text"
+                  value={formData.flight_number}
+                  onChange={(e) => setFormData(prev => ({ ...prev, flight_number: e.target.value.toUpperCase() }))}
+                  placeholder="e.g., MS091"
+                  className={`${inputClass} font-mono`}
                 />
-              </div>
-
-              {/* Additional Info */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">{t('additionalInfo')}</h3>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                    {t('notes')}
-                  </label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                    rows={3}
-                    placeholder={t('notesPlaceholder')}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] resize-none"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="is_active"
-                    checked={formData.is_active}
-                    onChange={(e) => setFormData(prev => ({ ...prev, is_active: e.target.checked }))}
-                    className="h-4 w-4 text-[#647C47] border-gray-300 rounded focus:ring-[#647C47]"
-                  />
-                  <label htmlFor="is_active" className="text-sm text-gray-600">
-                    {t('activeForBooking')}
-                  </label>
-                </div>
-              </div>
-
-              {/* Audit Log */}
-              {editingRate && (
-                <RateAuditLog tableName="flight_rates" recordId={editingRate.id} />
-              )}
-
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+              </Field>
+              <Field label={t('cabinClass')} required htmlFor="fl-cabin">
+                <select
+                  id="fl-cabin"
+                  value={formData.cabin_class}
+                  onChange={(e) => handleCabinClassChange(e.target.value as 'economy' | 'business' | 'first')}
+                  required
+                  className={inputClass}
                 >
-                  {tCommon('cancel')}
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-md hover:bg-[#4f6238] transition-colors disabled:opacity-50 min-w-[100px]"
+                  {!cabinClassOptions.some(o => o.value === formData.cabin_class) && formData.cabin_class && (
+                    <option value={formData.cabin_class}>{flightCabinLabel(formData.cabin_class, formData.cabin_class)}</option>
+                  )}
+                  {cabinClassOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          </FormSection>
+
+          <FormSection title={t('scheduleSection')}>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <Field label={t('departureTime')} htmlFor="fl-departure">
+                <input
+                  id="fl-departure"
+                  type="time"
+                  value={formData.departure_time}
+                  onChange={(e) => setFormData(prev => ({ ...prev, departure_time: e.target.value }))}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label={t('arrivalTime')} htmlFor="fl-arrival">
+                <input
+                  id="fl-arrival"
+                  type="time"
+                  value={formData.arrival_time}
+                  onChange={(e) => setFormData(prev => ({ ...prev, arrival_time: e.target.value }))}
+                  className={inputClass}
+                />
+              </Field>
+              <Field label={t('durationMin')} htmlFor="fl-duration">
+                <input
+                  id="fl-duration"
+                  type="number"
+                  value={formData.duration_minutes || ''}
+                  onChange={(e) => setFormData(prev => ({ ...prev, duration_minutes: parseInt(e.target.value) || 0 }))}
+                  placeholder="e.g., 80"
+                  min="0"
+                  className={inputClass}
+                />
+              </Field>
+              <Field label={t('frequency')} htmlFor="fl-frequency">
+                <select
+                  id="fl-frequency"
+                  value={formData.frequency}
+                  onChange={(e) => setFormData(prev => ({ ...prev, frequency: e.target.value }))}
+                  className={inputClass}
                 >
-                  {saving ? t('saving') : editingRate ? t('updateRate') : t('addRate')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+                  {!frequencyOptions.some(o => o.value === formData.frequency) && formData.frequency && (
+                    <option value={formData.frequency}>{flightFrequencyLabel(formData.frequency, formData.frequency)}</option>
+                  )}
+                  {frequencyOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          </FormSection>
+
+          {/* The contract, not the price.
+              The fare, its tax and the guide's seat used to be typed HERE
+              as well as in each period — two boxes for one number, and the
+              save silently kept the period's: legacyColumnMirror writes the
+              first period over these columns, so whatever was typed up here
+              was discarded the moment a period existed. A field that takes
+              a number and throws it away is worse than no field.
+              What is left is what belongs to the whole contract rather than
+              to one of its dated blocks. */}
+          <FormSection title={t('pricingSection')}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <CurrencyPicker id="fl-currency" value={formData.rate_currency} onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))} orgCurrency={rateCurrency} />
+              <Field label={t('baggage')} htmlFor="fl-baggage">
+                <input
+                  id="fl-baggage"
+                  type="number"
+                  value={formData.baggage_kg}
+                  onChange={(e) => setFormData(prev => ({ ...prev, baggage_kg: parseInt(e.target.value) || 0 }))}
+                  min="0"
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+          </FormSection>
+
+          {/* Validity — dated periods, the way a hotel's rate card works.
+              This was ONE window plus a hardcoded Low/High/Peak dropdown,
+              so a route sold across four seasons meant four near-identical
+              rows, and no agency outside Egypt could call a season
+              "Golden Week". The shared editor takes the season word from
+              Settings → Vocabulary → Rate seasons. */}
+          <FormSection title={t('validitySection')}>
+            <RateSeasonsEditor
+              entity="flight"
+              seasons={formData.seasons}
+              currency={rateCurrency}
+              onChange={(seasons) => setFormData(prev => ({ ...prev, seasons }))}
+            />
+          </FormSection>
+
+          <FormSection title={t('additionalInfo')}>
+            <Field label={t('notes')} htmlFor="fl-notes">
+              <textarea
+                id="fl-notes"
+                value={formData.notes}
+                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                rows={3}
+                placeholder={t('notesPlaceholder')}
+                className={`${inputClass} resize-none`}
+              />
+            </Field>
+          </FormSection>
+        </RateFormModal>
       )}
     </div>
   )

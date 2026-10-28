@@ -21,7 +21,7 @@ describe('one place to type a fare', () => {
 
   it('keeps what belongs to the contract rather than to one dated block', () => {
     // Currency and baggage are properties of the whole fare, not of a season.
-    expect(form).toContain('<RateCurrencyField')
+    expect(form).toContain('<CurrencyPicker') // components/rates/RateFormKit
     expect(form).toContain('formData.baggage_kg')
   })
 
