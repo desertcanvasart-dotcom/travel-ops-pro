@@ -38,8 +38,7 @@ import { Copy, Building2,
   CheckCircle2,
   Crown,
   ExternalLink,
-  User,
-  AtSign
+  User
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import RateAuditLog from '@/app/components/RateAuditLog'
@@ -50,7 +49,8 @@ import RateSupplementsPicker from '@/components/rates/RateSupplementsPicker'
 import { seasonsForRow, type RateSeason } from '@/lib/rates/rate-seasons'
 import { supplementsForRow, type RateSupplement } from '@/lib/rates/supplements'
 import RatePeriodLines, { pricedDoubles } from '@/components/rates/RatePeriodLines'
-import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
+import { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
+import { RateFormModal, FormSection, Field, CurrencyPicker, ValidityFields, inputClass, shortDate } from '@/components/rates/RateFormKit'
 import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
 
 // Hotel picker option that reveals the free-text input for a new hotel.
@@ -562,15 +562,6 @@ export default function HotelsContent() {
       ...prev,
       city,
       service_code: prev.service_code || generateServiceCode(city)
-    }))
-  }
-
-  // Handle checkbox
-  const handleCheckboxChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const { name, checked } = e.target
-    setFormData(prev => ({
-      ...prev,
-      [name]: checked
     }))
   }
 
@@ -1358,378 +1349,235 @@ export default function HotelsContent() {
 
       {/* ADD/EDIT MODAL */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between z-10">
-              <h2 className="text-lg font-bold text-gray-900">
-                {editingRate ? t('editRate') : t('addRate')}
-              </h2>
-              <button
-                onClick={() => setShowModal(false)}
-                className="p-1 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded transition-colors"
+        <RateFormModal
+          formId="hotel-rate-form"
+          title={editingRate ? t('editRate') : t('addRate')}
+          code={formData.service_code}
+          onClose={() => setShowModal(false)}
+          onSubmit={handleSubmit}
+          after={editingRate ? <RateAuditLog tableName="accommodation_rates" recordId={editingRate.id} /> : undefined}
+          summary={[
+            (formData.property_id ? hotelProps.find(hp => hp.id === formData.property_id)?.name : null) || formData.property_name,
+            formData.city,
+            tierOptions.find(o => o.value === formData.tier)?.label,
+            boardBasisOptions.find(o => o.value === formData.board_basis)?.label,
+            formData.rate_valid_from && formData.rate_valid_to ? `${shortDate(formData.rate_valid_from)} – ${shortDate(formData.rate_valid_to)}` : null,
+          ].filter(Boolean).join(' · ')}
+          active={{ checked: formData.is_active, onChange: v => setFormData(prev => ({ ...prev, is_active: v })), label: tCommon('formActive') }}
+          submitLabel={editingRate ? tCommon('updateRate') : tCommon('createRate')}
+          cancelLabel={tCommon('cancel')}
+          maxWidth="max-w-4xl"
+        >
+          <FormSection title={t('hotelInformation')}>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field
+                label={t('companySupplier')}
+                required
+                htmlFor="ht-supplier"
+                hint={
+                  <Link href="/suppliers?type=hotel" className="inline-flex items-center gap-1 text-primary-600 hover:underline">
+                    <Plus className="w-3 h-3" /> {t('addNewCompany')}
+                  </Link>
+                }
               >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form noValidate onSubmit={handleSubmit} className="p-4">
-              {/* SECTION 1: Hotel Information */}
-              <div className="mb-6">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold">1</span>
-                  {t('hotelInformation')}
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('companySupplier')}</label>
+                <select
+                  id="ht-supplier"
+                  required
+                  value={formData.supplier_id}
+                  onChange={(e) => handleSupplierSelect(e.target.value)}
+                  className={inputClass}
+                >
+                  <option value="" disabled>{t('selectCompanyOptional')}</option>
+                  <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
+                  {suppliers.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              </Field>
+              {/* Supplier-HAS-properties: with a supplier chosen, the hotel
+                  comes from that supplier's properties (managed on the
+                  supplier page). Typing a new name still works — the API
+                  creates the hotel under the supplier on save. */}
+              <Field label={t('hotelName')} required htmlFor={hotelProps.length > 0 && formData.supplier_id ? 'ht-hotel' : 'ht-hotel-name'}>
+                {hotelProps.length > 0 && formData.supplier_id ? (
+                  <>
                     <select
-                      required
-                      value={formData.supplier_id}
-                      onChange={(e) => handleSupplierSelect(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                      id="ht-hotel"
+                      value={formData.property_id || NEW_PROPERTY}
+                      onChange={(e) => handleHotelPick(e.target.value)}
+                      className={inputClass}
                     >
-                      <option value="" disabled>{t('selectCompanyOptional')}</option>
-                      <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
-                      {suppliers.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
+                      <option value={NEW_PROPERTY}>{t('newHotelOption')}</option>
+                      {hotelProps.map(hp => (
+                        <option key={hp.id} value={hp.id}>{hp.name}{hp.city ? ` (${hp.city})` : ''}</option>
                       ))}
                     </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      <Link href="/suppliers?type=hotel" className="text-primary-600 hover:underline flex items-center gap-1 inline">
-                        <Plus className="w-3 h-3" /> {t('addNewCompany')}
-                      </Link>
-                    </p>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('serviceCode')}</label>
-                    <input
-                      type="text"
-                      name="service_code"
-                      value={formData.service_code}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm bg-gray-50"
-                      placeholder={t('placeholders.autoGenerated')}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('hotelName')} *</label>
-                    {/* Supplier-HAS-properties: with a supplier chosen, the
-                        hotel comes from that supplier's properties (managed on
-                        the supplier page). Typing a new name still works — the
-                        API creates the hotel under the supplier on save. */}
-                    {hotelProps.length > 0 && formData.supplier_id ? (
-                      <>
-                        <select
-                          value={formData.property_id || NEW_PROPERTY}
-                          onChange={(e) => handleHotelPick(e.target.value)}
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                        >
-                          <option value={NEW_PROPERTY}>{t('newHotelOption')}</option>
-                          {hotelProps.map(hp => (
-                            <option key={hp.id} value={hp.id}>{hp.name}{hp.city ? ` (${hp.city})` : ''}</option>
-                          ))}
-                        </select>
-                        {!formData.property_id && (
-                          <input
-                            type="text"
-                            name="property_name"
-                            value={formData.property_name}
-                            onChange={handleChange}
-                            required
-                            placeholder={t('placeholders.hotelName')}
-                            className="w-full px-3 py-2 mt-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                          />
-                        )}
-                      </>
-                    ) : (
+                    {!formData.property_id && (
                       <input
+                        id="ht-hotel-name"
                         type="text"
                         name="property_name"
                         value={formData.property_name}
                         onChange={handleChange}
                         required
+                        aria-label={t('hotelName')}
                         placeholder={t('placeholders.hotelName')}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
+                        className={`${inputClass} mt-2`}
                       />
                     )}
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('city')} *</label>
-                    <select
-                      name="city"
-                      value={formData.city}
-                      onChange={(e) => handleCityChange(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                    >
-                      <option value="">{tCommon('selectCity')}</option>
-                      <CityOptions />
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('propertyType')} *</label>
-                    <select
-                      name="property_type"
-                      value={formData.property_type}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                    >
-                      {propertyTypeOptions.map(o => (
-                        <option key={o.value} value={o.value}>{PROPERTY_TYPE_ICONS[o.value] ?? '🏨'} {o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('boardBasis')}</label>
-                    <select
-                      name="board_basis"
-                      value={formData.board_basis}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                    >
-                      {boardBasisOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <RateCurrencyField
-                    value={formData.rate_currency}
-                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                  />
-                </div>
-              </div>
-
-              {/* SECTION 2: Hotel Contacts (NEW) */}
-              <div className="mb-6">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">2</span>
-                  {t('hotelContacts')}
-                </h3>
-                <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        <User className="w-3 h-3 inline mr-1" />
-                        {t('salesContactName')}
-                      </label>
-                      <input
-                        type="text"
-                        name="contact_name"
-                        value={formData.contact_name}
-                        onChange={handleChange}
-                        placeholder={t('placeholders.salesContact')}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        <Mail className="w-3 h-3 inline mr-1" />
-                        {t('salesEmail')}
-                      </label>
-                      <input
-                        type="email"
-                        name="contact_email"
-                        value={formData.contact_email}
-                        onChange={handleChange}
-                        placeholder={t('placeholders.salesEmail')}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        <Phone className="w-3 h-3 inline mr-1" />
-                        {t('salesPhone')}
-                      </label>
-                      <input
-                        type="tel"
-                        name="contact_phone"
-                        value={formData.contact_phone}
-                        onChange={handleChange}
-                        placeholder={t('placeholders.phone')}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        <AtSign className="w-3 h-3 inline mr-1" />
-                        {t('reservationsEmail')}
-                      </label>
-                      <input
-                        type="email"
-                        name="reservations_email"
-                        value={formData.reservations_email}
-                        onChange={handleChange}
-                        placeholder={t('placeholders.reservationsEmail')}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                      />
-                    </div>
-                    <div className="md:col-span-2">
-                      <label className="block text-xs font-medium text-gray-600 mb-1">
-                        <Phone className="w-3 h-3 inline mr-1" />
-                        {t('reservationsPhone')}
-                      </label>
-                      <input
-                        type="tel"
-                        name="reservations_phone"
-                        value={formData.reservations_phone}
-                        onChange={handleChange}
-                        placeholder={t('placeholders.phone')}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* SECTION 3: Service Tier */}
-              <div className="mb-6">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-amber-100 text-amber-600 flex items-center justify-center text-xs font-bold">3</span>
-                  {tCommon('tier')}
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {tierOptions.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, tier: opt.value })}
-                      className={`px-4 py-2 text-sm rounded-lg border-2 font-medium transition-all ${
-                        formData.tier === opt.value
-                          ? opt.value === 'budget'
-                            ? 'border-gray-600 bg-gray-100 text-gray-800'
-                            : opt.value === 'standard'
-                            ? 'border-blue-600 bg-blue-50 text-blue-800'
-                            : opt.value === 'deluxe'
-                            ? 'border-purple-600 bg-purple-50 text-purple-800'
-                            : opt.value === 'luxury'
-                            ? 'border-amber-600 bg-amber-50 text-amber-800'
-                            : 'border-[#647C47] bg-green-50 text-green-800'
-                          : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
-                      }`}
-                    >
-                      {opt.value === 'luxury' && <Crown className="w-3.5 h-3.5 inline mr-1" />}
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* SECTION 4: Rate periods */}
-              {/* Was three fixed season blocks — low, high, peak — with four
-                  date boxes between them. Contracts run to six or more dated
-                  periods and the count varies by property, so the periods are
-                  a list now. An existing rate opens with its old windows
-                  already converted (see openEditModal). */}
-              <div className="mb-6">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">4</span>
-                  {tPeriods('titleWithCurrency', { currency: formData.rate_currency || rateCurrency })}
-                </h3>
-                {/* Which of the agency's supplements this hotel prices — each
-                    one picked here gets a per-night price in every period. */}
-                <div className="mb-3">
-                  <p className="text-xs font-medium text-gray-600 mb-1">{tSupp('title')}</p>
-                  <RateSupplementsPicker
-                    kind="hotel_supplement"
-                    value={formData.supplements}
-                    onChange={(supplements) => setFormData({ ...formData, supplements })}
-                  />
-                </div>
-                <RateSeasonsEditor
-                  entity="accommodation"
-                  seasons={formData.seasons}
-                  supplements={formData.supplements}
-                  currency={rateCurrency}
-                  onChange={(seasons) => setFormData({ ...formData, seasons })}
-                />
-              </div>
-
-              {/* SECTION 5: Rate Card Validity */}
-              <div className="mb-6">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">5</span>
-                  {t('rateCardValidity')}
-                  <span className="text-xs font-normal text-gray-500 ml-2">{t('rateCardValidityDesc')}</span>
-                </h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('validFrom')}</label>
-                    <input
-                      type="date"
-                      name="rate_valid_from"
-                      value={formData.rate_valid_from}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('validTo')}</label>
-                    <input
-                      type="date"
-                      name="rate_valid_to"
-                      value={formData.rate_valid_to}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Notes & Status */}
-              <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('notes')}</label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleChange}
-                  rows={2}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-600 focus:border-transparent shadow-sm"
-                  placeholder={t('placeholders.notes')}
-                />
-              </div>
-
-              <div className="mb-4">
-                <label className="flex items-center gap-2 cursor-pointer">
+                  </>
+                ) : (
                   <input
-                    type="checkbox"
-                    name="is_active"
-                    checked={formData.is_active}
-                    onChange={handleCheckboxChange}
-                    className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    id="ht-hotel-name"
+                    type="text"
+                    name="property_name"
+                    value={formData.property_name}
+                    onChange={handleChange}
+                    required
+                    placeholder={t('placeholders.hotelName')}
+                    className={inputClass}
                   />
-                  <span className="text-sm font-medium text-gray-700">{tCommon('activeForBookings')}</span>
-                </label>
-              </div>
+                )}
+              </Field>
+              <Field label={tCommon('city')} required htmlFor="ht-city">
+                <select
+                  id="ht-city"
+                  name="city"
+                  value={formData.city}
+                  onChange={(e) => handleCityChange(e.target.value)}
+                  required
+                  className={inputClass}
+                >
+                  <option value="">{tCommon('selectCity')}</option>
+                  <CityOptions />
+                </select>
+              </Field>
+              <Field label={t('propertyType')} required htmlFor="ht-property-type">
+                <select
+                  id="ht-property-type"
+                  name="property_type"
+                  value={formData.property_type}
+                  onChange={handleChange}
+                  required
+                  className={inputClass}
+                >
+                  {propertyTypeOptions.map(o => (
+                    <option key={o.value} value={o.value}>{PROPERTY_TYPE_ICONS[o.value] ?? '🏨'} {o.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t('boardBasis')} htmlFor="ht-board">
+                <select
+                  id="ht-board"
+                  name="board_basis"
+                  value={formData.board_basis}
+                  onChange={handleChange}
+                  className={inputClass}
+                >
+                  {boardBasisOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
+                </select>
+              </Field>
+              <CurrencyPicker
+                id="ht-currency"
+                value={formData.rate_currency}
+                onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
+                orgCurrency={rateCurrency}
+              />
+            </div>
+          </FormSection>
 
-              {/* Change History */}
-              {editingRate && (
-                <div className="pt-3">
-                  <RateAuditLog tableName="accommodation_rates" recordId={editingRate.id} />
-                </div>
-              )}
+          <FormSection title={t('hotelContacts')}>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field label={t('salesContactName')} htmlFor="ht-contact-name">
+                <input id="ht-contact-name" type="text" name="contact_name" value={formData.contact_name} onChange={handleChange} placeholder={t('placeholders.salesContact')} className={inputClass} />
+              </Field>
+              <Field label={t('salesEmail')} htmlFor="ht-contact-email">
+                <input id="ht-contact-email" type="email" name="contact_email" value={formData.contact_email} onChange={handleChange} placeholder={t('placeholders.salesEmail')} className={inputClass} />
+              </Field>
+              <Field label={t('salesPhone')} htmlFor="ht-contact-phone">
+                <input id="ht-contact-phone" type="tel" name="contact_phone" value={formData.contact_phone} onChange={handleChange} placeholder={t('placeholders.phone')} className={inputClass} />
+              </Field>
+              <Field label={t('reservationsEmail')} htmlFor="ht-res-email">
+                <input id="ht-res-email" type="email" name="reservations_email" value={formData.reservations_email} onChange={handleChange} placeholder={t('placeholders.reservationsEmail')} className={inputClass} />
+              </Field>
+              <Field label={t('reservationsPhone')} htmlFor="ht-res-phone" className="md:col-span-2">
+                <input id="ht-res-phone" type="tel" name="reservations_phone" value={formData.reservations_phone} onChange={handleChange} placeholder={t('placeholders.phone')} className={inputClass} />
+              </Field>
+            </div>
+          </FormSection>
 
-              {/* Buttons */}
-              <div className="flex gap-2 pt-3 border-t">
+          <FormSection title={tCommon('tier')}>
+            <div className="flex flex-wrap gap-2" role="group" aria-label={tCommon('tier')}>
+              {tierOptions.map((opt) => (
                 <button
+                  key={opt.value}
                   type="button"
-                  onClick={() => setShowModal(false)}
-                  className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 font-medium transition-colors"
+                  aria-pressed={formData.tier === opt.value}
+                  onClick={() => setFormData({ ...formData, tier: opt.value })}
+                  className={`px-4 py-2 text-sm rounded-lg border-2 font-medium transition-all ${
+                    formData.tier === opt.value
+                      ? opt.value === 'budget'
+                        ? 'border-gray-600 bg-gray-100 text-gray-800'
+                        : opt.value === 'standard'
+                        ? 'border-blue-600 bg-blue-50 text-blue-800'
+                        : opt.value === 'deluxe'
+                        ? 'border-purple-600 bg-purple-50 text-purple-800'
+                        : opt.value === 'luxury'
+                        ? 'border-amber-600 bg-amber-50 text-amber-800'
+                        : 'border-[#647C47] bg-green-50 text-green-800'
+                      : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                  }`}
                 >
-                  {tCommon('cancel')}
+                  {opt.value === 'luxury' && <Crown className="w-3.5 h-3.5 inline mr-1" />}
+                  {opt.label}
                 </button>
-                <button
-                  type="submit"
-                  className="flex-1 px-3 py-2 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 font-medium transition-colors flex items-center justify-center gap-2"
-                >
-                  <Check className="w-4 h-4" />
-                  {editingRate ? tCommon('updateRate') : tCommon('createRate')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+              ))}
+            </div>
+          </FormSection>
+
+          {/* Was three fixed season blocks — low, high, peak — with four date
+              boxes between them. Contracts run to six or more dated periods
+              and the count varies by property, so the periods are a list now.
+              An existing rate opens with its old windows already converted
+              (see openEditModal). */}
+          <FormSection title={tPeriods('titleWithCurrency', { currency: formData.rate_currency || rateCurrency })}>
+            {/* Which of the agency's supplements this hotel prices — each one
+                picked here gets a per-night price in every period. */}
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-medium text-gray-700">{tSupp('title')}</p>
+              <RateSupplementsPicker
+                kind="hotel_supplement"
+                value={formData.supplements}
+                onChange={(supplements) => setFormData({ ...formData, supplements })}
+              />
+            </div>
+            <RateSeasonsEditor
+              entity="accommodation"
+              seasons={formData.seasons}
+              supplements={formData.supplements}
+              currency={rateCurrency}
+              onChange={(seasons) => setFormData({ ...formData, seasons })}
+            />
+          </FormSection>
+
+          <FormSection title={t('rateCardValidity')}>
+            <p className="-mt-1 text-xs text-gray-500">{t('rateCardValidityDesc')}</p>
+            <ValidityFields
+              idPrefix="ht-valid"
+              from={formData.rate_valid_from}
+              to={formData.rate_valid_to}
+              onChange={handleChange}
+              fromLabel={t('validFrom')}
+              toLabel={t('validTo')}
+            />
+          </FormSection>
+
+          <Field label={tCommon('notes')} htmlFor="ht-notes">
+            <textarea id="ht-notes" name="notes" value={formData.notes} onChange={handleChange} rows={2} placeholder={t('placeholders.notes')} className={inputClass} />
+          </Field>
+        </RateFormModal>
       )}
 
       <style jsx>{`
