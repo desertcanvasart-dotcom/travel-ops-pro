@@ -4,7 +4,9 @@ import { todayLocal } from '@/lib/today'
 import { useEffect, useState } from 'react'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useDestinationCities } from '@/app/components/useDestinationCities'
-import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { RateFormModal, FormSection, Field, MoneyInput, CurrencyPicker, ValidityFields, inputClass, shortDate } from '@/components/rates/RateFormKit'
+import { formatMoney } from '@/lib/currency-totals'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import SupplierPicker from '@/components/rates/SupplierPicker'
 import { useTranslations } from 'next-intl'
@@ -20,7 +22,6 @@ import { Copy, Train,
   Search,
   Edit,
   Trash2,
-  X,
   Check,
   MapPin,
   Clock,
@@ -989,271 +990,107 @@ export default function TrainRatesContent() {
 
       {/* Form Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-lg font-bold text-gray-900">
-                {editingRate ? t('editRate') : t('addRate')}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
-                <X className="w-4 h-4" />
-              </button>
+        <RateFormModal
+          formId="train-rate-form"
+          title={editingRate ? t('editRate') : t('addRate')}
+          code={formData.service_code}
+          onClose={() => setShowModal(false)}
+          onSubmit={handleSubmit}
+          after={editingRate ? <RateAuditLog tableName="train_rates" recordId={editingRate.id} /> : undefined}
+          summary={[
+            formData.origin_city && formData.destination_city ? `${formData.origin_city} → ${formData.destination_city}` : null,
+            classOptions.find(o => o.value === formData.class_type)?.label,
+            trains.find(tr => tr.id === formData.property_id)?.name,
+            Number(formData.rate_eur) > 0
+              ? `${formatMoney(Number(formData.rate_eur), formData.rate_currency || rateCurrency)} ${tCommon('perPerson')}`
+              : null,
+            formData.rate_valid_from && formData.rate_valid_to ? `${shortDate(formData.rate_valid_from)} – ${shortDate(formData.rate_valid_to)}` : null,
+          ].filter(Boolean).join(' · ')}
+          active={{ checked: formData.is_active, onChange: v => setFormData(prev => ({ ...prev, is_active: v })), label: tCommon('formActive') }}
+          submitLabel={editingRate ? t('form.update') : t('form.create')}
+          cancelLabel={t('form.cancel')}
+        >
+          <FormSection title={tCommon('sectionSupplier')}>
+            <SupplierPicker
+              value={formData.supplier_id}
+              onChange={(supplier_id, supplier) => {
+                // Keep the denormalized operator_name in step with the
+                // supplier rather than letting a second control disagree.
+                setFormData(prev => ({ ...prev, supplier_id, property_id: '', operator_name: supplier?.name ?? '' }))
+                void loadTrains(supplier_id)
+              }}
+              preferredType="train_operator"
+              preferredLabel="Train Operators"
+            />
+            {/* WHICH of the supplier's trains this rate prices
+                (supplier-HAS-properties, Phase 3). Always rendered, in three
+                states. Hiding it whenever the supplier had no loaded trains
+                meant an operator who had just added four of them opened this
+                form, saw nothing at all, and reasonably concluded the
+                properties had gone nowhere. */}
+            <Field label={t('form.train')} htmlFor="tr-train">
+              {!formData.supplier_id ? (
+                <p className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">{t('form.trainPickSupplier')}</p>
+              ) : trains.length === 0 ? (
+                <p className="rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-xs text-gray-500">{t('form.trainNone')}</p>
+              ) : (
+                <select id="tr-train" value={formData.property_id} onChange={(e) => setFormData(prev => ({ ...prev, property_id: e.target.value }))} className={inputClass}>
+                  <option value="">{t('form.trainAny')}</option>
+                  {trains.map(tr => <option key={tr.id} value={tr.id}>{tr.name}</option>)}
+                </select>
+              )}
+            </Field>
+          </FormSection>
+
+          <FormSection title={t('form.routeDetails')}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={t('form.originCity')} required htmlFor="tr-origin">
+                <select id="tr-origin" name="origin_city" value={formData.origin_city} onChange={handleChange} required className={inputClass}>
+                  <option value="">{t('form.selectOrigin')}</option>
+                  {cityChoices(destinationCities, formData.origin_city).map(city => <option key={city} value={city}>{city}</option>)}
+                </select>
+              </Field>
+              <Field label={t('form.destinationCity')} required htmlFor="tr-destination">
+                <select id="tr-destination" name="destination_city" value={formData.destination_city} onChange={handleChange} required className={inputClass}>
+                  <option value="">{t('form.selectDestination')}</option>
+                  {cityChoices(destinationCities, formData.destination_city).map(city => <option key={city} value={city}>{city}</option>)}
+                </select>
+              </Field>
+              <Field label={t('form.classType')} required htmlFor="tr-class">
+                <select id="tr-class" name="class_type" value={formData.class_type} onChange={handleChange} required className={inputClass}>
+                  <option value="">{t('form.selectClass')}</option>
+                  {classOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+              <Field label={t('form.duration')} htmlFor="tr-duration">
+                <input id="tr-duration" type="number" name="duration_hours" value={formData.duration_hours} onChange={handleChange} step="0.5" min="0" placeholder={t('form.durationPlaceholder')} className={inputClass} />
+              </Field>
             </div>
+            <Field label={t('form.departureTimes')} htmlFor="tr-times">
+              <input id="tr-times" type="text" name="departure_times" value={formData.departure_times} onChange={handleChange} placeholder={t('form.departureTimesPlaceholder')} className={inputClass} />
+            </Field>
+          </FormSection>
 
-            <form noValidate onSubmit={handleSubmit} className="p-4 overflow-y-auto max-h-[calc(90vh-140px)]">
-              <SupplierPicker
-                value={formData.supplier_id}
-                onChange={(supplier_id, supplier) => {
-                  // Keep the denormalized operator_name in step with the
-                  // supplier rather than letting a second control disagree.
-                  setFormData(prev => ({ ...prev, supplier_id, property_id: '', operator_name: supplier?.name ?? '' }))
-                  void loadTrains(supplier_id)
-                }}
-                preferredType="train_operator"
-                preferredLabel="Train Operators"
-                className="mb-4"
-              />
-              {/* WHICH of the supplier's trains this rate prices
-                  (supplier-HAS-properties, Phase 3). Always rendered, in three
-                  states. Hiding it whenever the supplier had no loaded trains
-                  meant an operator who had just added four of them opened this
-                  form, saw nothing at all, and reasonably concluded the
-                  properties had gone nowhere. */}
-              <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.train')}</label>
-                {!formData.supplier_id ? (
-                  <p className="px-3 py-2 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg">
-                    {t('form.trainPickSupplier')}
-                  </p>
-                ) : trains.length === 0 ? (
-                  <p className="px-3 py-2 text-xs text-gray-500 bg-gray-50 border border-gray-200 rounded-lg">
-                    {t('form.trainNone')}
-                  </p>
-                ) : (
-                  <select
-                    value={formData.property_id}
-                    onChange={(e) => setFormData(prev => ({ ...prev, property_id: e.target.value }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                  >
-                    <option value="">{t('form.trainAny')}</option>
-                    {trains.map(tr => (
-                      <option key={tr.id} value={tr.id}>{tr.name}</option>
-                    ))}
-                  </select>
-                )}
-              </div>
-              {/* Route Info */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-xs font-bold">1</span>
-                  {t('form.routeDetails')}
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.serviceCode')}</label>
-                    <input
-                      type="text"
-                      name="service_code"
-                      value={formData.service_code}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.originCity')} *</label>
-                    <select
-                      name="origin_city"
-                      value={formData.origin_city}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      <option value="">{t('form.selectOrigin')}</option>
-                      {cityChoices(destinationCities, formData.origin_city).map(city => (
-                        <option key={city} value={city}>{city}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.destinationCity')} *</label>
-                    <select
-                      name="destination_city"
-                      value={formData.destination_city}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      <option value="">{t('form.selectDestination')}</option>
-                      {cityChoices(destinationCities, formData.destination_city).map(city => (
-                        <option key={city} value={city}>{city}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.classType')} *</label>
-                    <select
-                      name="class_type"
-                      value={formData.class_type}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      <option value="">{t('form.selectClass')}</option>
-                      {classOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.duration')}</label>
-                    <input
-                      type="number"
-                      name="duration_hours"
-                      value={formData.duration_hours}
-                      onChange={handleChange}
-                      step="0.5"
-                      min="0"
-                      placeholder={t('form.durationPlaceholder')}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Departure Times */}
-              <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.departureTimes')}</label>
-                <input
-                  type="text"
-                  name="departure_times"
-                  value={formData.departure_times}
-                  onChange={handleChange}
-                  placeholder={t('form.departureTimesPlaceholder')}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                />
-              </div>
-
-              {/* Pricing */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">2</span>
-                  {t('form.pricing')}
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.rate')} *</label>
-                    <input
-                      type="number"
-                      name="rate_eur"
-                      value={formData.rate_eur}
-                      onChange={handleChange}
-                      required
-                      min="0.01"
-                      step="0.01"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1" title={tCommon('guideFareHint')}>{tCommon('guideFare')}</label>
-                    <input
-                      type="number"
-                      name="guide_rate"
-                      value={formData.guide_rate}
-                      onChange={handleChange}
-                      min="0"
-                      step="0.01"
-                      placeholder="—"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <RateCurrencyField
-                    value={formData.rate_currency}
-                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                  />
-                </div>
-              </div>
-
-              {/* Validity */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">3</span>
-                  {t('form.validityPeriod')}
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validFrom')}</label>
-                    <input
-                      type="date"
-                      name="rate_valid_from"
-                      value={formData.rate_valid_from}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validTo')}</label>
-                    <input
-                      type="date"
-                      name="rate_valid_to"
-                      value={formData.rate_valid_to}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Notes & Status */}
-              <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.notes')}</label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleChange}
-                  rows={2}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                />
-              </div>
-
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.is_active}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className="w-4 h-4 text-primary-600 border-gray-300 rounded"
-                  />
-                  <span className="text-sm font-medium text-gray-900">{t('activeRate')}</span>
-                </label>
-              </div>
-            </form>
-
-            {/* Audit Log */}
-            {editingRate && (
-              <div className="px-4">
-                <RateAuditLog tableName="train_rates" recordId={editingRate.id} />
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-2 p-4 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-              >
-                {t('form.cancel')}
-              </button>
-              <button
-                onClick={handleSubmit}
-                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
-              >
-                <Check className="w-4 h-4" />
-                {editingRate ? t('form.update') : t('form.create')}
-              </button>
+          <FormSection title={t('form.pricing')}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <Field label={t('form.rate')} required htmlFor="tr-rate">
+                <MoneyInput id="tr-rate" name="rate_eur" value={formData.rate_eur} onChange={handleChange} currency={formData.rate_currency || rateCurrency} unit={tCommon('perPerson')} required />
+              </Field>
+              <Field label={tCommon('guideFare')} htmlFor="tr-guide-fare" hint={tCommon('guideFareHint')}>
+                <MoneyInput id="tr-guide-fare" name="guide_rate" value={formData.guide_rate} onChange={handleChange} currency={formData.rate_currency || rateCurrency} allowZero placeholder="—" />
+              </Field>
+              <CurrencyPicker id="tr-currency" value={formData.rate_currency} onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))} orgCurrency={rateCurrency} />
             </div>
-          </div>
-        </div>
+          </FormSection>
+
+          <FormSection title={t('form.validityPeriod')}>
+            <ValidityFields idPrefix="tr" from={formData.rate_valid_from} to={formData.rate_valid_to} onChange={handleChange} fromLabel={t('form.validFrom')} toLabel={t('form.validTo')} />
+          </FormSection>
+
+          <Field label={t('form.notes')} htmlFor="tr-notes">
+            <textarea id="tr-notes" name="notes" value={formData.notes} onChange={handleChange} rows={2} className={inputClass} />
+          </Field>
+        </RateFormModal>
       )}
     </div>
   )

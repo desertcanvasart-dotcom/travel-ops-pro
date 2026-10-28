@@ -3963,7 +3963,16 @@
       "pricingFlatHint": "One price for the whole group, whatever its size",
       "pricingPerPersonHint": "The rate × the number of travellers",
       "pricingPerUnitHint": "The rate × the units the group needs (e.g. per room of 2)",
-      "peoplePerUnit": "people per unit"
+      "peoplePerUnit": "people per unit",
+      "currencyDefaultWith": "Default ({currency})",
+      "currencyHintShort": "Change only if the contract is in another currency.",
+      "formSummary": "Summary",
+      "formActive": "Available for bookings",
+      "formClose": "Close",
+      "validMonths": "{count, plural, one {# month} other {# months}}",
+      "validBackwards": "The end date is before the start date.",
+      "perPerson": "per person",
+      "sectionSupplier": "Supplier"
     },
     "meals": {
       "title": "Meal Rates",
@@ -3989,7 +3998,7 @@
       "addFirstRate": "Add First Rate",
       "restaurantMealDetails": "Restaurant & Meal Details",
       "supplierRestaurant": "Supplier/Restaurant",
-      "selectSupplierOptional": "Select supplier (optional)",
+      "selectSupplierOptional": "Select a supplier, or Direct booking",
       "linkToRestaurant": "Link to a restaurant supplier.",
       "manageRestaurants": "Manage Restaurants",
       "restaurantName": "Restaurant Name",

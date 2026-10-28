@@ -4,7 +4,8 @@ import { todayLocal } from '@/lib/today'
 import { useEffect, useState } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
-import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { RateFormModal, FormSection, Field, MoneyInput, CurrencyPicker, ValidityFields, SwitchField, inputClass, shortDate } from '@/components/rates/RateFormKit'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
@@ -23,7 +24,6 @@ import { Copy, Utensils,
   Search,
   Edit,
   Trash2,
-  X,
   Check,
   MapPin,
   Users,
@@ -36,11 +36,10 @@ import { Copy, Utensils,
   CheckCircle,
   XCircle,
   Info,
-  Loader2,
   Star
 } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
-import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
+import { averageRatesByCurrency, formatMoney, formatRateAverages } from '@/lib/currency-totals'
 
 // Egyptian cities
 
@@ -1113,302 +1112,152 @@ export default function MealRatesContent() {
 
       {/* Form Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-lg font-bold text-gray-900">
-                {editingRate ? t('editRate') : t('addRate')}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
-                <X className="w-4 h-4" />
-              </button>
+        <RateFormModal
+          formId="meal-rate-form"
+          title={editingRate ? t('editRate') : t('addRate')}
+          code={formData.service_code}
+          onClose={() => setShowModal(false)}
+          onSubmit={handleSubmit}
+          after={editingRate ? <RateAuditLog tableName="meal_rates" recordId={editingRate.id} /> : undefined}
+          summary={[
+            formData.restaurant_name || null,
+            mealTypeOptions.find(o => o.value === formData.meal_type)?.label,
+            Number(formData.base_rate_eur) > 0
+              ? `${formatMoney(Number(formData.base_rate_eur), formData.rate_currency || rateCurrency)}${formData.per_person_rate ? ` ${tCommon('perPerson')}` : ''}`
+              : null,
+            formData.rate_valid_from && formData.rate_valid_to ? `${shortDate(formData.rate_valid_from)} – ${shortDate(formData.rate_valid_to)}` : null,
+          ].filter(Boolean).join(' · ')}
+          active={{ checked: formData.is_active, onChange: v => setFormData(prev => ({ ...prev, is_active: v })), label: tCommon('formActive') }}
+          submitLabel={saving ? tCommon('saving') : (editingRate ? tCommon('updateRate') : tCommon('createRate'))}
+          cancelLabel={tCommon('cancel')}
+        >
+          <FormSection title={t('restaurantMealDetails')}>
+            <Field
+              label={t('supplierRestaurant')}
+              required
+              htmlFor="ml-supplier"
+              hint={<>{t('linkToRestaurant')} <a href="/suppliers?type=restaurant" className="text-primary-600 hover:underline">{t('manageRestaurants')}</a></>}
+            >
+              <select
+                id="ml-supplier"
+                required
+                value={formData.supplier_id}
+                onChange={(e) => handleSupplierChange(e.target.value)}
+                className={inputClass}
+              >
+                <option value="" disabled>{t('selectSupplierOptional')}</option>
+                <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
+                {suppliers.map(supplier => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name} {supplier.city && `(${supplier.city})`}
+                  </option>
+                ))}
+              </select>
+            </Field>
+            <Field label={t('restaurantName')} required htmlFor="ml-restaurant">
+              <input id="ml-restaurant" type="text" name="restaurant_name" value={formData.restaurant_name} onChange={handleChange} required placeholder="e.g., Naguib Mahfouz Café" className={inputClass} />
+            </Field>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={t('mealType')} htmlFor="ml-meal-type">
+                <select id="ml-meal-type" name="meal_type" value={formData.meal_type} onChange={handleChange} className={inputClass}>
+                  <option value="">{t('selectMealType')}</option>
+                  {mealTypeOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+              <Field label={t('cuisineType')} htmlFor="ml-cuisine">
+                <select id="ml-cuisine" name="cuisine_type" value={formData.cuisine_type} onChange={handleChange} className={inputClass}>
+                  <option value="">{t('selectCuisine')}</option>
+                  {cuisineOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+              <Field label={t('restaurantType')} htmlFor="ml-restaurant-type">
+                <select id="ml-restaurant-type" name="restaurant_type" value={formData.restaurant_type} onChange={handleChange} className={inputClass}>
+                  <option value="">{t('selectType')}</option>
+                  {restaurantTypeOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+              <Field label={tCommon('city')} htmlFor="ml-city">
+                <select id="ml-city" name="city" value={formData.city} onChange={handleChange} className={inputClass}>
+                  <option value="">{tCommon('selectCity')}</option>
+                  <CityOptions />
+                </select>
+              </Field>
+              <Field label={tCommon('tier')} htmlFor="ml-tier">
+                <select id="ml-tier" name="tier" value={formData.tier} onChange={handleChange} className={inputClass}>
+                  {tierOptions.map(opt => <option key={opt.value} value={opt.value}>{opt.label}</option>)}
+                </select>
+              </Field>
             </div>
+          </FormSection>
 
-            <form noValidate onSubmit={handleSubmit} className="p-4 overflow-y-auto max-h-[calc(90vh-140px)]">
-              {/* Basic Info */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold">1</span>
-                  {t('restaurantMealDetails')}
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  {/* Supplier Selection */}
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('supplierRestaurant')}</label>
-                    <select
-                      required
-                      value={formData.supplier_id}
-                      onChange={(e) => handleSupplierChange(e.target.value)}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      <option value="" disabled>{t('selectSupplierOptional')}</option>
-                      <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
-                      {suppliers.map(supplier => (
-                        <option key={supplier.id} value={supplier.id}>
-                          {supplier.name} {supplier.city && `(${supplier.city})`}
-                        </option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {t('linkToRestaurant')} <a href="/suppliers?type=restaurant" className="text-primary-600 hover:underline">{t('manageRestaurants')}</a>
-                    </p>
-                  </div>
+          <FormSection title={t('dietaryOptions')}>
+            <div className="flex flex-wrap gap-2">
+              {dietaryOptions.map(o => (
+                <button
+                  key={o.value}
+                  type="button"
+                  aria-pressed={formData.dietary_options.includes(o.value)}
+                  onClick={() => toggleDietaryOption(o.value)}
+                  className={`px-3 py-1.5 text-sm rounded-lg border font-medium transition-colors ${
+                    formData.dietary_options.includes(o.value)
+                      ? 'border-[#647C47] bg-[#647C47]/10 text-[#4a5c35]'
+                      : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
+                  }`}
+                >
+                  {o.label}
+                </button>
+              ))}
+            </div>
+          </FormSection>
 
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('restaurantName')} *</label>
-                    <input
-                      type="text"
-                      name="restaurant_name"
-                      value={formData.restaurant_name}
-                      onChange={handleChange}
-                      required
-                      placeholder="e.g., Naguib Mahfouz Café"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('serviceCode')}</label>
-                    <input
-                      type="text"
-                      name="service_code"
-                      value={formData.service_code}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('mealType')}</label>
-                    <select
-                      name="meal_type"
-                      value={formData.meal_type}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      <option value="">{t('selectMealType')}</option>
-                      {mealTypeOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('cuisineType')}</label>
-                    <select
-                      name="cuisine_type"
-                      value={formData.cuisine_type}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      <option value="">{t('selectCuisine')}</option>
-                      {cuisineOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('restaurantType')}</label>
-                    <select
-                      name="restaurant_type"
-                      value={formData.restaurant_type}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      <option value="">{t('selectType')}</option>
-                      {restaurantTypeOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('city')}</label>
-                    <select
-                      name="city"
-                      value={formData.city}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      <option value="">{tCommon('selectCity')}</option>
-                      <CityOptions />
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('tier')}</label>
-                    <select
-                      name="tier"
-                      value={formData.tier}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      {tierOptions.map(opt => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Dietary Options */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">2</span>
-                  {t('dietaryOptions')}
-                </h3>
-                <div className="flex flex-wrap gap-2">
-                  {dietaryOptions.map(o => (
-                    <button
-                      key={o.value}
-                      type="button"
-                      onClick={() => toggleDietaryOption(o.value)}
-                      className={`px-3 py-1.5 text-sm rounded-lg border-2 font-medium transition-colors ${
-                        formData.dietary_options.includes(o.value)
-                          ? 'border-green-600 bg-green-50 text-green-700'
-                          : 'border-gray-300 bg-white text-gray-700 hover:border-gray-400'
-                      }`}
-                    >
-                      {o.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Rates */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">3</span>
-                  {tCommon('pricing')}
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('eurRate')} *</label>
-                    <input
-                      type="number"
-                      name="base_rate_eur"
-                      value={formData.base_rate_eur}
-                      onChange={handleChange}
-                      required
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <RateCurrencyField
-                    value={formData.rate_currency}
-                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                  />
-                  <div>
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={formData.per_person_rate}
-                        onChange={(e) => setFormData({ ...formData, per_person_rate: e.target.checked })}
-                        className="w-4 h-4 text-primary-600 border-gray-300 rounded"
-                      />
-                      <span className="text-sm font-medium text-gray-900">{t('perPersonRate')}</span>
-                    </label>
-                  </div>
-                </div>
-              </div>
-
-              {/* Validity */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">4</span>
-                  {tCommon('validityPeriod')}
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('validFrom')}</label>
-                    <input
-                      type="date"
-                      name="rate_valid_from"
-                      value={formData.rate_valid_from}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('validTo')}</label>
-                    <input
-                      type="date"
-                      name="rate_valid_to"
-                      value={formData.rate_valid_to}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Notes & Status */}
-              <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1">{tCommon('notes')}</label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
+          <FormSection title={tCommon('pricing')}>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={tCommon('eurRate')} required htmlFor="ml-rate">
+                <MoneyInput
+                  id="ml-rate"
+                  name="base_rate_eur"
+                  value={formData.base_rate_eur}
                   onChange={handleChange}
-                  rows={2}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
+                  currency={formData.rate_currency || rateCurrency}
+                  unit={formData.per_person_rate ? tCommon('perPerson') : undefined}
+                  required
                 />
-              </div>
-
-              <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.is_active}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className="w-4 h-4 text-primary-600 border-gray-300 rounded"
-                  />
-                  <span className="text-sm font-medium text-gray-900">{tCommon('activeForBookings')}</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.is_preferred}
-                    onChange={(e) => setFormData({ ...formData, is_preferred: e.target.checked })}
-                    className="w-4 h-4 text-amber-500 border-gray-300 rounded"
-                  />
-                  <Star className="w-4 h-4 text-amber-500" />
-                  <span className="text-sm font-medium text-gray-900">{t('preferredRestaurant')}</span>
-                </label>
-                <p className="text-xs text-gray-500 ml-6">{t('preferredRestaurantHint')}</p>
-              </div>
-            </form>
-
-            {error && (
-              <div className="mx-4 mb-2 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4 flex-shrink-0" />
-                {error}
-              </div>
-            )}
-
-            {/* Audit Log */}
-            {editingRate && (
-              <div className="px-4">
-                <RateAuditLog tableName="meal_rates" recordId={editingRate.id} />
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-2 p-4 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-              >
-                {tCommon('cancel')}
-              </button>
-              <button
-                type="button"
-                disabled={saving}
-                onClick={handleSubmit}
-                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-                {saving ? tCommon('saving') || 'Saving...' : (editingRate ? tCommon('updateRate') : tCommon('createRate'))}
-              </button>
+              </Field>
+              <CurrencyPicker id="ml-currency" value={formData.rate_currency} onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))} orgCurrency={rateCurrency} />
             </div>
+            <SwitchField id="ml-per-person" checked={formData.per_person_rate} onChange={v => setFormData(prev => ({ ...prev, per_person_rate: v }))} label={t('perPersonRate')} />
+          </FormSection>
+
+          <FormSection title={tCommon('validityPeriod')}>
+            <ValidityFields idPrefix="ml" from={formData.rate_valid_from} to={formData.rate_valid_to} onChange={handleChange} fromLabel={tCommon('validFrom')} toLabel={tCommon('validTo')} />
+          </FormSection>
+
+          <Field label={tCommon('notes')} htmlFor="ml-notes">
+            <textarea id="ml-notes" name="notes" value={formData.notes} onChange={handleChange} rows={2} className={inputClass} />
+          </Field>
+
+          <div className="flex flex-col gap-1">
+            <label htmlFor="ml-preferred" className="inline-flex cursor-pointer items-center gap-2 text-sm text-gray-800">
+              <input
+                id="ml-preferred"
+                type="checkbox"
+                checked={formData.is_preferred}
+                onChange={(e) => setFormData(prev => ({ ...prev, is_preferred: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300 text-amber-500"
+              />
+              <Star className="h-4 w-4 text-amber-500" aria-hidden="true" />
+              {t('preferredRestaurant')}
+            </label>
+            <p className="ml-6 text-xs leading-snug text-gray-500">{t('preferredRestaurantHint')}</p>
           </div>
-        </div>
+
+          {error && (
+            <div role="alert" className="flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <AlertTriangle className="h-4 w-4 flex-shrink-0" />
+              {error}
+            </div>
+          )}
+        </RateFormModal>
       )}
     </div>
   )

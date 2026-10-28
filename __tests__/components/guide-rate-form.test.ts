@@ -29,11 +29,11 @@ describe('the form', () => {
     }
   })
   it('Save submits the form, so the browser checks required fields', () => {
-    expect(form).toContain('type="submit" form={FORM_ID}')
+    expect(src('components/rates/RateFormKit.tsx')).toContain('type="submit" form={formId}')
     expect(form).toContain('onSubmit={onSubmit}')
   })
   it('the rate opens blank rather than 0, and refuses 0', () => {
-    expect(form).toContain("value={amount > 0 ? values.base_rate_eur : ''}")
-    expect(form).toContain('min="0.01"')
+    expect(src('components/rates/RateFormKit.tsx')).toContain("(!allowZero && n === 0) ? '' : value")
+    expect(src('components/rates/RateFormKit.tsx')).toContain("'0.01'")
   })
 })
