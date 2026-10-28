@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-export default function LoginContent({ showSignUp = true }: { showSignUp?: boolean }) {
+export default function LoginContent({ showSignUp = true, companyName = '' }: { showSignUp?: boolean; companyName?: string }) {
   const t = useTranslations('auth')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -43,6 +43,11 @@ export default function LoginContent({ showSignUp = true }: { showSignUp?: boole
               <path d="M2 12L12 17L22 12" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
             </svg>
           </div>
+          {companyName && (
+            <p className="text-sm font-semibold tracking-wide text-[#263A29] mb-2">
+              Autoura · {companyName}
+            </p>
+          )}
           <h1 className="text-3xl font-bold text-gray-900 mb-2">{t('welcomeBack')}</h1>
           <p className="text-gray-600">{t('signInToAccount')}</p>
         </div>
