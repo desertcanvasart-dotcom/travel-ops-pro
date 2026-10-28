@@ -4083,7 +4083,7 @@
       "hotelInformation": "Hotel Information",
       "hotelName": "Hotel Name",
       "companySupplier": "Company/Supplier",
-      "selectCompanyOptional": "Select company (optional)",
+      "selectCompanyOptional": "Select a company, or Direct booking",
       "addNewCompany": "Add new company",
       "hotelContacts": "Hotel Contacts",
       "salesContactName": "Sales Contact Name",
