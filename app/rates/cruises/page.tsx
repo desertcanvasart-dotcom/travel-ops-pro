@@ -1,7 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
+import { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import {
@@ -14,13 +14,14 @@ import { useVocabOptions } from '@/hooks/useVocabOptions'
 import { defaultTierKey } from '@/lib/vocabulary'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import Link from 'next/link'
-import { Copy, Ship, Plus, Search, Edit, Trash2, X, Check, ChevronDown, AlertCircle, CheckCircle2, Crown, Star,
+import { Copy, Ship, Plus, Search, Edit, Trash2, ChevronDown, AlertCircle, CheckCircle2, Crown, Star,
   ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Calendar
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import RateAuditLog from '@/app/components/RateAuditLog'
+import { RateFormModal, FormSection, Field, CurrencyPicker, ValidityFields, inputClass, shortDate } from '@/components/rates/RateFormKit'
 import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 
 // Ship picker option that reveals the free-text input for a new ship.
@@ -1043,26 +1044,40 @@ export default function CruisesPage() {
 
       {/* Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white border-b px-4 py-3 flex items-center justify-between z-10">
-              <h2 className="text-lg font-bold text-gray-900">
-                {editingCruise ? t('form.editCruise') : t('form.addNewCruise')}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="p-1 text-gray-400 hover:text-gray-600 rounded">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form noValidate onSubmit={handleSubmit} className="p-4 space-y-6">
-              {/* Section 1: Supplier Selection */}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.supplier')}</label>
+        <RateFormModal
+          formId="cruise-rate-form"
+          title={editingCruise ? t('form.editCruise') : t('form.addNewCruise')}
+          code={formData.cruise_code || undefined}
+          onClose={() => setShowModal(false)}
+          onSubmit={handleSubmit}
+          after={editingCruise ? <RateAuditLog tableName="nile_cruises" recordId={editingCruise.id} /> : undefined}
+          summary={[
+            formData.ship_name,
+            cruiseRouteLabel(formData),
+            cabinOptions.find(o => o.value === formData.cabin_type)?.label,
+            tierOptions.find(o => o.value === formData.tier)?.label,
+            formData.rate_valid_from && formData.rate_valid_to ? `${shortDate(formData.rate_valid_from)} – ${shortDate(formData.rate_valid_to)}` : null,
+          ].filter(Boolean).join(' · ')}
+          active={{ checked: formData.is_active, onChange: v => setFormData(prev => ({ ...prev, is_active: v })), label: tCommon('formActive') }}
+          submitLabel={editingCruise ? t('form.updateRate') : t('form.createRate')}
+          cancelLabel={t('form.cancel')}
+          maxWidth="max-w-4xl"
+        >
+          <FormSection title={tCommon('sectionSupplier')}>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <Field
+                label={t('form.supplier')}
+                required
+                htmlFor="cr-supplier"
+                className="md:col-span-2"
+                hint={<>{t('form.supplierHelp')} <Link href="/suppliers?type=cruise" className="text-primary-600 hover:underline">{t('form.manageSuppliers')}</Link></>}
+              >
                 <select
+                  id="cr-supplier"
                   required
                   value={formData.supplier_id}
                   onChange={(e) => handleSupplierChange(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className={inputClass}
                 >
                   <option value="" disabled>{t('form.selectSupplier')}</option>
                   <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
@@ -1070,357 +1085,287 @@ export default function CruisesPage() {
                     <option key={supplier.id} value={supplier.id}>{supplier.name}</option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  {t('form.supplierHelp')} <Link href="/suppliers?type=cruise" className="text-blue-600 hover:underline">{t('form.manageSuppliers')}</Link>
-                </p>
-              </div>
-
-              {/* Section 2: Ship Info */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.shipName')} *</label>
-                  {/* Supplier-HAS-properties: with a supplier chosen, the ship
-                      comes from that supplier's fleet (managed on the supplier
-                      page). Typing a new name still works — the API creates
-                      the ship under the supplier on save. */}
-                  {ships.length > 0 && formData.supplier_id && formData.supplier_id !== NO_SUPPLIER_SENTINEL ? (
-                    <>
-                      <select
-                        value={formData.property_id || NEW_SHIP}
-                        onChange={(e) => handleShipPick(e.target.value)}
-                        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                      >
-                        <option value={NEW_SHIP}>{t('form.newShip')}</option>
-                        {ships.map(ship => (
-                          <option key={ship.id} value={ship.id}>{ship.name}{ship.category ? ` (${ship.category})` : ''}</option>
-                        ))}
-                      </select>
-                      {!formData.property_id && (
-                        <input
-                          type="text"
-                          name="ship_name"
-                          value={formData.ship_name}
-                          onChange={handleChange}
-                          required
-                          className="w-full px-3 py-2 mt-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                          placeholder={t('form.shipNamePlaceholder')}
-                        />
-                      )}
-                    </>
-                  ) : (
+              </Field>
+              {/* Supplier-HAS-properties: with a supplier chosen, the ship
+                  comes from that supplier's fleet (managed on the supplier
+                  page). Typing a new name still works — the API creates
+                  the ship under the supplier on save. */}
+              {ships.length > 0 && formData.supplier_id && formData.supplier_id !== NO_SUPPLIER_SENTINEL ? (
+                <Field label={t('form.shipName')} required htmlFor="cr-ship">
+                  <select
+                    id="cr-ship"
+                    value={formData.property_id || NEW_SHIP}
+                    onChange={(e) => handleShipPick(e.target.value)}
+                    className={inputClass}
+                  >
+                    <option value={NEW_SHIP}>{t('form.newShip')}</option>
+                    {ships.map(ship => (
+                      <option key={ship.id} value={ship.id}>{ship.name}{ship.category ? ` (${ship.category})` : ''}</option>
+                    ))}
+                  </select>
+                  {!formData.property_id && (
                     <input
+                      id="cr-ship-name"
                       type="text"
                       name="ship_name"
                       value={formData.ship_name}
                       onChange={handleChange}
                       required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+                      aria-label={t('form.shipName')}
+                      className={`${inputClass} mt-2`}
                       placeholder={t('form.shipNamePlaceholder')}
                     />
                   )}
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.shipCategory')} *</label>
-                  <select
-                    name="ship_category"
-                    value={formData.ship_category}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                  >
-                    {SHIP_CATEGORIES.map(cat => (
-                      <option key={cat} value={cat}>{t(`shipCategories.${cat}`)}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Section 3: Route */}
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.embarkCity')} *</label>
-                  <select
-                    name="embark_city"
-                    value={formData.embark_city}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                  >
-                    {CITIES.map(city => (
-                      <option key={city} value={city}>{city}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.disembarkCity')} *</label>
-                  <select
-                    name="disembark_city"
-                    value={formData.disembark_city}
-                    onChange={handleChange}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                  >
-                    {CITIES.map(city => (
-                      <option key={city} value={city}>{city}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.durationNights')} *</label>
+                </Field>
+              ) : (
+                <Field label={t('form.shipName')} required htmlFor="cr-ship-name">
                   <input
-                    type="number"
-                    name="duration_nights"
-                    value={formData.duration_nights}
+                    id="cr-ship-name"
+                    type="text"
+                    name="ship_name"
+                    value={formData.ship_name}
                     onChange={handleChange}
-                    min="1"
                     required
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+                    className={inputClass}
+                    placeholder={t('form.shipNamePlaceholder')}
                   />
-                </div>
-              </div>
-
-              {/* The days this sailing actually leaves on.
-                  A ship that departs Aswan on Mondays and Fridays cannot serve
-                  a Wednesday itinerary — and until now nothing in the system
-                  knew that, so the quote was right, the arithmetic was right,
-                  and the booking was impossible. Leaving it EMPTY means no
-                  fixed day, which is the default and checks nothing. */}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">
-                  {t('form.sailingDays')}
-                  <span className="ml-2 font-normal text-gray-400">{t('form.sailingDaysHint')}</span>
-                </label>
-                <div className="flex flex-wrap gap-1.5">
-                  {SAILING_DAYS.map(day => {
-                    const on = formData.sailing_days.includes(day)
-                    return (
-                      <button
-                        key={day}
-                        type="button"
-                        onClick={() => setFormData(prev => ({
-                          ...prev,
-                          sailing_days: on
-                            ? prev.sailing_days.filter(d => d !== day)
-                            : SAILING_DAYS.filter(d => d === day || prev.sailing_days.includes(d)),
-                        }))}
-                        aria-pressed={on}
-                        className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
-                          on
-                            ? 'bg-blue-600 text-white border-blue-600'
-                            : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
-                        }`}
-                      >
-                        {dayName(day).slice(0, 3)}
-                      </button>
-                    )
-                  })}
-                </div>
-                {formData.sailing_days.length > 0 && (
-                  <p className="mt-1 text-[11px] text-gray-500">
-                    {t('form.sailingDaysChosen', { days: sailingDaysLabel(formData.sailing_days) })}
-                  </p>
-                )}
-              </div>
-
-              {/* Section 4: Cabin Type */}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.cabinType')} *</label>
+                </Field>
+              )}
+              <Field label={t('form.shipCategory')} required htmlFor="cr-ship-category">
                 <select
+                  id="cr-ship-category"
+                  name="ship_category"
+                  value={formData.ship_category}
+                  onChange={handleChange}
+                  className={inputClass}
+                >
+                  {SHIP_CATEGORIES.map(cat => (
+                    <option key={cat} value={cat}>{t(`shipCategories.${cat}`)}</option>
+                  ))}
+                </select>
+              </Field>
+            </div>
+          </FormSection>
+
+          <FormSection title={tCommon('basicInformation')}>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <Field label={t('form.embarkCity')} required htmlFor="cr-embark">
+                <select
+                  id="cr-embark"
+                  name="embark_city"
+                  value={formData.embark_city}
+                  onChange={handleChange}
+                  className={inputClass}
+                >
+                  {CITIES.map(city => (
+                    <option key={city} value={city}>{city}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t('form.disembarkCity')} required htmlFor="cr-disembark">
+                <select
+                  id="cr-disembark"
+                  name="disembark_city"
+                  value={formData.disembark_city}
+                  onChange={handleChange}
+                  className={inputClass}
+                >
+                  {CITIES.map(city => (
+                    <option key={city} value={city}>{city}</option>
+                  ))}
+                </select>
+              </Field>
+              <Field label={t('form.durationNights')} required htmlFor="cr-nights">
+                <input
+                  id="cr-nights"
+                  type="number"
+                  name="duration_nights"
+                  value={formData.duration_nights}
+                  onChange={handleChange}
+                  min="1"
+                  required
+                  className={inputClass}
+                />
+              </Field>
+            </div>
+
+            {/* The days this sailing actually leaves on.
+                A ship that departs Aswan on Mondays and Fridays cannot serve
+                a Wednesday itinerary — and until now nothing in the system
+                knew that, so the quote was right, the arithmetic was right,
+                and the booking was impossible. Leaving it EMPTY means no
+                fixed day, which is the default and checks nothing. */}
+            <div className="flex min-w-0 flex-col gap-1">
+              <span id="cr-sailing-days-label" className="text-xs font-medium text-gray-700">{t('form.sailingDays')}</span>
+              <div role="group" aria-labelledby="cr-sailing-days-label" className="flex flex-wrap gap-1.5">
+                {SAILING_DAYS.map(day => {
+                  const on = formData.sailing_days.includes(day)
+                  return (
+                    <button
+                      key={day}
+                      type="button"
+                      onClick={() => setFormData(prev => ({
+                        ...prev,
+                        sailing_days: on
+                          ? prev.sailing_days.filter(d => d !== day)
+                          : SAILING_DAYS.filter(d => d === day || prev.sailing_days.includes(d)),
+                      }))}
+                      aria-pressed={on}
+                      className={`px-3 py-1.5 text-xs font-medium rounded-lg border transition-colors ${
+                        on
+                          ? 'bg-[#647C47] text-white border-[#647C47]'
+                          : 'bg-white text-gray-600 border-gray-300 hover:bg-gray-50'
+                      }`}
+                    >
+                      {dayName(day).slice(0, 3)}
+                    </button>
+                  )
+                })}
+              </div>
+              <p className="text-xs leading-snug text-gray-500">
+                {formData.sailing_days.length > 0
+                  ? t('form.sailingDaysChosen', { days: sailingDaysLabel(formData.sailing_days) })
+                  : t('form.sailingDaysHint')}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+              <Field label={t('form.cabinType')} required htmlFor="cr-cabin">
+                <select
+                  id="cr-cabin"
                   name="cabin_type"
                   value={formData.cabin_type}
                   onChange={handleChange}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
+                  className={inputClass}
                 >
                   {cabinOptions.map(o => (
                     <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
-              </div>
+              </Field>
+            </div>
+          </FormSection>
 
-              {/* Section 5: Service Tier & Preference */}
-              <div>
-                <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-purple-600 text-white flex items-center justify-center text-xs">2</span>
-                  {t('form.serviceTier')}
-                </h3>
-                <div className="flex flex-wrap gap-2 mb-3">
-                  {tierOptions.map((opt) => (
-                    <button
-                      key={opt.value}
-                      type="button"
-                      onClick={() => setFormData({ ...formData, tier: opt.value })}
-                      className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
-                        formData.tier === opt.value
-                          ? opt.value === 'luxury'
-                            ? 'bg-amber-600 text-white'
-                            : opt.value === 'deluxe'
-                            ? 'bg-purple-600 text-white'
-                            : opt.value === 'standard'
-                            ? 'bg-blue-600 text-white'
-                            : opt.value === 'budget'
-                            ? 'bg-gray-600 text-white'
-                            : 'bg-[#647C47] text-white'
-                          : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                      }`}
-                    >
-                      {opt.value === 'luxury' && <Crown className="w-3.5 h-3.5" />}
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="mb-3 max-w-xs">
-                  <RateCurrencyField
-                    value={formData.rate_currency}
-                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                  />
-                </div>
-                <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
-                  <label className="flex items-start gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={formData.is_preferred}
-                      onChange={(e) => setFormData({ ...formData, is_preferred: e.target.checked })}
-                      className="w-4 h-4 text-amber-600 border-gray-300 rounded focus:ring-amber-500 mt-0.5"
-                    />
-                    <div>
-                      <span className="text-sm font-medium text-amber-900 flex items-center gap-1.5">
-                        <Star className="w-4 h-4 text-amber-600" />
-                        {t('form.preferredCruise')}
-                      </span>
-                      <p className="text-xs text-amber-700 mt-0.5">
-                        {t('form.preferredCruiseHelp')}
-                      </p>
-                    </div>
-                  </label>
-                </div>
-              </div>
-
-              {/* Section 6: Rate periods */}
-              {/* Was three fixed season blocks — low, high, peak — with the
-                  peak one carrying a second date box because ships often have
-                  two. Contracts run to six or more dated periods and the count
-                  varies by ship, so the periods are a list now. An existing
-                  cruise opens with its old windows already converted (see
-                  openEditModal). */}
-              <div>
-                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs">3</span>
-                  {tPeriods('titleWithCurrency', { currency: formData.rate_currency || rateCurrency })}
-                </h4>
-                {/* Which of the agency's cruise supplements this ship prices —
-                    a deck, a balcony — each with a per-night price per period. */}
-                <div className="mb-3">
-                  <p className="text-xs font-medium text-gray-600 mb-1">{tSupp('title')}</p>
-                  <RateSupplementsPicker
-                    kind="cruise_supplement"
-                    value={formData.supplements}
-                    onChange={(supplements) => setFormData({ ...formData, supplements })}
-                  />
-                </div>
-                <RateSeasonsEditor
-                  entity="cruise"
-                  seasons={formData.seasons}
-                  supplements={formData.supplements}
-                  currency={rateCurrency}
-                  onChange={(seasons) => setFormData({ ...formData, seasons })}
-                />
-              </div>
-
-              {/* Section 7: Rate Card Validity */}
-              <div className="border border-gray-200 rounded-lg p-4">
-                <h4 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-5 h-5 rounded-full bg-gray-600 text-white flex items-center justify-center text-xs">4</span>
-                  {t('form.rateCardValidity')}
-                  <span className="text-xs font-normal text-gray-500">{t('form.rateCardValidityHelp')}</span>
-                </h4>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validFrom')}</label>
-                    <input
-                      type="date"
-                      value={formData.rate_valid_from}
-                      onChange={(e) => setFormData({ ...formData, rate_valid_from: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validTo')}</label>
-                    <input
-                      type="date"
-                      value={formData.rate_valid_to}
-                      onChange={(e) => setFormData({ ...formData, rate_valid_to: e.target.value })}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Section 8: Options */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.cruiseCode')}</label>
-                  <input
-                    type="text"
-                    name="cruise_code"
-                    value={formData.cruise_code}
-                    onChange={handleChange}
-                    placeholder={t('form.cruiseCodePlaceholder')}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600 font-mono"
-                  />
-                </div>
-                <div className="flex items-end gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="sightseeing_included"
-                      checked={formData.sightseeing_included}
-                      onChange={handleCheckbox}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <span className="text-sm text-gray-700">{t('form.sightseeingIncluded')}</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      name="is_active"
-                      checked={formData.is_active}
-                      onChange={handleCheckbox}
-                      className="w-4 h-4 text-blue-600 rounded"
-                    />
-                    <span className="text-sm text-gray-700">{t('form.active')}</span>
-                  </label>
-                </div>
-              </div>
-
-              {/* Section 9: Notes */}
-              <div>
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.notes')}</label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleChange}
-                  rows={2}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-600"
-                  placeholder={t('form.notesPlaceholder')}
-                />
-              </div>
-
-              {/* Audit Log */}
-              {editingCruise && (
-                <RateAuditLog tableName="nile_cruises" recordId={editingCruise.id} />
-              )}
-
-              {/* Buttons */}
-              <div className="flex gap-2 pt-3 border-t">
-                <button type="button" onClick={() => setShowModal(false)} className="flex-1 px-3 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-50 font-medium">
-                  {t('form.cancel')}
+          <FormSection title={t('form.serviceTier')}>
+            <div className="flex flex-wrap gap-2" role="group" aria-label={tCommon('tier')}>
+              {tierOptions.map((opt) => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  aria-pressed={formData.tier === opt.value}
+                  onClick={() => setFormData({ ...formData, tier: opt.value })}
+                  className={`px-3 py-1.5 text-sm rounded-lg font-medium transition-colors flex items-center gap-1.5 ${
+                    formData.tier === opt.value
+                      ? opt.value === 'luxury'
+                        ? 'bg-amber-600 text-white'
+                        : opt.value === 'deluxe'
+                        ? 'bg-purple-600 text-white'
+                        : opt.value === 'standard'
+                        ? 'bg-blue-600 text-white'
+                        : opt.value === 'budget'
+                        ? 'bg-gray-600 text-white'
+                        : 'bg-[#647C47] text-white'
+                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  }`}
+                >
+                  {opt.value === 'luxury' && <Crown className="w-3.5 h-3.5" />}
+                  {opt.label}
                 </button>
-                <button type="submit" className="flex-1 px-3 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center justify-center gap-2">
-                  <Check className="w-4 h-4" />
-                  {editingCruise ? t('form.updateRate') : t('form.createRate')}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              <CurrencyPicker
+                id="cr-currency"
+                value={formData.rate_currency}
+                onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
+                orgCurrency={rateCurrency}
+              />
+            </div>
+            <div className="flex flex-col gap-2">
+              <label className="flex cursor-pointer items-start gap-2">
+                <input
+                  type="checkbox"
+                  checked={formData.is_preferred}
+                  onChange={(e) => setFormData({ ...formData, is_preferred: e.target.checked })}
+                  className="mt-0.5 h-4 w-4 rounded border-gray-300 text-amber-600 focus:ring-amber-500"
+                />
+                <span className="flex flex-col">
+                  <span className="flex items-center gap-1.5 text-sm font-medium text-gray-800">
+                    <Star className="h-4 w-4 text-amber-600" />
+                    {t('form.preferredCruise')}
+                  </span>
+                  <span className="text-xs text-gray-500">{t('form.preferredCruiseHelp')}</span>
+                </span>
+              </label>
+              <label className="flex cursor-pointer items-center gap-2">
+                <input
+                  type="checkbox"
+                  name="sightseeing_included"
+                  checked={formData.sightseeing_included}
+                  onChange={handleCheckbox}
+                  className="h-4 w-4 rounded border-gray-300 text-[#647C47]"
+                />
+                <span className="text-sm text-gray-800">{t('form.sightseeingIncluded')}</span>
+              </label>
+            </div>
+          </FormSection>
+
+          {/* Was three fixed season blocks — low, high, peak — with the
+              peak one carrying a second date box because ships often have
+              two. Contracts run to six or more dated periods and the count
+              varies by ship, so the periods are a list now. An existing
+              cruise opens with its old windows already converted (see
+              openEditModal). */}
+          <FormSection title={tPeriods('titleWithCurrency', { currency: formData.rate_currency || rateCurrency })}>
+            {/* Which of the agency's cruise supplements this ship prices —
+                a deck, a balcony — each with a per-night price per period. */}
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-medium text-gray-700">{tSupp('title')}</p>
+              <RateSupplementsPicker
+                kind="cruise_supplement"
+                value={formData.supplements}
+                onChange={(supplements) => setFormData({ ...formData, supplements })}
+              />
+            </div>
+            <RateSeasonsEditor
+              entity="cruise"
+              seasons={formData.seasons}
+              supplements={formData.supplements}
+              currency={rateCurrency}
+              onChange={(seasons) => setFormData({ ...formData, seasons })}
+            />
+          </FormSection>
+
+          <FormSection title={t('form.rateCardValidity')}>
+            <p className="-mt-1 text-xs text-gray-500">{t('form.rateCardValidityHelp')}</p>
+            <ValidityFields
+              idPrefix="cr-valid"
+              from={formData.rate_valid_from}
+              to={formData.rate_valid_to}
+              onChange={handleChange}
+              fromLabel={t('form.validFrom')}
+              toLabel={t('form.validTo')}
+            />
+          </FormSection>
+
+          {/* The code stays typeable: cruise codes are named by hand here, and a
+              blank one is generated on save (generateCode). */}
+          <Field label={t('form.cruiseCode')} htmlFor="cr-code">
+            <input id="cr-code" type="text" name="cruise_code" value={formData.cruise_code} onChange={handleChange} placeholder={t('form.cruiseCodePlaceholder')} className={`${inputClass} font-mono`} />
+          </Field>
+
+          <Field label={t('form.notes')} htmlFor="cr-notes">
+            <textarea
+              id="cr-notes"
+              name="notes"
+              value={formData.notes}
+              onChange={handleChange}
+              rows={2}
+              className={inputClass}
+              placeholder={t('form.notesPlaceholder')}
+            />
+          </Field>
+        </RateFormModal>
       )}
     </div>
   )
