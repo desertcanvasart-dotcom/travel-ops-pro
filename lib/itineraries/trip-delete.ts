@@ -41,6 +41,27 @@ export function tripDeleteRefusal(reasons: string[]): string {
   return `This trip cannot be deleted: ${reasons.join('; ')}. Cancel the trip instead (Cancel trip on the itinerary page) — that keeps its booking, payments and documents on record.`
 }
 
+// What a row in each table is, for a delete the database itself refused
+// (23503). The message names the table: 'violates foreign key constraint
+// "…" on table "invoices"'. Most links clear themselves since migration
+// 20270112; whatever still blocks is named, not guessed at.
+const BLOCKING_TABLE_LABELS: Record<string, string> = {
+  invoices: 'an invoice',
+  payments: 'a payment',
+  bookings: 'a booking',
+  tour_quotes: 'a quote',
+  client_documents: 'a client document',
+  client_followups: 'a client follow-up',
+  communication_history: 'a logged message',
+}
+
+export function tripDeleteForeignKeyRefusal(error: { message?: string | null; details?: string | null }): string {
+  const text = `${error.message ?? ''} ${error.details ?? ''}`
+  const table = text.match(/on table "([^"]+)"/g)?.map(m => m.slice(10, -1)).find(t => t !== 'itineraries')
+  const what = table ? (BLOCKING_TABLE_LABELS[table] ?? `a record in ${table.replace(/_/g, ' ')}`) : 'another record'
+  return `This trip cannot be deleted: ${what} still refers to it. Remove that first, or cancel the trip instead (Cancel trip on the itinerary page).`
+}
+
 type DbClient = {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   from: (table: string) => any

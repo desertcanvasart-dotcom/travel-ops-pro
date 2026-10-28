@@ -12,7 +12,7 @@ import { loadTripVatExtras } from '@/lib/vat'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { insertBookingWithCode } from '@/lib/bookings/booking-code'
 import { isItineraryStatus, ITINERARY_STATUSES } from '@/lib/itineraries/statuses'
-import { loadTripDeleteFacts, removeTripFiles, tripDeleteBlockers, tripDeleteRefusal } from '@/lib/itineraries/trip-delete'
+import { loadTripDeleteFacts, removeTripFiles, tripDeleteBlockers, tripDeleteForeignKeyRefusal, tripDeleteRefusal } from '@/lib/itineraries/trip-delete'
 
 /**
  * May this trip become a booking? The same gate /api/bookings/from-quote runs
@@ -427,7 +427,7 @@ export async function DELETE(
       if (error.code === '23503') {
         return NextResponse.json({
           success: false,
-          error: 'Cannot delete itinerary. It has linked records (invoices, payments, etc.). Please remove those first.'
+          error: tripDeleteForeignKeyRefusal(error)
         }, { status: 409 })
       }
       
