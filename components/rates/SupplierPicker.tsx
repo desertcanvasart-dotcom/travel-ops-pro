@@ -78,15 +78,15 @@ export default function SupplierPicker({
 
   return (
     <div className={className}>
-      <label className="block text-sm font-medium text-gray-600 mb-1.5 flex items-center gap-1.5">
-        <Building2 className="w-3.5 h-3.5 text-cyan-600" />
+      <label className="mb-1 flex items-center gap-1.5 text-xs font-medium text-gray-700">
+        <Building2 className="h-3.5 w-3.5 text-[#647C47]" />
         {label}
       </label>
       <select
         value={value}
         onChange={(e) => onChange(e.target.value, suppliers.find(s => s.id === e.target.value) ?? null)}
         disabled={loading}
-        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] disabled:bg-gray-50"
+        className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-white focus:outline-none focus:ring-2 focus:ring-[#647C47] focus:border-transparent disabled:bg-gray-50"
       >
         <option value="">{loading ? 'Loading suppliers…' : 'Not recorded yet'}</option>
         {preferred.length > 0 && (

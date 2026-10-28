@@ -4,7 +4,9 @@ import { todayLocal } from '@/lib/today'
 import { useEffect, useState } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
-import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { RateFormModal, FormSection, Field, MoneyInput, CurrencyPicker, ValidityFields, inputClass, shortDate } from '@/components/rates/RateFormKit'
+import { formatMoney } from '@/lib/currency-totals'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
@@ -21,7 +23,6 @@ import { Copy, Ticket,
   Search,
   Edit,
   Trash2,
-  X,
   Check,
   MapPin,
   Clock,
@@ -305,6 +306,13 @@ export default function ActivityRatesContent() {
   useEffect(() => {
     setCurrentPage(1)
   }, [searchTerm, selectedCity, selectedCategory, selectedSupplier, selectedPricingType, showInactive, itemsPerPage])
+
+  // The unit the single rate is quoted in, shown after the amount.
+  const baseRateUnit =
+    formData.pricing_type === 'per_person' ? tCommon('perPerson')
+      : formData.pricing_type === 'per_unit' ? `/ ${formData.unit_label || 'unit'}`
+        : formData.pricing_type === 'flat' ? '/ total'
+          : undefined
 
   // Handlers
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -1157,395 +1165,236 @@ export default function ActivityRatesContent() {
 
       {/* Form Modal - Updated with pricing type fields */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-lg font-bold text-gray-900">
-                {editingRate ? 'Edit Activity Rate' : 'Add Activity Rate'}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
-                <X className="w-4 h-4" />
-              </button>
+        <RateFormModal
+          formId="activity-rate-form"
+          title={editingRate ? 'Edit Activity Rate' : 'Add Activity Rate'}
+          code={formData.service_code}
+          onClose={() => setShowModal(false)}
+          onSubmit={handleSubmit}
+          after={editingRate ? <RateAuditLog tableName="activity_rates" recordId={editingRate.id} /> : undefined}
+          summary={[
+            formData.activity_name || null,
+            formData.city || null,
+            pricingTypeLabel(formData.pricing_type, PRICING_TYPES.find(p => p.value === formData.pricing_type)?.label ?? formData.pricing_type),
+            formData.pricing_type !== 'tiered' && Number(formData.base_rate_eur) > 0
+              ? `${formatMoney(Number(formData.base_rate_eur), formData.rate_currency || rateCurrency)} ${baseRateUnit}`
+              : null,
+            formData.rate_valid_from && formData.rate_valid_to ? `${shortDate(formData.rate_valid_from)} – ${shortDate(formData.rate_valid_to)}` : null,
+          ].filter(Boolean).join(' · ')}
+          active={{ checked: formData.is_active, onChange: v => setFormData(prev => ({ ...prev, is_active: v })), label: tCommon('formActive') }}
+          submitLabel={editingRate ? t('form.update') : t('form.create')}
+          cancelLabel={t('form.cancel')}
+        >
+          <FormSection title="Activity Details">
+            <Field label={t('form.activityName')} required htmlFor="ac-name">
+              <input id="ac-name" type="text" name="activity_name" value={formData.activity_name} onChange={handleChange} required placeholder={t('form.activityNamePlaceholder')} className={inputClass} />
+            </Field>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={t('form.category')} htmlFor="ac-category">
+                <select id="ac-category" name="activity_category" value={formData.activity_category} onChange={handleChange} className={inputClass}>
+                  <option value="">{t('form.selectCategory')}</option>
+                  {categoryOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+              <Field label={t('form.activityType')} htmlFor="ac-type">
+                <select id="ac-type" name="activity_type" value={formData.activity_type} onChange={handleChange} className={inputClass}>
+                  <option value="">{t('form.selectType')}</option>
+                  {typeOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+              <Field label={t('form.duration')} htmlFor="ac-duration">
+                <select id="ac-duration" name="duration" value={formData.duration} onChange={handleChange} className={inputClass}>
+                  <option value="">{t('form.selectDuration')}</option>
+                  {durationOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Field>
+              <Field label={t('form.city')} htmlFor="ac-city">
+                <select id="ac-city" name="city" value={formData.city} onChange={handleChange} className={inputClass}>
+                  <option value="">{t('form.selectCity')}</option>
+                  <CityOptions />
+                </select>
+              </Field>
+            </div>
+          </FormSection>
+
+          <FormSection title={t('form.pricingType')}>
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2" role="radiogroup" aria-label={t('form.pricingType')}>
+              {PRICING_TYPES.map((type) => {
+                const Icon = type.icon
+                const selected = formData.pricing_type === type.value
+                return (
+                  <button
+                    key={type.value}
+                    type="button"
+                    role="radio"
+                    aria-checked={selected}
+                    onClick={() => setFormData(prev => ({ ...prev, pricing_type: type.value as any }))}
+                    className={`rounded-lg border p-3 text-left transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[#647C47] ${
+                      selected ? 'border-[#647C47] bg-[#647C47]/5 ring-1 ring-[#647C47]' : 'border-gray-200 hover:border-gray-300'
+                    }`}
+                  >
+                    <span className="mb-0.5 flex items-center gap-2">
+                      <Icon className={`h-4 w-4 ${selected ? 'text-[#4a5c35]' : 'text-gray-400'}`} />
+                      <span className={`text-sm font-medium ${selected ? 'text-[#4a5c35]' : 'text-gray-900'}`}>
+                        {pricingTypeLabel(type.value, type.label)}
+                      </span>
+                    </span>
+                    <span className="block text-xs text-gray-500">{type.description}</span>
+                  </button>
+                )
+              })}
             </div>
 
-            <form noValidate onSubmit={handleSubmit} className="p-4 overflow-y-auto max-h-[calc(90vh-140px)]">
-              {/* Basic Info */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold">1</span>
-                  Activity Details
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="col-span-2">
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.activityName')} {t('form.required')}</label>
-                    <input
-                      type="text"
-                      name="activity_name"
-                      value={formData.activity_name}
-                      onChange={handleChange}
-                      required
-                      placeholder={t('form.activityNamePlaceholder')}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.serviceCode')}</label>
-                    <input
-                      type="text"
-                      name="service_code"
-                      value={formData.service_code}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.category')}</label>
-                    <select
-                      name="activity_category"
-                      value={formData.activity_category}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      <option value="">{t('form.selectCategory')}</option>
-                      {categoryOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
+            {/* Per Unit Settings - Only show when per_unit is selected */}
+            {formData.pricing_type === 'per_unit' && (
+              <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50/60 p-3">
+                <p className="flex items-center gap-2 text-xs font-medium text-gray-700">
+                  <Ship className="h-4 w-4 text-gray-500" />
+                  Per Unit Settings (e.g., boat, ride, vehicle)
+                </p>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                  <Field label={t('form.unitLabel')} required htmlFor="ac-unit">
+                    <select id="ac-unit" name="unit_label" value={formData.unit_label} onChange={handleChange} className={inputClass}>
+                      <option value="">{t('form.selectUnit')}</option>
+                      {unitOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                     </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.activityType')}</label>
-                    <select
-                      name="activity_type"
-                      value={formData.activity_type}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      <option value="">{t('form.selectType')}</option>
-                      {typeOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.duration')}</label>
-                    <select
-                      name="duration"
-                      value={formData.duration}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      <option value="">{t('form.selectDuration')}</option>
-                      {durationOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.city')}</label>
-                    <select
-                      name="city"
-                      value={formData.city}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      <option value="">{t('form.selectCity')}</option>
-                      <CityOptions />
-                    </select>
-                  </div>
+                  </Field>
+                  <Field label={t('form.minCapacity')} htmlFor="ac-min-cap">
+                    <input id="ac-min-cap" type="number" name="min_capacity" value={formData.min_capacity} onChange={handleChange} min="1" className={inputClass} />
+                  </Field>
+                  <Field label={t('form.maxCapacity')} htmlFor="ac-max-cap">
+                    <input id="ac-max-cap" type="number" name="max_capacity" value={formData.max_capacity} onChange={handleChange} min="1" className={inputClass} />
+                  </Field>
                 </div>
-              </div>
-
-              {/* NEW: Pricing Type Section */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">2</span>
-                  {t('form.pricingType')}
-                </h3>
-                
-                {/* Pricing Type Selection */}
-                <div className="grid grid-cols-2 gap-3 mb-4">
-                  {PRICING_TYPES.map((type) => {
-                    const Icon = type.icon
-                    return (
-                      <button
-                        key={type.value}
-                        type="button"
-                        onClick={() => setFormData(prev => ({ ...prev, pricing_type: type.value as any }))}
-                        className={`p-3 border-2 rounded-lg text-left transition-all ${
-                          formData.pricing_type === type.value
-                            ? 'border-primary-600 bg-primary-50'
-                            : 'border-gray-200 hover:border-gray-300'
-                        }`}
-                      >
-                        <div className="flex items-center gap-2 mb-1">
-                          <Icon className={`w-4 h-4 ${formData.pricing_type === type.value ? 'text-primary-600' : 'text-gray-400'}`} />
-                          <span className={`text-sm font-semibold ${formData.pricing_type === type.value ? 'text-primary-600' : 'text-gray-900'}`}>
-                            {pricingTypeLabel(type.value, type.label)}
-                          </span>
-                        </div>
-                        <p className="text-xs text-gray-500">{type.description}</p>
-                      </button>
-                    )
-                  })}
-                </div>
-
-                {/* Per Unit Settings - Only show when per_unit is selected */}
-                {formData.pricing_type === 'per_unit' && (
-                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 space-y-3">
-                    <p className="text-xs font-medium text-blue-800 flex items-center gap-2">
-                      <Ship className="w-4 h-4" />
-                      Per Unit Settings (e.g., boat, ride, vehicle)
-                    </p>
-                    <div className="grid grid-cols-3 gap-3">
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.unitLabel')} {t('form.required')}</label>
-                        <select
-                          name="unit_label"
-                          value={formData.unit_label}
-                          onChange={handleChange}
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                        >
-                          <option value="">{t('form.selectUnit')}</option>
-                          {unitOptions.map(o => (
-                            <option key={o.value} value={o.value}>{o.label}</option>
-                          ))}
-                        </select>
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.minCapacity')}</label>
-                        <input
-                          type="number"
-                          name="min_capacity"
-                          value={formData.min_capacity}
-                          onChange={handleChange}
-                          min="1"
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                        />
-                      </div>
-                      <div>
-                        <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.maxCapacity')}</label>
-                        <input
-                          type="number"
-                          name="max_capacity"
-                          value={formData.max_capacity}
-                          onChange={handleChange}
-                          min="1"
-                          className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                        />
-                      </div>
-                    </div>
-                    <p className="text-xs text-blue-600">
-                      💡 Example: Felucca ride costs 25/boat and can hold 1-6 passengers
-                    </p>
-                  </div>
-                )}
-
-                {/* Tiered Settings - Only show when tiered is selected */}
-                {formData.pricing_type === 'tiered' && (
-                  <div className="bg-purple-50 border border-purple-200 rounded-lg p-4 space-y-3">
-                    <p className="text-xs font-medium text-purple-800 flex items-center gap-2">
-                      <Users className="w-4 h-4" />
-                      Volume-discount bands — per-person rate by group size. Groups larger than the last band use its rate.
-                    </p>
-                    {formData.tiers.map((tier, i) => (
-                      <div key={i} className="grid grid-cols-[1fr_1fr_1fr_1fr_1fr_auto] gap-2 items-end">
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Min Pax</label>
-                          <input
-                            type="number" min="1" required value={tier.min_pax || ''}
-                            onChange={(e) => updateTier(i, { min_pax: parseInt(e.target.value) || 0 })}
-                            className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Max Pax</label>
-                          <input
-                            type="number" min="1" required value={tier.max_pax || ''}
-                            onChange={(e) => updateTier(i, { max_pax: parseInt(e.target.value) || 0 })}
-                            className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.eurRate')} <span className="text-gray-400 font-normal">/pax</span></label>
-                          <input
-                            type="number" min="0.01" step="0.01" required value={tier.rate_eur || ''}
-                            onChange={(e) => updateTier(i, { rate_eur: parseFloat(e.target.value) || 0 })}
-                            className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg"
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-xs font-medium text-gray-600 mb-1">Label</label>
-                          <input
-                            type="text" value={tier.label} placeholder={`${tier.min_pax || 1}-${tier.max_pax || '?'}`}
-                            onChange={(e) => updateTier(i, { label: e.target.value })}
-                            className="w-full px-2 py-2 text-sm border border-gray-300 rounded-lg"
-                          />
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeTier(i)}
-                          className="p-2 text-red-500 hover:bg-red-50 rounded-lg"
-                          title="Remove tier"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    ))}
-                    <button
-                      type="button"
-                      onClick={addTier}
-                      className="flex items-center gap-1 text-sm text-purple-700 hover:text-purple-900 font-medium"
-                    >
-                      <Plus className="w-4 h-4" /> Add tier
-                    </button>
-                    <p className="text-xs text-purple-600">
-                      💡 Example: Felucca — 1-4 pax at 30/person, 5-15 pax at 20/person
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Rates — for tiered pricing the rates live in the bands above */}
-              {formData.pricing_type !== 'tiered' && (
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">3</span>
-                  {t('form.pricing')}
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">
-                      {t('form.eurRate')} {t('form.required')}
-                      <span className="text-gray-400 font-normal ml-1">
-                        {formData.pricing_type === 'per_person' && '/ person'}
-                        {formData.pricing_type === 'per_unit' && `/ ${formData.unit_label || 'unit'}`}
-                        {formData.pricing_type === 'flat' && '/ total'}
-                      </span>
-                    </label>
-                    <input
-                      type="number"
-                      name="base_rate_eur"
-                      value={formData.base_rate_eur}
-                      onChange={handleChange}
-                      required
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <RateCurrencyField
-                    value={formData.rate_currency}
-                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                  />
-                </div>
-              </div>
-              )}
-
-              {/* Link to Supplier */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-orange-100 text-orange-600 flex items-center justify-center text-xs font-bold">4</span>
-                  Supplier (required)
-                </h3>
-                <select
-                  required
-                  name="supplier_id"
-                  value={formData.supplier_id}
-                  onChange={(e) => handleSupplierChange(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                >
-                  <option value="" disabled>-- Select a Supplier --</option>
-                  <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
-                  {suppliers.map(supplier => (
-                    <option key={supplier.id} value={supplier.id}>
-                      {supplier.name} {supplier.city ? `(${supplier.city})` : ''}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Validity */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">5</span>
-                  {t('form.validityPeriod')}
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validFrom')}</label>
-                    <input
-                      type="date"
-                      name="rate_valid_from"
-                      value={formData.rate_valid_from}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validTo')}</label>
-                    <input
-                      type="date"
-                      name="rate_valid_to"
-                      value={formData.rate_valid_to}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Notes & Status */}
-              <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.notes')}</label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleChange}
-                  rows={2}
-                  placeholder={t('form.notesPlaceholder')}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                />
-              </div>
-
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.is_active}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className="w-4 h-4 text-primary-600 border-gray-300 rounded"
-                  />
-                  <span className="text-sm font-medium text-gray-900">{t('form.activeStatus')}</span>
-                </label>
-              </div>
-            </form>
-
-            {/* Audit Log */}
-            {editingRate && (
-              <div className="px-4">
-                <RateAuditLog tableName="activity_rates" recordId={editingRate.id} />
+                <p className="text-xs text-gray-500">Example: Felucca ride costs 25/boat and can hold 1-6 passengers</p>
               </div>
             )}
 
-            <div className="flex items-center justify-end gap-2 p-4 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+            {/* Tiered Settings - Only show when tiered is selected */}
+            {formData.pricing_type === 'tiered' && (
+              <div className="flex flex-col gap-3 rounded-lg border border-gray-200 bg-gray-50/60 p-3">
+                <p className="flex items-start gap-2 text-xs font-medium text-gray-700">
+                  <Users className="mt-px h-4 w-4 shrink-0 text-gray-500" />
+                  Volume-discount bands — per-person rate by group size. Groups larger than the last band use its rate.
+                </p>
+                <div className="overflow-x-auto rounded-lg border border-gray-200 bg-white">
+                  <table className="w-full min-w-[30rem] text-sm">
+                    <thead className="bg-gray-50 text-left text-xs font-medium text-gray-600">
+                      <tr>
+                        <th scope="col" className="px-2 py-1.5 font-medium">Min Pax <span className="text-red-600">*</span></th>
+                        <th scope="col" className="px-2 py-1.5 font-medium">Max Pax <span className="text-red-600">*</span></th>
+                        <th scope="col" className="px-2 py-1.5 font-medium">
+                          {t('form.eurRate')} <span className="font-normal text-gray-400">({formData.rate_currency || rateCurrency}) /pax</span> <span className="text-red-600">*</span>
+                        </th>
+                        <th scope="col" className="px-2 py-1.5 font-medium">Label</th>
+                        <th scope="col" className="w-10 px-2 py-1.5"><span className="sr-only">Remove tier</span></th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-100">
+                      {formData.tiers.map((tier, i) => (
+                        <tr key={i}>
+                          <td className="px-2 py-1.5">
+                            <input
+                              id={`ac-tier-${i}-min`} aria-label={`Min Pax ${i + 1}`}
+                              type="number" min="1" required value={tier.min_pax || ''}
+                              onChange={(e) => updateTier(i, { min_pax: parseInt(e.target.value) || 0 })}
+                              className={inputClass}
+                            />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input
+                              id={`ac-tier-${i}-max`} aria-label={`Max Pax ${i + 1}`}
+                              type="number" min="1" required value={tier.max_pax || ''}
+                              onChange={(e) => updateTier(i, { max_pax: parseInt(e.target.value) || 0 })}
+                              className={inputClass}
+                            />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input
+                              id={`ac-tier-${i}-rate`} aria-label={`${t('form.eurRate')} ${i + 1}`}
+                              type="number" inputMode="decimal" min="0.01" step="0.01" required value={tier.rate_eur || ''}
+                              onChange={(e) => updateTier(i, { rate_eur: parseFloat(e.target.value) || 0 })}
+                              className={`${inputClass} tabular-nums`}
+                            />
+                          </td>
+                          <td className="px-2 py-1.5">
+                            <input
+                              id={`ac-tier-${i}-label`} aria-label={`Label ${i + 1}`}
+                              type="text" value={tier.label} placeholder={`${tier.min_pax || 1}-${tier.max_pax || '?'}`}
+                              onChange={(e) => updateTier(i, { label: e.target.value })}
+                              className={inputClass}
+                            />
+                          </td>
+                          <td className="px-2 py-1.5 text-right">
+                            <button
+                              type="button"
+                              onClick={() => removeTier(i)}
+                              className="rounded-lg p-2 text-red-500 hover:bg-red-50"
+                              title="Remove tier"
+                              aria-label="Remove tier"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                <button
+                  type="button"
+                  onClick={addTier}
+                  className="flex w-fit items-center gap-1 text-sm font-medium text-[#4a5c35] hover:underline"
+                >
+                  <Plus className="h-4 w-4" /> Add tier
+                </button>
+                <p className="text-xs text-gray-500">Example: Felucca — 1-4 pax at 30/person, 5-15 pax at 20/person</p>
+              </div>
+            )}
+          </FormSection>
+
+          {/* Rates — for tiered pricing the rates live in the bands above */}
+          {formData.pricing_type !== 'tiered' && (
+            <FormSection title={t('form.pricing')}>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <Field label={t('form.eurRate')} required htmlFor="ac-rate">
+                  <MoneyInput id="ac-rate" name="base_rate_eur" value={formData.base_rate_eur} onChange={handleChange} currency={formData.rate_currency || rateCurrency} unit={baseRateUnit} required />
+                </Field>
+                <CurrencyPicker id="ac-currency" value={formData.rate_currency} onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))} orgCurrency={rateCurrency} />
+              </div>
+            </FormSection>
+          )}
+
+          {/* Link to Supplier */}
+          <FormSection title={tCommon('sectionSupplier')}>
+            <Field label={tCommon('linkToSupplier')} required htmlFor="ac-supplier">
+              <select
+                id="ac-supplier"
+                required
+                name="supplier_id"
+                value={formData.supplier_id}
+                onChange={(e) => handleSupplierChange(e.target.value)}
+                className={inputClass}
               >
-                {t('form.cancel')}
-              </button>
-              <button
-                onClick={handleSubmit}
-                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
-              >
-                <Check className="w-4 h-4" />
-                {editingRate ? t('form.update') : t('form.create')}
-              </button>
-            </div>
-          </div>
-        </div>
+                <option value="" disabled>-- Select a Supplier --</option>
+                <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
+                {suppliers.map(supplier => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name} {supplier.city ? `(${supplier.city})` : ''}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </FormSection>
+
+          <FormSection title={t('form.validityPeriod')}>
+            <ValidityFields idPrefix="ac" from={formData.rate_valid_from} to={formData.rate_valid_to} onChange={handleChange} fromLabel={t('form.validFrom')} toLabel={t('form.validTo')} />
+          </FormSection>
+
+          <Field label={t('form.notes')} htmlFor="ac-notes">
+            <textarea id="ac-notes" name="notes" value={formData.notes} onChange={handleChange} rows={2} placeholder={t('form.notesPlaceholder')} className={inputClass} />
+          </Field>
+        </RateFormModal>
       )}
     </div>
   )

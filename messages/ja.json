@@ -4644,7 +4644,16 @@
       "pricingFlatHint": "人数に関係なくグループ全体で1回の料金",
       "pricingPerPersonHint": "料金 × 旅行者数",
       "pricingPerUnitHint": "料金 × グループに必要なユニット数（例：2名1室ごと）",
-      "peoplePerUnit": "名/ユニット"
+      "peoplePerUnit": "名/ユニット",
+      "currencyDefaultWith": "既定（{currency}）",
+      "currencyHintShort": "契約が別の通貨の場合のみ変更してください。",
+      "formSummary": "内容の確認",
+      "formActive": "予約に使用可能",
+      "formClose": "閉じる",
+      "validMonths": "{count}か月",
+      "validBackwards": "終了日が開始日より前になっています。",
+      "perPerson": "1名あたり",
+      "sectionSupplier": "仕入先"
     },
     "hub": {
       "title": "料金管理",
@@ -4979,7 +4988,7 @@
       "addFirstRate": "最初の料金を追加",
       "restaurantMealDetails": "レストラン・食事詳細",
       "supplierRestaurant": "サプライヤー（レストラン）",
-      "selectSupplierOptional": "サプライヤーを選択（任意）",
+      "selectSupplierOptional": "サプライヤーを選択（または直接予約）",
       "linkToRestaurant": "追跡用にレストランサプライヤーをリンク。",
       "manageRestaurants": "レストランを管理 →",
       "selectMealType": "食事タイプを選択",
