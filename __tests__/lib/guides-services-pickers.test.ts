@@ -118,7 +118,10 @@ describe('the rate pages', () => {
   })
 
   it('the guide form says which durations are priced (#6)', () => {
-    expect(src('app/rates/guides/guide-rates-content.tsx')).toContain("t('form.durationHint')")
+    // The form lives in components/rates/GuideRateForm.tsx; the long hint opens
+    // under a one-line summary of the same fact.
+    expect(src('components/rates/GuideRateForm.tsx')).toContain("f('durationHint')")
+    expect(src('components/rates/GuideRateForm.tsx')).toContain("f('durationHintShort')")
     for (const lang of ['en', 'ja']) {
       const m = JSON.parse(src(`messages/${lang}.json`))
       expect(m.rates.guides.form.durationHint).toBeTruthy()
