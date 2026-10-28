@@ -12,7 +12,9 @@ import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
 import RateAuditLog from '@/app/components/RateAuditLog'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
-import RateCurrencyField, { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
+import { rateCurrencyPatch, formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
+import { RateFormModal, FormSection, Field, CurrencyPicker, ValidityFields, inputClass, shortDate } from '@/components/rates/RateFormKit'
+import { formatMoney } from '@/lib/currency-totals'
 import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 import { useSupplierTypes } from '@/hooks/useSupplierTypes'
 import { isTransportSupplier } from '@/lib/rates/transport-suppliers'
@@ -1262,127 +1264,136 @@ export default function TransportationContent() {
 
       {/* Add/Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <div className="sticky top-0 bg-white flex items-center justify-between px-6 py-4 border-b border-gray-200 z-10">
-              <h2 className="text-lg font-semibold text-gray-900">
-                {editingRate ? 'Edit Transportation Service' : 'Add Transportation Service'}
-              </h2>
-              <button
-                type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="text-gray-400 hover:text-gray-600 p-1"
-                title="Close"
-              >
-                <X className="h-5 w-5" />
-              </button>
+        // noValidate (inside RateFormModal): the browser's own bubble points at
+        // a control that may be scrolled out of sight in this modal, so the
+        // submit did nothing and said nothing. Every rule is checked in
+        // handleSubmit instead, where the message lands in the banner.
+        <RateFormModal
+          formId="transport-rate-form"
+          title={editingRate ? t('editRate') : t('addRate')}
+          onClose={() => setIsModalOpen(false)}
+          onSubmit={handleSubmit}
+          maxWidth="max-w-2xl"
+          submitting={saving}
+          after={editingRate ? <RateAuditLog tableName="transportation_rates" recordId={editingRate.id} /> : undefined}
+          summary={[
+            serviceTypeLabelFor(formData.service_type),
+            formData.city
+              ? translateCity(formData.city) + (needsDestinationCity(formData.service_type) && formData.destination_city ? ` → ${translateCity(formData.destination_city)}` : '')
+              : '',
+            isRoadTransferType(formData.service_type) ? t(`tripShape.${formData.trip_shape}`) : '',
+            Object.entries(formData.vehicles)
+              .filter(([, r]) => r.rate_eur !== '' && parseFloat(r.rate_eur) > 0)
+              .map(([k, r]) => `${vehicleName(k)} ${formatMoney(parseFloat(r.rate_eur), formData.rate_currency || rateCurrency)}`)
+              .join(', '),
+            formData.rate_valid_from && formData.rate_valid_to
+              ? `${shortDate(formData.rate_valid_from)} – ${shortDate(formData.rate_valid_to)}`
+              : '',
+          ].filter(Boolean).join(' · ')}
+          active={{
+            checked: formData.is_active,
+            onChange: v => setFormData(prev => ({ ...prev, is_active: v })),
+            label: tCommon('formActive'),
+          }}
+          submitLabel={saving ? tCommon('saving') : editingRate ? tCommon('updateRate') : tCommon('createRate')}
+          cancelLabel={tCommon('cancel')}
+        >
+          {error && (
+            <div
+              ref={errorRef}
+              className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm"
+            >
+              {error}
             </div>
+          )}
 
-            {/* noValidate: the browser's own bubble points at a control that
-                may be scrolled out of sight in this modal, so the submit did
-                nothing and said nothing. Every rule below is checked in
-                handleSubmit instead, where the message lands in the banner. */}
-            <form onSubmit={handleSubmit} noValidate className="p-6 space-y-6">
-              {error && (
-                <div
-                  ref={errorRef}
-                  className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-md text-sm"
-                >
-                  {error}
-                </div>
-              )}
+          <FormSection title={tCommon('sectionSupplier')}>
+            <Field label="Transport Company (Supplier)" required htmlFor="tr-supplier">
+              <select
+                id="tr-supplier"
+                required
+                value={formData.supplier_id}
+                onChange={(e) => handleSupplierChange(e.target.value)}
+                title="Select supplier"
+                className={inputClass}
+              >
+                <option value="" disabled>Select supplier…</option>
+                <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
+                {suppliers.map(supplier => (
+                  <option key={supplier.id} value={supplier.id}>
+                    {supplier.name}{supplier.city ? ` (${supplier.city})` : ''}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          </FormSection>
 
-              {/* Supplier Selection */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2 flex items-center gap-2">
-                  <Building2 className="h-4 w-4 text-cyan-600" />
-                  Transport Company (Supplier) <span className="text-red-500">*</span>
-                </h3>
+          <FormSection title="Service Information">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label={t('serviceType')} required htmlFor="tr-service-type">
                 <select
+                  id="tr-service-type"
+                  value={formData.service_type}
+                  onChange={(e) => handleServiceTypeChange(e.target.value)}
                   required
-                  value={formData.supplier_id}
-                  onChange={(e) => handleSupplierChange(e.target.value)}
-                  title="Select supplier"
-                  className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
+                  className={inputClass}
                 >
-                  <option value="" disabled>Select supplier…</option>
-                  <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
-                  {suppliers.map(supplier => (
-                    <option key={supplier.id} value={supplier.id}>
-                      {supplier.name}{supplier.city ? ` (${supplier.city})` : ''}
-                    </option>
+                  {/* The agency's list (Settings → Vocabulary) — an entry removed
+                      there is gone from here too. A rate whose stored type is no
+                      longer listed still shows it, so editing does not silently
+                      retype it. */}
+                  {!serviceTypeOptions.some(o => o.value === formData.service_type) && formData.service_type && (
+                    <option value={formData.service_type}>{serviceTypeLabelFor(formData.service_type)}</option>
+                  )}
+                  {serviceTypeOptions.map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
                   ))}
                 </select>
-              </div>
+              </Field>
 
-              {/* Service Info */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Service Information</h3>
+              {/* Typeable: generated from city + type as they change; a blank
+                  code on a new rate is generated by the API. */}
+              <Field label={t('serviceCode')} htmlFor="tr-service-code">
+                <input
+                  id="tr-service-code"
+                  type="text"
+                  value={formData.service_code}
+                  onChange={(e) => setFormData(prev => ({ ...prev, service_code: e.target.value }))}
+                  placeholder="Auto-generated"
+                  className={`${inputClass} font-mono`}
+                />
+              </Field>
+            </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Service Type <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.service_type}
-                      onChange={(e) => handleServiceTypeChange(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    >
-                      {/* The agency's list (Settings → Vocabulary) — an entry removed
-                          there is gone from here too. A rate whose stored type is no
-                          longer listed still shows it, so editing does not silently
-                          retype it. */}
-                      {!serviceTypeOptions.some(o => o.value === formData.service_type) && formData.service_type && (
-                        <option value={formData.service_type}>{serviceTypeLabelFor(formData.service_type)}</option>
-                      )}
-                      {serviceTypeOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      Service Code
-                    </label>
-                    <input
-                      type="text"
-                      value={formData.service_code}
-                      onChange={(e) => setFormData(prev => ({ ...prev, service_code: e.target.value }))}
-                      placeholder="Auto-generated"
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] bg-gray-50 font-mono"
-                    />
-                  </div>
-                </div>
-
-                {/* Route Name - Combobox with existing + suggested names */}
+            {/* Route Name - Combobox with existing + suggested names */}
+            <Field
+              label="Route / Service Name"
+              htmlFor="tr-route-name"
+              hint="Select an existing route or type a new name. Leave empty to auto-generate."
+            >
+              <div className="relative">
                 <div className="relative">
-                  <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                    Route / Service Name
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={formData.route_name}
-                      onChange={(e) => {
-                        setFormData(prev => ({ ...prev, route_name: e.target.value }))
-                        setShowRouteDropdown(true)
-                      }}
-                      onFocus={() => setShowRouteDropdown(true)}
-                      onBlur={() => setTimeout(() => setShowRouteDropdown(false), 200)}
-                      placeholder="e.g., Karnak & Luxor Temples tour transport"
-                      className="w-full px-3 py-2 pr-8 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setShowRouteDropdown(!showRouteDropdown)}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                    >
-                      <ChevronDown className="w-4 h-4" />
-                    </button>
-                  </div>
+                  <input
+                    id="tr-route-name"
+                    type="text"
+                    value={formData.route_name}
+                    onChange={(e) => {
+                      setFormData(prev => ({ ...prev, route_name: e.target.value }))
+                      setShowRouteDropdown(true)
+                    }}
+                    onFocus={() => setShowRouteDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowRouteDropdown(false), 200)}
+                    placeholder="e.g., Karnak & Luxor Temples tour transport"
+                    className={`${inputClass} pr-8`}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowRouteDropdown(!showRouteDropdown)}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <ChevronDown className="w-4 h-4" />
+                  </button>
+                </div>
                   {showRouteDropdown && (() => {
                     // Collect existing route names from saved rates
                     const existingNames = [...new Set(
@@ -1497,188 +1508,141 @@ export default function TransportationContent() {
                       </div>
                     )
                   })()}
-                  <p className="text-xs text-gray-400 mt-1">Select an existing route or type a new name. Leave empty to auto-generate.</p>
-                </div>
-
-                {/* City / Route */}
-                <div className={`grid gap-4 ${needsDestinationCity(formData.service_type) ? 'grid-cols-2' : 'grid-cols-1'}`}>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {needsDestinationCity(formData.service_type) ? 'Departure City' : 'City'} <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.city}
-                      onChange={(e) => handleCityChange(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    >
-                      <option value="">{t('selectDepartureCity')}</option>
-                      <CityOptions label={translateCity} />
-                    </select>
-                  </div>
-
-                  {needsDestinationCity(formData.service_type) && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                        {t('selectDestinationCity')} <span className="text-red-500">*</span>
-                      </label>
-                      <select
-                        value={formData.destination_city}
-                        onChange={(e) => handleDestinationCityChange(e.target.value)}
-                        required
-                        className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                      >
-                        <option value="">{t('selectDestinationCity')}</option>
-                        <CityOptions exclude={formData.city} label={translateCity} />
-                      </select>
-                    </div>
-                  )}
-                </div>
-
-                {/* Road transfers: one way, back the same day, or back the next day —
-                    each a different price for the same route (lib/pricing/road-trips). */}
-                {isRoadTransferType(formData.service_type) && (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                      {t('tripShape.label')} <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      value={formData.trip_shape}
-                      onChange={(e) => setFormData(prev => ({ ...prev, trip_shape: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                      data-testid="trip-shape"
-                    >
-                      {TRIP_SHAPES.map(shape => (
-                        <option key={shape} value={shape}>{t(`tripShape.${shape}`)}</option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">{t(`tripShape.hint.${formData.trip_shape}`)}</p>
-                  </div>
-                )}
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1.5">
-                    Includes (description)
-                  </label>
-                  <input
-                    type="text"
-                    value={formData.includes}
-                    onChange={(e) => setFormData(prev => ({ ...prev, includes: e.target.value }))}
-                    placeholder="e.g., Driver + AC vehicle + fuel + tolls"
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                  />
-                </div>
               </div>
+            </Field>
 
-              {/* Vehicle Tier Rates */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">
-                  Vehicle Rates <span className="text-xs font-normal text-gray-400">(at least one required)</span>
-                </h3>
+            {/* City / Route */}
+            <div className={`grid grid-cols-1 gap-3 ${needsDestinationCity(formData.service_type) ? 'sm:grid-cols-2' : ''}`}>
+              <Field
+                label={needsDestinationCity(formData.service_type) ? 'Departure City' : 'City'}
+                required
+                htmlFor="tr-city"
+              >
+                <select
+                  id="tr-city"
+                  value={formData.city}
+                  onChange={(e) => handleCityChange(e.target.value)}
+                  required
+                  className={inputClass}
+                >
+                  <option value="">{t('selectDepartureCity')}</option>
+                  <CityOptions label={translateCity} />
+                </select>
+              </Field>
 
-                {/* The same table as a transport package (components/rates/VehicleRatesTable):
-                    the vocabulary's vehicles and sizes, one price each. */}
-                <VehicleRatesTable
-                  rows={formData.vehicles}
-                  onChange={vehicles => setFormData(prev => ({ ...prev, vehicles }))}
-                  vehicleName={vehicleName}
-                  currency={formData.rate_currency || undefined}
-                />
-              </div>
-
-              {/* Validity & Notes */}
-              <div className="space-y-4">
-                <h3 className="text-sm font-medium text-gray-700 border-b pb-2">Additional</h3>
-
-                <div className="grid grid-cols-3 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">Season</label>
-                    <select
-                      value={formData.season}
-                      onChange={(e) => setFormData(prev => ({ ...prev, season: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    >
-                      <option value="">All Year</option>
-                      <option value="high_season">High Season</option>
-                      <option value="low_season">Low Season</option>
-                      <option value="peak">Peak</option>
-                    </select>
-                  </div>
-                  <RateCurrencyField
-                    value={formData.rate_currency}
-                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                  />
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">Valid From</label>
-                    <input
-                      type="date"
-                      value={formData.rate_valid_from}
-                      onChange={(e) => setFormData(prev => ({ ...prev, rate_valid_from: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-600 mb-1.5">Valid To</label>
-                    <input
-                      type="date"
-                      value={formData.rate_valid_to}
-                      onChange={(e) => setFormData(prev => ({ ...prev, rate_valid_to: e.target.value }))}
-                      className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47]"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-600 mb-1.5">Notes</label>
-                  <textarea
-                    value={formData.notes}
-                    onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
-                    rows={2}
-                    placeholder="Any additional notes..."
-                    className="w-full px-3 py-2 text-sm border border-gray-200 rounded-md focus:outline-none focus:ring-1 focus:ring-[#647C47] focus:border-[#647C47] resize-none"
-                  />
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="is_active"
-                    checked={formData.is_active}
-                    onChange={(e) => setFormData(prev => ({ ...prev, is_active: e.target.checked }))}
-                    className="h-4 w-4 text-[#647C47] border-gray-300 rounded focus:ring-[#647C47]"
-                  />
-                  <label htmlFor="is_active" className="text-sm text-gray-600">
-                    Active (available for booking)
-                  </label>
-                </div>
-              </div>
-
-              {/* Audit Log */}
-              {editingRate && (
-                <RateAuditLog tableName="transportation_rates" recordId={editingRate.id} />
+              {needsDestinationCity(formData.service_type) && (
+                <Field label={t('selectDestinationCity')} required htmlFor="tr-destination-city">
+                  <select
+                    id="tr-destination-city"
+                    value={formData.destination_city}
+                    onChange={(e) => handleDestinationCityChange(e.target.value)}
+                    required
+                    className={inputClass}
+                  >
+                    <option value="">{t('selectDestinationCity')}</option>
+                    <CityOptions exclude={formData.city} label={translateCity} />
+                  </select>
+                </Field>
               )}
+            </div>
 
-              {/* Actions */}
-              <div className="flex justify-end gap-3 pt-4 border-t border-gray-200">
-                <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800 transition-colors"
+            {/* Road transfers: one way, back the same day, or back the next day —
+                each a different price for the same route (lib/pricing/road-trips). */}
+            {isRoadTransferType(formData.service_type) && (
+              <Field
+                label={t('tripShape.label')}
+                required
+                htmlFor="tr-trip-shape"
+                hint={t(`tripShape.hint.${formData.trip_shape}`)}
+              >
+                <select
+                  id="tr-trip-shape"
+                  value={formData.trip_shape}
+                  onChange={(e) => setFormData(prev => ({ ...prev, trip_shape: e.target.value }))}
+                  className={inputClass}
+                  data-testid="trip-shape"
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="px-4 py-2 text-sm bg-[#647C47] text-white rounded-md hover:bg-[#4f6238] transition-colors disabled:opacity-50 min-w-[100px]"
+                  {TRIP_SHAPES.map(shape => (
+                    <option key={shape} value={shape}>{t(`tripShape.${shape}`)}</option>
+                  ))}
+                </select>
+              </Field>
+            )}
+
+            <Field label="Includes (description)" htmlFor="tr-includes">
+              <input
+                id="tr-includes"
+                type="text"
+                value={formData.includes}
+                onChange={(e) => setFormData(prev => ({ ...prev, includes: e.target.value }))}
+                placeholder="e.g., Driver + AC vehicle + fuel + tolls"
+                className={inputClass}
+              />
+            </Field>
+          </FormSection>
+
+          <FormSection title="Vehicle Rates (at least one required)">
+            {/* The same table as a transport package (components/rates/VehicleRatesTable):
+                the vocabulary's vehicles and sizes, one price each. */}
+            <div className="overflow-x-auto">
+              <VehicleRatesTable
+                rows={formData.vehicles}
+                onChange={vehicles => setFormData(prev => ({ ...prev, vehicles }))}
+                vehicleName={vehicleName}
+                currency={formData.rate_currency || undefined}
+              />
+            </div>
+          </FormSection>
+
+          <FormSection title="Additional">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Field label="Season" htmlFor="tr-season">
+                <select
+                  id="tr-season"
+                  value={formData.season}
+                  onChange={(e) => setFormData(prev => ({ ...prev, season: e.target.value }))}
+                  className={inputClass}
                 >
-                  {saving ? 'Saving...' : editingRate ? 'Update Service' : 'Add Service'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
+                  <option value="">All Year</option>
+                  <option value="high_season">High Season</option>
+                  <option value="low_season">Low Season</option>
+                  <option value="peak">Peak</option>
+                </select>
+              </Field>
+              <CurrencyPicker
+                id="tr-rate-currency"
+                value={formData.rate_currency}
+                onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
+                orgCurrency={rateCurrency}
+              />
+            </div>
+
+            <ValidityFields
+              idPrefix="tr-valid"
+              from={formData.rate_valid_from}
+              to={formData.rate_valid_to}
+              onChange={(e) => {
+                const { name, value } = e.target
+                setFormData(prev => name === 'rate_valid_to'
+                  ? { ...prev, rate_valid_to: value }
+                  : { ...prev, rate_valid_from: value })
+              }}
+              fromLabel={t('validFrom')}
+              toLabel={t('validTo')}
+            />
+
+            <Field label={t('notes')} htmlFor="tr-notes">
+              <textarea
+                id="tr-notes"
+                value={formData.notes}
+                onChange={(e) => setFormData(prev => ({ ...prev, notes: e.target.value }))}
+                rows={2}
+                placeholder="Any additional notes..."
+                className={`${inputClass} resize-none`}
+              />
+            </Field>
+          </FormSection>
+        </RateFormModal>
       )}
     </div>
   )
