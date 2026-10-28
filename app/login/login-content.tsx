@@ -8,7 +8,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 
-export default function LoginContent() {
+export default function LoginContent({ showSignUp = true }: { showSignUp?: boolean }) {
   const t = useTranslations('auth')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -105,14 +105,16 @@ export default function LoginContent() {
             </button>
           </form>
 
-          <div className="mt-6 text-center">
-            <p className="text-sm text-gray-600">
-              {t('dontHaveAccount')}{' '}
-              <Link href="/signup" className="text-[#263A29] hover:text-[#1D2B20] font-medium">
-                {t('signUp')}
-              </Link>
-            </p>
-          </div>
+          {showSignUp && (
+            <div className="mt-6 text-center">
+              <p className="text-sm text-gray-600">
+                {t('dontHaveAccount')}{' '}
+                <Link href="/signup" className="text-[#263A29] hover:text-[#1D2B20] font-medium">
+                  {t('signUp')}
+                </Link>
+              </p>
+            </div>
+          )}
         </div>
 
         <p className="text-center text-sm text-gray-500 mt-6">

@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { canonicalRedirectOrigin } from '@/lib/http/canonical-host'
 import { siteMovedRedirect } from '@/lib/http/site-moved'
+import { marketingPageRedirect } from '@/lib/http/marketing-pages'
 import { clientIp } from '@/lib/client-ip'
 import { createClient } from '@supabase/supabase-js'
 import { NextResponse, type NextRequest } from 'next/server'
@@ -417,6 +418,12 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
   if (canonical) {
     return NextResponse.redirect(new URL(`${request.nextUrl.pathname}${request.nextUrl.search}`, canonical), 308)
   }
+
+  // A company's own install (MARKETING_PAGES=off, lib/http/marketing-pages):
+  // Autoura's home and product pages go to /login, which sends a signed-in
+  // user on to /dashboard.
+  const hidden = marketingPageRedirect(request.nextUrl.pathname, process.env.MARKETING_PAGES)
+  if (hidden) return NextResponse.redirect(new URL(hidden, request.url), 307)
 
   // The caller's role in their organisation — organization_members is the one
   // authority (see lib/auth/roles.ts). Resolved at most once per request and
