@@ -271,7 +271,8 @@ export function ValidityFields({ idPrefix, from, to, onChange, fromLabel, toLabe
         label={toLabel}
         required={required}
         htmlFor={`${idPrefix}-to`}
-        hint={backwards ? <span className="text-red-700">{t('validBackwards')}</span> : months !== null ? t('validMonths', { count: months }) : undefined}
+        // No count past ten years: an end date of 2099 means "no end", not "878 months".
+        hint={backwards ? <span className="text-red-700">{t('validBackwards')}</span> : months !== null && months <= 120 ? t('validMonths', { count: months }) : undefined}
       >
         <input id={`${idPrefix}-to`} type="date" name={toName} value={to} onChange={onChange} required={required} className={inputClass} />
       </Field>
