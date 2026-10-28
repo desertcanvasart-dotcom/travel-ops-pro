@@ -5,7 +5,7 @@ import { todayLocal } from '@/lib/today'
 import { useEffect, useState, useMemo } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { firstInvalidMessage } from '@/lib/form-guard'
-import RateCurrencyField, { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
+import { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
@@ -13,10 +13,10 @@ import { BUILT_IN_GUIDE_LANGUAGES, guideLanguageKey, guideLanguageWord } from '@
 import { optionsFromLabels } from '@/lib/vocabulary'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
 import RateAuditLog from '@/app/components/RateAuditLog'
+import GuideRateForm from '@/components/rates/GuideRateForm'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import GuideLanguagesEditor from '@/components/rates/GuideLanguagesEditor'
-import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Copy, Users,
@@ -24,7 +24,6 @@ import { Copy, Users,
   Search,
   Edit,
   Trash2,
-  X,
   Check,
   Globe,
   MapPin,
@@ -1064,249 +1063,26 @@ export default function GuideRatesContent() {
 
       {/* Form Modal */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg max-w-2xl w-full max-h-[90vh] overflow-hidden">
-            <div className="flex items-center justify-between p-4 border-b border-gray-200">
-              <h2 className="text-lg font-bold text-gray-900">
-                {editingRate ? t('editRate') : t('addGuideRate')}
-              </h2>
-              <button onClick={() => setShowModal(false)} className="p-1.5 text-gray-400 hover:text-gray-600 rounded">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form noValidate onSubmit={handleSubmit} className="p-4 overflow-y-auto max-h-[calc(90vh-140px)]">
-              {/* Basic Info */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-purple-100 text-purple-600 flex items-center justify-center text-xs font-bold">1</span>
-                  {t('form.basicInfo')}
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.serviceCode')}</label>
-                    <input
-                      type="text"
-                      name="service_code"
-                      value={formData.service_code}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg bg-gray-50"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.language')} *</label>
-                    <select
-                      name="guide_language"
-                      value={formData.guide_language}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      {languageOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                      {/* A language since removed from the vocabulary still shows. */}
-                      {formData.guide_language && !languageOptions.some(o => o.value === formData.guide_language) && (
-                        <option value={formData.guide_language}>{guideLanguageLabel(formData.guide_language, guideLanguageWord(formData.guide_language))}</option>
-                      )}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.guideType')} *</label>
-                    <select
-                      name="guide_type"
-                      value={formData.guide_type}
-                      onChange={handleChange}
-                      required
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      {gradeOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.city')}</label>
-                    <select
-                      name="city"
-                      value={formData.city}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      <option value="">{t('form.selectCity')}</option>
-                      <CityOptions />
-                    </select>
-                  </div>
-                </div>
-              </div>
-
-              {/* Link to Guide */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-blue-100 text-blue-600 flex items-center justify-center text-xs font-bold">2</span>
-                  {t('form.linkToGuide')}
-                </h3>
-                <select
-                  required
-                  name="supplier_id"
-                  value={formData.supplier_id}
-                  onChange={(e) => handleGuideChange(e.target.value)}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                >
-                  <option value="" disabled>{t('form.selectGuide')} {filteredGuidesForDropdown.length < guides.length ? `(${filteredGuidesForDropdown.length} matching)` : ''}</option>
-                  <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
-                  {filteredGuidesForDropdown.map(guide => (
-                    <option key={guide.id} value={guide.id}>
-                      {guide.name}
-                    </option>
-                  ))}
-                </select>
-                {filteredGuidesForDropdown.length === 0 && guides.length > 0 && (
-                  <p className="text-xs text-amber-600 mt-1">
-                    No guides match the selected city/language. Try changing the filters above.
-                  </p>
-                )}
-              </div>
-
-              {/* Duration & Rates */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-green-100 text-green-600 flex items-center justify-center text-xs font-bold">3</span>
-                  {t('form.durationRates')}
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.guideMode')}</label>
-                    <select
-                      name="guide_mode"
-                      value={formData.guide_mode}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                      data-testid="guide-mode"
-                    >
-                      {modeOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                      {formData.guide_mode && !modeOptions.some(o => o.value === formData.guide_mode) && (
-                        <option value={formData.guide_mode}>{guideModeLabel(formData.guide_mode, formData.guide_mode)}</option>
-                      )}
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.tourDuration')}</label>
-                    <select
-                      name="tour_duration"
-                      value={formData.tour_duration}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    >
-                      {durationOptions.map(o => (
-                        <option key={o.value} value={o.value}>{o.label}</option>
-                      ))}
-                    </select>
-                    <p className="text-xs text-gray-500 mt-1">{t('form.durationHint')}</p>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.eurRate')} *</label>
-                    <input
-                      type="number"
-                      name="base_rate_eur"
-                      value={formData.base_rate_eur}
-                      onChange={handleChange}
-                      required
-                      min="0"
-                      step="0.01"
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <RateCurrencyField
-                    value={formData.rate_currency}
-                    onChange={v => setFormData(prev => ({ ...prev, rate_currency: v }))}
-                    className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                  />
-                </div>
-              </div>
-
-              {/* Validity */}
-              <div className="mb-4">
-                <h3 className="text-base font-semibold text-gray-900 mb-3 flex items-center gap-2">
-                  <span className="w-6 h-6 rounded-full bg-pink-100 text-pink-600 flex items-center justify-center text-xs font-bold">4</span>
-                  {t('form.validityPeriod')}
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validFrom')}</label>
-                    <input
-                      type="date"
-                      name="rate_valid_from"
-                      value={formData.rate_valid_from}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.validTo')}</label>
-                    <input
-                      type="date"
-                      name="rate_valid_to"
-                      value={formData.rate_valid_to}
-                      onChange={handleChange}
-                      className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Notes & Status */}
-              <div className="mb-4">
-                <label className="block text-xs font-medium text-gray-600 mb-1">{t('form.notes')}</label>
-                <textarea
-                  name="notes"
-                  value={formData.notes}
-                  onChange={handleChange}
-                  rows={2}
-                  className="w-full px-3 py-2 text-sm border border-gray-300 rounded-lg"
-                />
-              </div>
-
-              <div>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={formData.is_active}
-                    onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                    className="w-4 h-4 text-primary-600 border-gray-300 rounded"
-                  />
-                  <span className="text-sm font-medium text-gray-900">{t('form.activeBookings')}</span>
-                </label>
-              </div>
-            </form>
-
-            {/* Audit Log */}
-            {editingRate && (
-              <div className="px-4">
-                <RateAuditLog tableName="guide_rates" recordId={editingRate.id} />
-              </div>
-            )}
-
-            <div className="flex items-center justify-end gap-2 p-4 border-t border-gray-200">
-              <button
-                type="button"
-                onClick={() => setShowModal(false)}
-                className="px-3 py-1.5 text-sm border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
-              >
-                {t('form.cancel')}
-              </button>
-              <button
-                onClick={handleSubmit}
-                className="px-3 py-1.5 text-sm bg-primary-600 text-white rounded-lg hover:bg-primary-700 flex items-center gap-2"
-              >
-                <Check className="w-4 h-4" />
-                {editingRate ? t('form.update') : t('form.create')}
-              </button>
-            </div>
-          </div>
-        </div>
+        <GuideRateForm
+          editing={!!editingRate}
+          values={formData}
+          onField={handleChange}
+          onPatch={patch => setFormData(prev => ({ ...prev, ...patch }))}
+          onGuideChange={handleGuideChange}
+          onSubmit={handleSubmit}
+          onClose={() => setShowModal(false)}
+          languageOptions={languageOptions}
+          gradeOptions={gradeOptions}
+          modeOptions={modeOptions}
+          durationOptions={durationOptions}
+          guides={filteredGuidesForDropdown}
+          totalGuides={guides.length}
+          orgRateCurrency={rateCurrency}
+          cityOptions={<CityOptions />}
+          legacyLanguageLabel={formData.guide_language ? guideLanguageLabel(formData.guide_language, guideLanguageWord(formData.guide_language)) : undefined}
+          legacyModeLabel={formData.guide_mode ? guideModeLabel(formData.guide_mode, formData.guide_mode) : undefined}
+          footerExtra={editingRate ? <RateAuditLog tableName="guide_rates" recordId={editingRate.id} /> : undefined}
+        />
       )}
     </div>
   )
