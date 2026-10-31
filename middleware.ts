@@ -62,12 +62,12 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/bookings': ['admin', 'manager', 'agent'],
   '/invoices': ['admin', 'manager', 'agent'],
   '/payments': ['admin', 'manager', 'agent'],
+  // Tasks · Follow-ups as tabs (?type=), both agent-and-above.
   '/tasks': ['admin', 'manager', 'agent'],
   // Inbox: All · Email · WhatsApp (lib/nav/config.ts TABBED_PAGES).
   '/inbox': ['admin', 'manager', 'agent'],
   '/whatsapp-parser': ['admin', 'manager', 'agent'],
   '/contacts': ['admin', 'manager', 'agent'],
-  '/followups': ['admin', 'manager', 'agent'],
   // Tours. Tour Manager (templates, variations, their options) and Transport
   // Packages are the managers' screens; '/tours' (Ready-made Packages) is
   // every staff role's — agents start a B2B quote there ("Quote this tour").

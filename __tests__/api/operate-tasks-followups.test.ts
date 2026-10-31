@@ -192,7 +192,7 @@ describe('tasks — Archive Done archives every done task of the company (#5)', 
   })
 
   it('the screen calls it, and confirms with the company-wide count', () => {
-    const page = src('app/tasks/page.tsx')
+    const page = src('app/tasks/_views/TasksView.tsx')
     expect(page).toMatch(/fetch\('\/api\/tasks\/archive-done', \{ method: 'POST' \}\)/)
     expect(page).toMatch(/const archivableDoneCount = summary\?\.done \?\? 0/)
   })
@@ -220,7 +220,7 @@ describe('tasks — a deactivated member cannot be newly assigned (#6)', () => {
 
 describe('tasks — a failed save is shown (#3)', () => {
   it('handleSubmit alerts the API error', () => {
-    const page = src('app/tasks/page.tsx')
+    const page = src('app/tasks/_views/TasksView.tsx')
     const submit = page.slice(page.indexOf('const handleSubmit'), page.indexOf('const handleStatusChange'))
     expect(submit).toMatch(/\} else \{[\s\S]*dialog\.alert\(t\('saveFailed'\), data\?\.error \|\| t\('saveFailed'\)/)
   })
@@ -274,7 +274,7 @@ describe('follow-ups — the active company only, on its role (#1, #2, #7)', () 
   })
 
   it('no screen writes or lists client_followups from the browser any more', () => {
-    for (const f of ['app/followups/page.tsx', 'components/AddFollowupModal.tsx', 'app/dashboard/page.tsx']) {
+    for (const f of ['app/tasks/_views/FollowupsView.tsx', 'components/AddFollowupModal.tsx', 'app/dashboard/page.tsx']) {
       expect(src(f), f).not.toMatch(/from\('client_followups'\)/)
     }
     const client = src('app/clients/[id]/page.tsx')
@@ -301,7 +301,7 @@ describe('follow-ups — snooze moves later (#4)', () => {
 })
 
 describe('follow-ups — the screen (#3, #6)', () => {
-  const page = src('app/followups/page.tsx')
+  const page = src('app/tasks/_views/FollowupsView.tsx')
 
   it('shows the saved notes (description), not a column that does not exist', () => {
     expect(page).toMatch(/followup\.description && \(/)
@@ -352,8 +352,8 @@ describe('follow-ups — due-day reminder (#5)', () => {
     expect(r.results.followups).toBe(2)
     const sent = (await table('notifications')).filter(n => n.type === 'followup_due')
     expect(sent.map(n => [n.org_id, n.user_id, n.link]).sort()).toEqual([
-      ['org-a', 'u-both', '/followups'],
-      ['org-b', 'u-both', '/followups'],
+      ['org-a', 'u-both', '/tasks?type=follow-up'],
+      ['org-b', 'u-both', '/tasks?type=follow-up'],
     ])
     expect(mail.sent).toEqual([])
     const rows = await table('client_followups')

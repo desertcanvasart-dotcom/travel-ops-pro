@@ -22,7 +22,7 @@ describe('menu roles', () => {
 })
 
 describe('what the dashboard links for each role', () => {
-  const LINKS = ['/rates', '/itineraries/new', '/tours', '/tasks', '/followups', '/clients', '/itineraries', '/inbox?channel=all', '/calendar']
+  const LINKS = ['/rates', '/itineraries/new', '/tours', '/tasks', '/tasks?type=follow-up', '/clients', '/itineraries', '/inbox?channel=all', '/calendar']
   const open = (role: string | null) => LINKS.filter(h => canOpenFromMenu(role, h))
 
   it('a viewer opens none of them', () => {
@@ -30,7 +30,7 @@ describe('what the dashboard links for each role', () => {
   })
   it('an agent does not get the Rates Hub', () => {
     expect(canOpenFromMenu('agent', '/rates')).toBe(false)
-    expect(open('agent')).toEqual(expect.arrayContaining(['/followups', '/clients', '/inbox?channel=all', '/calendar']))
+    expect(open('agent')).toEqual(expect.arrayContaining(['/tasks?type=follow-up', '/clients', '/inbox?channel=all', '/calendar']))
   })
   it('the owner and admins open all of them', () => {
     expect(open('owner')).toEqual(LINKS)

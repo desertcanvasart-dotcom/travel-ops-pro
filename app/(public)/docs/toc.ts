@@ -153,7 +153,7 @@ export const CATEGORIES: DocCategory[] = [
       { href: '/docs/tasks', icon: CheckSquare, title: 'Tasks', description: 'Kanban board, table, and list views for managing operational tasks with priorities and assignments.', covers: ['/tasks'] },
       { href: '/docs/departures', icon: CalendarDays, title: 'Departures', description: 'Schedule and price group departures, count seats taken, and confirm or release the seat holds web orders place.', covers: ['/departures'] },
       { href: '/docs/capacity-departures', icon: Gauge, title: 'Capacity', description: 'Set how many groups, guides and vehicles you can run each day; groups out are counted from sold trips and departures.', covers: ['/capacity'] },
-      { href: '/docs/followups-reminders', icon: Bell, title: 'Follow-ups', description: 'Schedule follow-ups, set reminders, and never miss a client touchpoint.', covers: ['/followups'] },
+      { href: '/docs/followups-reminders', icon: Bell, title: 'Follow-ups', description: 'Schedule follow-ups, set reminders, and never miss a client touchpoint.', covers: ['/tasks?type=follow-up'] },
       { href: '/docs/resources-documents', icon: FolderOpen, title: 'Documents', description: 'Supplier vouchers, guide assignments and service orders, numbered per company: generate, edit, send by email or WhatsApp. Contracts, invoices and receipts open from their trip or payment.', covers: ['/documents'] },
       { href: '/docs/guest-surveys', icon: ClipboardCheck, title: 'Guest Surveys', description: "Read guest satisfaction surveys, sent automatically by email and WhatsApp when a trip ends, and see each guest's ratings and comments.", covers: ['/surveys'] },
     ],
