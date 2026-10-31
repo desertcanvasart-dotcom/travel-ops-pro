@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useAuth } from '@/app/contexts/AuthContext'
-import { Building2, Users, Mail, Loader2, Save, Trash2, Send, XCircle, CheckCircle, ShieldCheck, KeyRound } from 'lucide-react'
+import { Users, Mail, Loader2, Save, Trash2, Send, XCircle, CheckCircle, ShieldCheck, KeyRound } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { useRole } from '@/hooks/useRole'
@@ -258,20 +258,7 @@ export default function OrganizationSettingsPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-      <header className="mb-8">
-        <div className="flex items-center gap-3">
-          <div className="w-12 h-12 rounded-lg bg-[#647C47]/10 flex items-center justify-center">
-            <Building2 className="w-6 h-6 text-[#647C47]" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-semibold text-gray-900">Organization</h1>
-            <p className="text-sm text-gray-500">
-              Manage your organization name, members, and pending invitations.
-            </p>
-          </div>
-        </div>
-      </header>
+    <div className="max-w-4xl px-4 md:px-6 py-6">
 
       {!isAdmin && (
         <div className="mb-4 p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-sm">

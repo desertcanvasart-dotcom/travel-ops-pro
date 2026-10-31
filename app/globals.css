@@ -5,6 +5,11 @@
 /* Autoura Design System - Global Styles */
 
 :root {
+  /* The top bar's height (components/nav/TopBar.tsx). Full-height pages use
+     h-[calc(100vh_-_var(--app-chrome))]; a page with its own tab strip under
+     the bar adds the strip's height. */
+  --app-chrome: 3rem;
+
   /* Autoura Brand Colors */
   --primary: #647C47;
   --primary-light: #E8EDE0;

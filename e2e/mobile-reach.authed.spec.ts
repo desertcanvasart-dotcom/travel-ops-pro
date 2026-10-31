@@ -15,7 +15,7 @@ test.use({ storageState: STORAGE_STATE, viewport: { width: 375, height: 812 } })
 
 const ROUTES = [
   '/dashboard', '/bookings', '/clients', '/itineraries', '/suppliers',
-  '/payments', '/invoices', '/rates/hotels', '/rates/cruises', '/templates',
+  '/payments', '/invoices', '/rates/hotels', '/rates/cruises', '/settings/message-templates',
 ]
 
 test('no header control is stranded off-screen at 375px', async ({ page }) => {

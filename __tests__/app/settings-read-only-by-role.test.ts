@@ -41,7 +41,7 @@ describe('each form follows its server rule', () => {
   })
 
   it('Accounting: Connect and Disconnect for admins; everyone else is told why', () => {
-    const s = src('app/settings/page.tsx')
+    const s = src('app/settings/accounting/page.tsx')
     expect(s).toContain('const { role, isAdmin } = useRole()')
     expect(s).toMatch(/\{isAdmin && \(\s*<button\s+onClick=\{\(\) => disconnectAccounting\(p\.key\)\}/)
     expect(s).toContain(') : isAdmin ? (')
@@ -81,16 +81,14 @@ describe('agents\' own pages', () => {
   it('/settings/preferences exists, and the WhatsApp parser links agents to it', () => {
     expect(existsSync('app/settings/preferences/page.tsx')).toBe(true)
     expect(src('app/settings/preferences/page.tsx')).toContain('<PreferencesPanel />')
-    expect(src('app/settings/page.tsx')).toContain("{activeTab === 'preferences' && <PreferencesPanel />}")
     const parser = src('app/whatsapp-parser/whatsapp-parser-content.tsx')
     expect(parser).toContain('href="/settings/preferences"')
     expect(parser).not.toContain('/settings?tab=preferences')
   })
 
-  it('/settings/email hides the managers\' office addresses from agents and sends them back to the inbox', () => {
+  it('/settings/email hides the managers\' office addresses from agents', () => {
     const s = src('app/settings/email/page.tsx')
     expect(s).toContain('{canManageSettings && <OfficeAddressesCard />}')
-    expect(s).toContain("href={canManageSettings ? '/settings?tab=email' : '/inbox'}")
   })
 })
 

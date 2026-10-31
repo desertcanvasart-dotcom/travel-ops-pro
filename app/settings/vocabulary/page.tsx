@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import {
-  ArrowDown, ArrowUp, BookA, Check, Eye, EyeOff, Globe2, Loader2, Pencil, Plus, RotateCcw, Trash2, X, AlertCircle,
+  ArrowDown, ArrowUp, Check, Eye, EyeOff, Globe2, Loader2, Pencil, Plus, RotateCcw, Trash2, X, AlertCircle,
   CalendarRange, ChevronDown, Search,
 } from 'lucide-react'
 import { useRole } from '@/hooks/useRole'
@@ -181,22 +181,11 @@ export default function VocabularySettingsPage() {
   })
 
   return (
-    <div className="max-w-5xl mx-auto p-6 space-y-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2"><BookA className="w-6 h-6 text-primary-600" /> Your vocabulary</h1>
-          <p className="text-sm text-gray-600 mt-1 max-w-2xl">
-            The words your agency works with. Rename anything, hide what you never use, add what is missing — every dropdown in the app follows.
-            the default preset are only a starting point.
-          </p>
-        </div>
-        <Link href="/settings" className="text-sm text-gray-500 hover:text-gray-700 shrink-0">&larr; Settings</Link>
-      </div>
-
+    <div className="max-w-5xl p-4 md:p-6 space-y-6">
       {!isAdmin && (
         <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800 flex items-center gap-2">
           <AlertCircle className="w-4 h-4 shrink-0" />
-          <span>You can read these lists but not change them. Only the agency owner or an admin can — ask one of them to make the change, or to make you an admin under <Link href="/users" className="underline">Settings → User Management</Link>.</span>
+          <span>You can read these lists but not change them. Only the agency owner or an admin can — ask one of them to make the change, or to make you an admin under <Link href="/settings/users" className="underline">Settings → Team &amp; roles</Link>.</span>
         </div>
       )}
 
@@ -229,7 +218,7 @@ export default function VocabularySettingsPage() {
             <p className="text-xs text-gray-500">The dates you charge more on, and by how much. The <span className="font-medium">Rate seasons</span> list below is different: it is only the season a supplier&rsquo;s rate is tagged with.</p>
           </div>
         </div>
-        <Link href="/rates/seasons" className="px-3 py-1.5 text-sm font-medium text-primary-600 border border-primary-200 rounded-lg hover:bg-primary-50 shrink-0">Manage seasons</Link>
+        <Link href="/settings/seasonal-premiums" className="px-3 py-1.5 text-sm font-medium text-primary-600 border border-primary-200 rounded-lg hover:bg-primary-50 shrink-0">Manage seasons</Link>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-[220px_1fr] gap-6">

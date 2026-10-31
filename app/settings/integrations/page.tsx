@@ -1,8 +1,16 @@
-import { redirect } from 'next/navigation'
+// ============================================
+// Settings › Organization › Partner integrations
+// ============================================
+// The partner platforms that send bookings in, with their API keys. Moved as
+// it was from the old Settings "Partners" tab (/settings?tab=partners
+// redirects here). Creating, pausing and rotating keys is admin-only; the
+// panel says so to everyone else.
+import { PartnerIntegrationsPanel } from '@/components/settings/PartnerIntegrationsPanel'
 
-// Consolidated into Settings → Partner Integrations. Kept as a redirect so any
-// existing links / bookmarks to /settings/integrations still land in the right
-// place. The UI itself now lives in components/settings/PartnerIntegrationsPanel.
-export default function IntegrationsRedirect() {
-  redirect('/settings?tab=partners')
+export default function PartnerIntegrationsPage() {
+  return (
+    <div className="m-4 md:m-6 max-w-5xl bg-white border border-gray-200 rounded-xl shadow-sm p-6">
+      <PartnerIntegrationsPanel />
+    </div>
+  )
 }

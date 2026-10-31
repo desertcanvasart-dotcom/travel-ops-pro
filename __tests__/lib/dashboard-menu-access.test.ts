@@ -1,5 +1,5 @@
 // The dashboard links only where the side menu lets the role go
-// (lib/dashboard/menu-access.ts reads components/nav/navigation-config.ts).
+// (lib/dashboard/menu-access.ts reads lib/nav/config.ts).
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { canOpenFromMenu, menuRolesFor } from '@/lib/dashboard/menu-access'

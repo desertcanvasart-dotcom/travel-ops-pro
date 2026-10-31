@@ -17,7 +17,9 @@ interface Notification {
   created_at: string
 }
 
-export default function NotificationBell() {
+/** `align`: which edge of the bell the panel lines up with — 'right' in the
+ *  top bar, where opening rightwards would leave the screen. */
+export default function NotificationBell({ align = 'left' }: { align?: 'left' | 'right' } = {}) {
   const t = useTranslations('notificationBell')
   const confirmDialog = useConfirm()
   const [isOpen, setIsOpen] = useState(false)
@@ -210,7 +212,7 @@ export default function NotificationBell() {
       {isOpen && (
         <div 
           ref={dropdownRef}
-          className="absolute top-full left-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-200 z-[100] overflow-hidden"
+          className={`absolute top-full ${align === 'right' ? 'right-0' : 'left-0'} mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-200 z-[100] overflow-hidden`}
           style={{ 
             // Ensure dropdown doesn't go off-screen
             minWidth: '320px',

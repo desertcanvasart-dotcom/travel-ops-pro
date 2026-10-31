@@ -1,9 +1,11 @@
 'use client'
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { Inter } from "next/font/google"
 import "./globals.css"
 import Sidebar from "@/components/Sidebar"
+import TopBar from "@/components/nav/TopBar"
+import { isSettingsPath, rememberAppPage } from "@/lib/nav/settings-return"
 import { AuthProvider } from './contexts/AuthContext'
 import { PreferencesProvider } from './contexts/PreferencesContext'
 import { ConfirmDialogProvider } from '@/components/ConfirmDialog'
@@ -17,7 +19,16 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   const [isCollapsed, setIsCollapsed] = useState(false)
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
   const pathname = usePathname()
+  // Settings has its own menu in place of the sidebar (app/settings/layout.tsx).
+  const inSettings = isSettingsPath(pathname)
+
+  // Every page outside Settings is where Settings' "Back to app" returns to.
+  useEffect(() => {
+    rememberAppPage(pathname + window.location.search)
+    setMobileNavOpen(false)
+  }, [pathname])
   
   // Pages that should NOT show the sidebar (public pages)
   const publicPages = ['/', '/login', '/signup', '/forgot-password', '/reset-password', '/terms', '/privacy', '/contact', '/integrations', '/about', '/blog']
@@ -85,21 +96,27 @@ export default function RootLayout({
                   {children}
                 </main>
               ) : (
-                // App pages - with sidebar
-                <div className="flex h-screen overflow-hidden bg-gray-50">
-                  <Sidebar isCollapsed={isCollapsed} setIsCollapsed={setIsCollapsed} />
-                  {/* pt-14 below lg: the menu button is `fixed top-4 left-4`
-                      and floats OVER the page, so on a phone it landed on top
-                      of whatever each page put in its top-left corner — page
-                      titles came out as "otel Rates". Reserving the strip once
-                      here beats every page remembering to dodge it. */}
-                  <main
-                    className={`flex-1 overflow-y-auto transition-all duration-300 pt-14 lg:pt-0 ${
-                      isCollapsed ? 'lg:ml-16' : 'lg:ml-56'
-                    }`}
-                  >
-                    {children}
-                  </main>
+                // App pages: the top bar over the sidebar (or, in Settings,
+                // the Settings menu) and the page.
+                <div className="flex flex-col h-screen overflow-hidden bg-gray-50">
+                  <TopBar
+                    showMenuButton={!inSettings}
+                    menuOpen={mobileNavOpen}
+                    onMenuToggle={() => setMobileNavOpen(o => !o)}
+                  />
+                  <div className="flex flex-1 min-h-0">
+                    {!inSettings && (
+                      <Sidebar
+                        isCollapsed={isCollapsed}
+                        setIsCollapsed={setIsCollapsed}
+                        mobileOpen={mobileNavOpen}
+                        onMobileClose={() => setMobileNavOpen(false)}
+                      />
+                    )}
+                    <main className="flex-1 min-w-0 overflow-y-auto">
+                      {children}
+                    </main>
+                  </div>
                 </div>
               )}
             </ConfirmDialogProvider>

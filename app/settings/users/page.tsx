@@ -12,7 +12,6 @@ import {
   MoreVertical,
   Edit2,
   Trash2,
-  Shield,
   CheckCircle,
   XCircle,
   Clock,
@@ -302,18 +301,10 @@ export default function UserManagementPage() {
   }
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="p-4 md:p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
-            <Shield className="w-5 h-5 text-gray-600" />
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">User Management</h1>
-            <p className="text-sm text-gray-500">Manage user accounts and access permissions</p>
-          </div>
-        </div>
+        <div />
 
         {/* Inviting is organisation administration (/api/invitations is
             admin-only); a manager sees the roster and the invitations,

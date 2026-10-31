@@ -9,7 +9,6 @@ import Link from 'next/link'
 import RichTextEditor, { SignatureEditor, TemplateEditor } from '@/components/email/RichTextEditor'
 import { 
   Mail, 
-  ArrowLeft, 
   Check, 
   AlertCircle, 
   Loader2,
@@ -236,29 +235,10 @@ function EmailSettingsContent() {
   ]
 
   return (
-    <div className="min-h-screen bg-gray-50/50">
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="px-6 py-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <Link
-                href={canManageSettings ? '/settings?tab=email' : '/inbox'}
-                className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 mb-2"
-              >
-                <ArrowLeft className="w-3.5 h-3.5" />
-                {canManageSettings ? 'Back to Settings' : 'Back to the Email Inbox'}
-              </Link>
-              <h1 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                <Mail className="w-5 h-5 text-primary-600" />
-                Email Settings
-              </h1>
-              <p className="text-xs text-gray-500 mt-0.5">Manage your email connection, signatures, and templates</p>
-            </div>
-          </div>
-        </div>
-        
+    <div>
+      <header className="mt-4 border-b border-gray-200">
         {/* Tabs */}
-        <div className="px-6 flex gap-6 border-t border-gray-100">
+        <div className="px-4 md:px-6 flex gap-6 overflow-x-auto">
           {tabs.map((tab) => (
             <button
               key={tab.id}

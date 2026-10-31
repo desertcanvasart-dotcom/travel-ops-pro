@@ -12,7 +12,7 @@ import { describe, it, expect } from 'vitest'
 import { readdirSync, statSync, readFileSync, existsSync } from 'node:fs'
 import { join } from 'node:path'
 import { CATEGORIES, DOC_PAGES, adjacentDocs } from '@/app/(public)/docs/toc'
-import { navigationConfig } from '@/components/nav/navigation-config'
+import { MAIN_NAV, SETTINGS_NAV } from '@/lib/nav/config'
 import en from '@/messages/en.json'
 
 const DOCS_DIR = join(process.cwd(), 'app/(public)/docs')
@@ -55,13 +55,14 @@ describe('docs table of contents', () => {
 // ============================================
 // The docs groups drifted from the menu: when Communicate moved to second
 // place in the menu it stayed eighth in the docs, and four menu items had no
-// page at all. These pin the docs to components/nav/navigation-config.ts.
+// page at all. These pin the docs to lib/nav/config.ts: the sidebar's
+// groups, then one Settings group for the whole Settings area.
 describe('docs table of contents follows the app menu', () => {
   const navLabels = en.navigation as Record<string, string>
 
   it('the docs groups are the menu groups, in menu order, with the menu labels', () => {
     const docsGroups = CATEGORIES.filter(c => c.menuSection).map(c => [c.menuSection, c.label])
-    const menuGroups = navigationConfig.map(s => [s.key, navLabels[s.titleKey]])
+    const menuGroups = [...MAIN_NAV.map(s => [s.key, navLabels[s.titleKey]]), ['settings', navLabels.settings]]
     expect(docsGroups).toEqual(menuGroups)
   })
 
@@ -72,7 +73,7 @@ describe('docs table of contents follows the app menu', () => {
 
   it('every menu item is documented by a page in its own group', () => {
     const uncovered: string[] = []
-    for (const section of navigationConfig) {
+    for (const section of MAIN_NAV) {
       const group = CATEGORIES.find(c => c.menuSection === section.key)
       const covered = new Set(group?.items.flatMap(i => i.covers ?? []) ?? [])
       for (const item of section.items) {
@@ -81,6 +82,14 @@ describe('docs table of contents follows the app menu', () => {
         }
       }
     }
+    expect(uncovered).toEqual([])
+  })
+
+  it('every Settings page is documented', () => {
+    // Mostly in the Settings group; message templates and the staff directory
+    // are sidebar items too, and are documented there (Communicate, Contacts).
+    const covered = new Set(CATEGORIES.flatMap(c => c.items.flatMap(i => i.covers ?? [])))
+    const uncovered = SETTINGS_NAV.flatMap(g => g.items.map(i => i.href)).filter(href => !covered.has(href))
     expect(uncovered).toEqual([])
   })
 

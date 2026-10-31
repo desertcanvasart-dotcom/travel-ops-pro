@@ -886,7 +886,7 @@ export default function RatesPage() {
               💧 Fixed Costs
             </Link>
             <Link
-              href="/rates/seasons"
+              href="/settings/seasonal-premiums"
               className="px-3 py-2 text-xs font-semibold transition-all whitespace-nowrap text-gray-600 hover:text-blue-600 hover:bg-gray-50 flex items-center gap-1"
             >
               📅 {t('tabs.seasons')}

@@ -343,18 +343,10 @@ export default function TeamMembersPage() {
   }
 
   return (
-    <div className="p-6 space-y-5">
+    <div className="p-4 md:p-6 space-y-5">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center text-lg">
-            👥
-          </div>
-          <div>
-            <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
-            <p className="text-sm text-gray-500">{t('subtitle')}</p>
-          </div>
-        </div>
+        <p className="text-sm text-gray-500">{t('subtitle')}</p>
 
         <button
           onClick={openAddModal}

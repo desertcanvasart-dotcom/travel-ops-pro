@@ -101,17 +101,9 @@ export default function CopilotKnowledgePage() {
   }
 
   return (
-    <div className="max-w-5xl mx-auto p-6">
+    <div className="max-w-5xl p-4 md:p-6">
       <div className="flex items-start justify-between mb-6 gap-4">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <Sparkles className="w-5 h-5 text-purple-600" />
-            <h1 className="text-2xl font-semibold text-gray-900">Copilot Knowledge Base</h1>
-          </div>
-          <p className="text-sm text-gray-500">
-            Everything your AI copilot draws on when drafting replies. Scoped to your workspace.
-          </p>
-        </div>
+        <p className="text-sm text-gray-500 min-w-0">Scoped to your workspace.</p>
         <div className="flex items-center gap-2 flex-shrink-0">
           <button
             onClick={() => setShowBulk(true)}

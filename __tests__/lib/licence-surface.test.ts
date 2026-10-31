@@ -31,8 +31,8 @@ describe('licence surface', () => {
     expect(read('lib/support/bundle-core.mjs')).toContain("'LICENSE_KEY'")
     expect(read('scripts/doctor.mjs')).toContain("verifyLicence(process.env.LICENSE_KEY)")
   })
-  it('the Settings organization tab shows the licence card', () => {
-    expect(read('app/settings/page.tsx')).toContain("{activeTab === 'organization' && <LicenceCard />}")
+  it('Settings › Company shows the licence card', () => {
+    expect(read('app/settings/company/page.tsx')).toContain('<LicenceCard />')
   })
   it('doctor and the mint script share the app\'s verifier — one implementation', () => {
     expect(read('scripts/doctor.mjs')).toContain("from '../lib/licence/verify-core.mjs'")

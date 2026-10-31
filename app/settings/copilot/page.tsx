@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { Settings, Check, Sparkles } from 'lucide-react'
+import { Settings, Check } from 'lucide-react'
 import { useAuth } from '@/app/contexts/AuthContext'
 import type { CopilotTone } from '@/types/copilot'
 
@@ -83,16 +83,10 @@ export default function CopilotSettingsPage() {
   }
 
   return (
-    <div className="p-6 max-w-3xl mx-auto">
+    <div className="p-4 md:p-6 max-w-3xl">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-lg bg-[#647C47]/10 flex items-center justify-center">
-          <Sparkles className="w-5 h-5 text-[#647C47]" />
-        </div>
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">AI Copilot Settings</h1>
-          <p className="text-sm text-gray-500">Configure how Claude drafts replies</p>
-        </div>
+        <p className="text-sm text-gray-500">Configure how Claude drafts replies</p>
         {saved && (
           <span className="ml-auto flex items-center gap-1 text-xs text-green-600 bg-green-50 px-2.5 py-1 rounded-full">
             <Check className="w-3 h-3" />

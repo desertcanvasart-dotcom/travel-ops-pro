@@ -27,8 +27,8 @@ export async function GET(request: NextRequest) {
   const baseUrl = BASE_URL || new URL(request.url).origin
   const redirectTo = (qs: string) =>
     BASE_URL
-      ? NextResponse.redirect(new URL(`/settings?tab=integrations&${qs}`, baseUrl))
-      : NextResponse.redirect(new URL(`/settings?tab=integrations&${qs}`, request.url))
+      ? NextResponse.redirect(new URL(`/settings/accounting?${qs}`, baseUrl))
+      : NextResponse.redirect(new URL(`/settings/accounting?${qs}`, request.url))
 
   if (error) {
     // Reflect only a constrained code, never the raw provider string.
@@ -49,7 +49,7 @@ export async function GET(request: NextRequest) {
   const parsed = parseAccountingState(verifyState(state))
   if (!parsed) {
     return NextResponse.redirect(
-      new URL('/settings?tab=integrations&error=invalid_state', baseUrl)
+      new URL('/settings/accounting?error=invalid_state', baseUrl)
     )
   }
   const { userId, provider: providerName, orgId, nonce: stateNonce } = parsed
@@ -127,7 +127,7 @@ export async function GET(request: NextRequest) {
     const replacedQs = (replaced ?? []).length > 0 ? `&replaced=${other}` : ''
     // The nonce is single-use: a connected flow spends it.
     const done = NextResponse.redirect(
-      new URL(`/settings?tab=integrations&accounting=connected&provider=${providerName}${replacedQs}`, baseUrl)
+      new URL(`/settings/accounting?accounting=connected&provider=${providerName}${replacedQs}`, baseUrl)
     )
     clearNonceCookie(done)
     return done
@@ -135,7 +135,7 @@ export async function GET(request: NextRequest) {
     const message = err instanceof Error ? err.message : 'Unknown error'
     console.error('Accounting OAuth callback error:', err)
     return NextResponse.redirect(
-      new URL(`/settings?tab=integrations&error=${encodeURIComponent(message)}`, baseUrl)
+      new URL(`/settings/accounting?error=${encodeURIComponent(message)}`, baseUrl)
     )
   }
 }
