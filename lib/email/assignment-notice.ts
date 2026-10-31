@@ -52,7 +52,7 @@ export async function notifyEmailAssignee(db: Db, n: EmailAssignmentNotice): Pro
     type: 'email_assigned',
     title: 'Email Conversation Assigned',
     message: `You've been assigned an email conversation with ${who}${n.subject ? `: "${n.subject.substring(0, 100)}"` : ''}.`,
-    link: `/communications?conversation=${n.conversationId}`,
+    link: `/inbox?channel=all&conversation=${n.conversationId}`,
   })
   if (!result.success) console.error('Email assignment notification failed:', result.error)
   return result.success

@@ -311,7 +311,7 @@ function EmailSettingsContent() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Link
-                          href="/communications"
+                          href="/inbox?channel=all"
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 transition-colors"
                         >
                           <Mail className="w-3.5 h-3.5" />
@@ -336,7 +336,7 @@ function EmailSettingsContent() {
                       </div>
                       <div className="flex items-center gap-2">
                         <Link
-                          href="/communications"
+                          href="/inbox?channel=all"
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-white bg-primary-600 rounded-md hover:bg-primary-700 transition-colors"
                         >
                           <Mail className="w-3.5 h-3.5" />

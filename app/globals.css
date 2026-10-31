@@ -5,10 +5,14 @@
 /* Autoura Design System - Global Styles */
 
 :root {
-  /* The top bar's height (components/nav/TopBar.tsx). Full-height pages use
-     h-[calc(100vh_-_var(--app-chrome))]; a page with its own tab strip under
-     the bar adds the strip's height. */
-  --app-chrome: 3rem;
+  /* The top bar's height (components/nav/TopBar.tsx), and a URL tab strip's
+     (components/nav/UrlTabs.tsx). Full-height pages use
+     h-[calc(100vh_-_var(--app-chrome))]: the chrome above them. A page that
+     shows a tab strip over a full-height view sets --app-chrome to
+     calc(var(--top-bar) + var(--tab-strip)) on its own wrapper. */
+  --top-bar: 3rem;
+  --tab-strip: 2.75rem;
+  --app-chrome: var(--top-bar);
 
   /* Autoura Brand Colors */
   --primary: #647C47;

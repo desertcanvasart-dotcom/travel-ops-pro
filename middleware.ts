@@ -63,8 +63,8 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/invoices': ['admin', 'manager', 'agent'],
   '/payments': ['admin', 'manager', 'agent'],
   '/tasks': ['admin', 'manager', 'agent'],
+  // Inbox: All · Email · WhatsApp (lib/nav/config.ts TABBED_PAGES).
   '/inbox': ['admin', 'manager', 'agent'],
-  '/whatsapp-inbox': ['admin', 'manager', 'agent'],
   '/whatsapp-parser': ['admin', 'manager', 'agent'],
   '/contacts': ['admin', 'manager', 'agent'],
   '/followups': ['admin', 'manager', 'agent'],
@@ -78,9 +78,9 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/tours': ['admin', 'manager', 'agent'],
   '/expenses': ['admin', 'manager'],
   '/reminders': ['admin', 'manager', 'agent'],
-  // Customer conversations and the AI copilot's drafts — the menu shows these
-  // to agent and above; a viewer opened them by URL.
-  '/communications': ['admin', 'manager', 'agent'],
+  // The AI copilot's drafts — the menu shows them to agent and above; a
+  // viewer opened them by URL. (Customer conversations are '/inbox' above:
+  // All · Email · WhatsApp, every tab agent-and-above.)
   '/copilot': ['admin', 'manager', 'agent'],
   '/concierge-briefs': ['admin', 'manager', 'agent'],
   // Sell. The menu shows Pricing Grid, B2B Quotes and Order Intake to agents

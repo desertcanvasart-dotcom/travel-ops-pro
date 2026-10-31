@@ -66,7 +66,8 @@ describe('connected mailboxes', () => {
       'app/api/unified/client/[clientId]/route.ts',
       'app/api/email/conversations/route.ts',
       'app/api/dashboard/attention/route.ts',
-      'app/api/dashboard/summary/route.ts',
+      // The dashboard's and the sidebar badges' unread counts.
+      'lib/inbox/unread-counts.ts',
     ]) {
       const code = src(f)
       expect(code, f).toContain('scopedToConnectedMailboxes(supabase, orgId,')

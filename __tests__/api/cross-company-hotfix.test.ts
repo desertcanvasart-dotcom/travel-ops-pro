@@ -177,7 +177,7 @@ describe('lists scoped to the caller org (fixes 1, 2, 23)', () => {
       .toMatch(/from\('portal_message_threads'\)[\s\S]*?\.eq\('org_id', orgId\)[\s\S]*?portalQuery\.limit\(limit\)/)
   })
   it('every email list passes the caller org to the mailbox scope', () => {
-    for (const f of ['app/api/unified/conversations/route.ts', 'app/api/email/conversations/route.ts', 'app/api/dashboard/summary/route.ts', 'app/api/dashboard/attention/route.ts', 'app/api/unified/client/[clientId]/route.ts']) {
+    for (const f of ['app/api/unified/conversations/route.ts', 'app/api/email/conversations/route.ts', 'lib/inbox/unread-counts.ts', 'app/api/dashboard/attention/route.ts', 'app/api/unified/client/[clientId]/route.ts']) {
       expect(code(f), f).toMatch(/scopedToConnectedMailboxes\(supabase, orgId,/)
     }
   })

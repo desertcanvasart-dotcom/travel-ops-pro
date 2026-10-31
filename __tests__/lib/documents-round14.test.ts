@@ -18,7 +18,7 @@ describe('round 13 regressions', () => {
     expect(src('app/components/CompanyProfileCard.tsx')).toContain('whatsapp_number === loadedWhatsapp.current ? rest : form')
   })
   it('the WhatsApp inbox says why a send or a new chat failed', () => {
-    const p = src('app/whatsapp-inbox/page.tsx')
+    const p = src('app/inbox/_views/WhatsAppView.tsx')
     expect(p).toContain("alert(data.error || 'The message could not be sent')")
     expect(p).toContain("alert(data.error || 'The conversation could not be started')")
   })

@@ -159,7 +159,7 @@ describe('template placeholders', () => {
       .toBe('<p>Dear Tanaka &lt;Ken&gt; &amp; Co</p>')
     expect(replacePlaceholders('For {{client_name}}', data)).toBe('For Tanaka <Ken> & Co')
     expect(replacePlaceholders('{{missing}}', data, { html: true })).toBe('{{missing}}')
-    for (const p of ['app/inbox/page.tsx', 'components/unified/ComposeEmailModal.tsx']) {
+    for (const p of ['app/inbox/_views/EmailView.tsx', 'components/unified/ComposeEmailModal.tsx']) {
       expect(src(p)).toContain('replacePlaceholders(selectedTemplate.content, finalData, { html: true })')
     }
   })

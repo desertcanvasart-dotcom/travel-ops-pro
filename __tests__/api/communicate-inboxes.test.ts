@@ -152,7 +152,7 @@ describe('U12 unified inbox filters and tab counts', () => {
     expect(list).not.toContain("<option value=\"active\">{tCommon('status')}</option>")
     expect(list).toContain('setCounts(data.counts ?? null)')
     expect(list).toContain('onSelectConversation(target)')
-    expect(src('app/communications/page.tsx')).toContain(".get('conversation')")
+    expect(src('app/inbox/_views/AllView.tsx')).toContain(".get('conversation')")
   })
 })
 
@@ -267,7 +267,7 @@ describe('U4 / U10 agents', () => {
   it('the modals and the WhatsApp inbox surface failures and know the current agent', () => {
     const list = src('components/unified/UnifiedConversationList.tsx')
     expect(list).toContain("setNotice({ tone: 'error', text: await failure(res, t('agentAddFailed')) })")
-    const wa = src('app/whatsapp-inbox/page.tsx')
+    const wa = src('app/inbox/_views/WhatsAppView.tsx')
     expect(wa).toContain('setCurrentAgentId(data.current_team_member_id ?? null)')
     expect(wa).not.toContain('{agent.max_conversations}')
   })
@@ -330,7 +330,7 @@ describe('U11 and small role gaps', () => {
   })
 
   it('Email Inbox: an agent is not sent to Settings (which bounces them) to connect Gmail', () => {
-    const inbox = src('app/inbox/page.tsx')
+    const inbox = src('app/inbox/_views/EmailView.tsx')
     expect(inbox).toMatch(/\{isAgent \? \([\s\S]{0,200}Ask an admin or manager to connect Gmail/)
   })
 

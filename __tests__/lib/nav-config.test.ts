@@ -176,6 +176,20 @@ describe('redirects (lib/nav/redirects.js)', () => {
   })
 })
 
+describe('sidebar badges', () => {
+  it('every badge key is a count the unread endpoint returns, agents and above only', () => {
+    const route = readFileSync('app/api/unified/unread-counts/route.ts', 'utf8')
+    const keys = navEntries().map(e => e.item.badge).filter(Boolean)
+    expect(keys.sort()).toEqual(['email', 'whatsapp'])
+    for (const k of keys) expect(route).toMatch(new RegExp(`${k}: sumUnread`))
+    expect(route).toContain("requireRole(['admin', 'manager', 'agent'])")
+  })
+  it('the dashboard counts unread through the same helper', () => {
+    const summary = readFileSync('app/api/dashboard/summary/route.ts', 'utf8')
+    expect(summary).toContain("from '@/lib/inbox/unread-counts'")
+  })
+})
+
 describe('only the config lists links', () => {
   // The menus' renderers name no page. The top bar's logo goes home.
   const RENDERERS = ['components/Sidebar.tsx', 'components/nav/TopBar.tsx', 'components/nav/CommandPalette.tsx', 'app/settings/layout.tsx']

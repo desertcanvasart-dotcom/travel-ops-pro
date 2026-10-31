@@ -267,7 +267,7 @@ export async function GET(request: NextRequest) {
         startDate: null,
         // lastMessageAt: the customer writing again brings a dismissed row back.
         detail: { conversationId: c.id, waitingSince: c.awaiting_reply_since, lastMessageAt: c.last_message_at, waiting: waitingLabel(c.awaiting_reply_since) },
-        href: '/communications?awaiting_reply=1',
+        href: '/inbox?channel=all&awaiting_reply=1',
       })
     }
 

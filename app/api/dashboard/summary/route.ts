@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, getCurrentUserRole, noOrgResponse } from '@/lib/auth/current-org'
-import { scopedToConnectedMailboxes } from '@/lib/email/connected-mailboxes'
+import { unreadWhatsAppRows, unreadEmailRows, sumUnread } from '@/lib/inbox/unread-counts'
 import { shiftDateISO, todayFromRequest } from '@/lib/today'
 import { quotePipeline, STAFF_ROLES } from '@/lib/dashboard/figures'
 import { roleAllows } from '@/lib/auth/roles'
@@ -92,21 +92,9 @@ export async function GET(request: NextRequest) {
         .eq('org_id', orgId)
         .not('status', 'in', `(${OPEN_TASK.join(',')})`)
         .not('due_date', 'is', null),
-      // Unread counts straight from the conversation tables (hidden rows excluded)
-      supabase.from('whatsapp_conversations')
-        .select('unread_count')
-        .eq('org_id', orgId)
-        .or('is_hidden.is.null,is_hidden.eq.false')
-        .gt('unread_count', 0),
-      // Only a connected address's mail (lib/email/connected-mailboxes).
-      scopedToConnectedMailboxes(supabase, orgId, (mailboxFilter) => {
-        return supabase.from('email_conversations')
-          .select('unread_count')
-          .eq('org_id', orgId)
-          .or('is_hidden.is.null,is_hidden.eq.false')
-          .gt('unread_count', 0)
-          .or(mailboxFilter)
-      }),
+      // Unread counts (lib/inbox/unread-counts — the sidebar badges count there too)
+      unreadWhatsAppRows(supabase, orgId),
+      unreadEmailRows(supabase, orgId),
       // client_followups has no org_id: scoped through its client, as the
       // analytics follow-ups count is (this counted every company's).
       supabase.from('client_followups')
@@ -153,8 +141,6 @@ export async function GET(request: NextRequest) {
     const openTaskRows = openTasks.data || []
     const followupRows = followups.data || []
     const quoteRows = quotes.data || []
-    const sumUnread = (rows: { unread_count: number | null }[] | null) =>
-      (rows || []).reduce((s, r) => s + (r.unread_count || 0), 0)
 
     const pipeline = quotePipeline(quoteRows)
 

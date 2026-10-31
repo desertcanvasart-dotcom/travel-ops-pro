@@ -4,8 +4,9 @@
 // The top bar — above every signed-in page, full width
 // ============================================
 // Search and jump (⌘K), the Copilot, notifications and the account menu. Its
-// height is --app-chrome (app/globals.css): a full-height page sizes itself
-// h-[calc(100vh_-_var(--app-chrome))] so it does not run off the screen.
+// height is --top-bar (app/globals.css), part of --app-chrome: a full-height
+// page sizes itself h-[calc(100vh_-_var(--app-chrome))] so it does not run
+// off the screen.
 //
 // Below lg the sidebar is a drawer, and the menu button here opens it.
 // Nothing that depends on the browser (the ⌘ vs Ctrl label, the role) is
@@ -55,7 +56,7 @@ export default function TopBar({ showMenuButton, menuOpen, onMenuToggle }: TopBa
   }, [])
 
   return (
-    <header className="h-[var(--app-chrome)] shrink-0 flex items-center gap-2 px-3 bg-white border-b border-gray-200 z-50">
+    <header className="h-[var(--top-bar)] shrink-0 flex items-center gap-2 px-3 bg-white border-b border-gray-200 z-50">
       {showMenuButton && (
         <button
           onClick={onMenuToggle}

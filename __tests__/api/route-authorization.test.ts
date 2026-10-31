@@ -196,7 +196,7 @@ describe('page gate — a manager sees everything', () => {
   })
 
   // The menu shows these to agent and above; a viewer could open them by URL.
-  it.each(['/communications', '/copilot', '/settings/copilot-knowledge', '/settings/copilot', '/settings/message-templates', '/concierge-briefs'])('%s is agent-and-above', page => {
+  it.each(['/inbox', '/copilot', '/settings/copilot-knowledge', '/settings/copilot', '/settings/message-templates', '/concierge-briefs'])('%s is agent-and-above', page => {
     const roles = pagePermissions()[page]
     expect(roles, `${page} has no page gate`).toBeTruthy()
     expect(roleAllows('agent', roles)).toBe(true)

@@ -122,7 +122,7 @@ describe('connecting Gmail', () => {
 
   it('the callback stamps the company from the state', async () => {
     const res = await callback(back(signState('both:n1:org-a')))
-    expect(res.headers.get('location')).toContain('/communications?gmail=connected')
+    expect(res.headers.get('location')).toContain('/inbox?channel=all&gmail=connected')
     expect(tokens()).toMatchObject([{ user_id: 'both', org_id: 'org-a', email: 'owner@travel2egypt.org' }])
   })
 

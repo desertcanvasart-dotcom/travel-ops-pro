@@ -236,7 +236,7 @@ export default function DashboardPage() {
   }
 
   const quickActions = [
-    { icon: MessageSquare, label: t('unifiedInbox'), href: '/communications', description: t('manageConversations'), color: 'bg-success' },
+    { icon: MessageSquare, label: t('unifiedInbox'), href: '/inbox?channel=all', description: t('manageConversations'), color: 'bg-success' },
     { icon: Sparkles, label: t('newQuote'), href: '/itineraries/new', description: t('createFromScratch'), color: 'bg-purple-500' },
     { icon: Layers, label: t('ratesHub'), href: '/rates', description: t('manageRates'), color: 'bg-primary-600' },
     { icon: Package, label: t('b2bPackages'), href: '/tours', description: t('readyMadePackages'), color: 'bg-warning' },
@@ -294,7 +294,7 @@ export default function DashboardPage() {
           value={stats.unreadInbox}
           icon={MessageSquare}
           subtitle={t('acrossWhatsappEmail')}
-          href={linkFor('/communications')}
+          href={linkFor('/inbox?channel=all')}
           color="purple"
         />
 

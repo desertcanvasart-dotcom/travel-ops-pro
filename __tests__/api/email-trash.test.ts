@@ -59,7 +59,7 @@ describe('Inbox: Trash and Spam', () => {
   it('Trash and Spam are listed — Gmail leaves them out unless asked', () => {
     const gmail = src('lib/gmail.ts')
     expect(gmail).toContain("labelIds?.some(l => l === 'TRASH' || l === 'SPAM') ? { includeSpamTrash: true } : {}")
-    const page = src('app/inbox/page.tsx')
+    const page = src('app/inbox/_views/EmailView.tsx')
     expect(page).toContain("spam: 'SPAM', trash: 'TRASH'")
     expect(page).toContain("handleEmailAction(folder === 'trash' ? 'restore' : folder === 'spam' ? 'notSpam' : 'archive')")
     // Delete in Trash is for good, and asks first.
