@@ -20,7 +20,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { navEntries, SETTINGS_HOME } from '@/lib/nav/config'
+import { navEntries, SETTINGS_HOME, TABBED_PAGES } from '@/lib/nav/config'
 
 const ALL_ROLES = ['admin', 'manager', 'agent', 'viewer']
 const source = readFileSync(join(process.cwd(), 'middleware.ts'), 'utf8')
@@ -45,11 +45,20 @@ function serverRoles(path: string): string[] {
   return match ? match[1] : ALL_ROLES
 }
 
+/** The tab a link opens, if it names one of a tabbed page's tabs. */
+function tabOf(href: string) {
+  const [path, query = ''] = href.split('?')
+  const page = TABBED_PAGES.find(p => p.path === path)
+  const value = page && new URLSearchParams(query).get(page.param)
+  return page && value ? page.tabs.find(t => t.value === value) : undefined
+}
+
 /** Every menu link with the roles that see it (owner aside: it passes both).
- *  A page listed in two menus (Message templates) is checked in each. */
+ *  A page listed in two menus (Message templates) is checked in each. A link
+ *  to a TAB is held to the tab's roles below, not to the page gate. */
 function menuScreens(): Array<{ path: string; roles: string[] }> {
   const entries = [...navEntries().map(e => ({ href: e.item.href, roles: e.roles })), { href: SETTINGS_HOME.href, roles: SETTINGS_HOME.roles ?? null }]
-  return entries.map(e => ({
+  return entries.filter(e => !tabOf(e.href)).map(e => ({
     path: e.href.split(/[?#]/)[0],
     roles: (e.roles ?? ALL_ROLES).filter(r => r !== 'owner'),
   }))
@@ -67,6 +76,21 @@ describe('menu screens are gated on the server to the menu roles', () => {
       .filter(s => sorted(s.roles) !== sorted(serverRoles(s.path)))
       .map(s => `${s.path}: menu=${sorted(s.roles)} server=${sorted(serverRoles(s.path))}`)
     expect(gaps).toEqual(KNOWN_GAPS)
+  })
+})
+
+describe('tabbed pages: the page gate is the union of its tabs', () => {
+  it('each tabbed page is gated to exactly the roles of its tabs together', () => {
+    for (const page of TABBED_PAGES) {
+      const union = new Set(page.tabs.flatMap(t => t.roles ?? ALL_ROLES))
+      expect(sorted(serverRoles(page.path)), page.path).toBe(sorted([...union]))
+    }
+  })
+  it('a menu link to a tab carries that tab\'s roles', () => {
+    for (const e of navEntries()) {
+      const tab = tabOf(e.item.href)
+      if (tab) expect(sorted(e.roles ?? ALL_ROLES), e.item.href).toBe(sorted(tab.roles ?? ALL_ROLES))
+    }
   })
 })
 

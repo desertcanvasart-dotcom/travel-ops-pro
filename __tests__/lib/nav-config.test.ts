@@ -12,7 +12,7 @@
 import { describe, it, expect } from 'vitest'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { MAIN_NAV, SETTINGS_NAV, RATE_GROUPS, JUMP_ONLY_PAGES, SETTINGS_HOME, navEntries } from '@/lib/nav/config'
+import { MAIN_NAV, SETTINGS_NAV, RATE_GROUPS, JUMP_ONLY_PAGES, SETTINGS_HOME, TABBED_PAGES, navEntries } from '@/lib/nav/config'
 import { activeHref } from '@/lib/nav/active'
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const redirects = require('../../lib/nav/redirects.js')
@@ -28,6 +28,27 @@ describe('every menu link opens a page', () => {
   it('sidebar, rate sheets, Settings, ⌘K-only and the pinned Settings link', () => {
     const missing = [...navEntries().map(e => e.item.href), SETTINGS_HOME.href].filter(h => !pageExists(h))
     expect(missing).toEqual([])
+  })
+
+  it('a link with a query opens a real tab of a tabbed page', () => {
+    const hrefs = [...navEntries().map(e => e.item.href), ...(redirects.MOVED as Array<[string, string]>).map(([, to]) => to)]
+    const bad = hrefs.filter(h => h.includes('?')).filter(h => {
+      const [path, query] = h.split('?')
+      const page = TABBED_PAGES.find(p => p.path === path)
+      const value = page && new URLSearchParams(query).get(page.param)
+      return !page || !page.tabs.some(t => t.value === value)
+    })
+    expect(bad).toEqual([])
+  })
+
+  it('every tabbed page renders its tabs from the config, with UrlTabs', () => {
+    for (const page of TABBED_PAGES) {
+      const src = readFileSync(join(process.cwd(), 'app', page.path, 'page.tsx'), 'utf8')
+      expect(src, page.path).toContain(`tabbedPage('${page.path}')`)
+      expect(src, page.path).toContain('<UrlTabs')
+      expect(src, page.path).toContain('<Suspense')
+      for (const tab of page.tabs) expect(src, `${page.path} ${tab.value}`).toContain(`'${tab.value}'`)
+    }
   })
 
   it('each rate group opens a Rates hub tab', () => {

@@ -14,7 +14,7 @@ import { join } from 'node:path'
 const strip = (src: string) =>
   src.split('\n').filter(l => !l.trim().startsWith('//') && !l.trim().startsWith('*')).join('\n')
 const route = strip(readFileSync(join(process.cwd(), 'app/api/analytics/route.ts'), 'utf8'))
-const page = strip(readFileSync(join(process.cwd(), 'app/analytics/page.tsx'), 'utf8'))
+const page = strip(readFileSync(join(process.cwd(), 'app/reports/_views/AnalyticsView.tsx'), 'utf8'))
 
 describe('analytics route wiring', () => {
   it('derives bookings, revenue and the weekly chart from one summariseItineraries pass', () => {

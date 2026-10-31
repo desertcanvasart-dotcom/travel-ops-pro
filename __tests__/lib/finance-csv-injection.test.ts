@@ -14,7 +14,7 @@ describe('CSV export neutralises formula injection', () => {
   })
 
   it('the financial-reports page inline export also neutralises them', () => {
-    const code = src('app/financial-reports/page.tsx')
+    const code = src('app/reports/_views/FinanceView.tsx')
     expect(code).toMatch(/\/\^\[=\+\\-@\\t\\r\]\//)
     // and quote-wraps (was raw .join(',') before)
     expect(code).toMatch(/replace\(\/"\/g, '""'\)/)

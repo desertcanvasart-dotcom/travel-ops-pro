@@ -95,7 +95,7 @@ describe('docs table of contents follows the app menu', () => {
 
   it('every route a page claims to cover is a real app page', () => {
     const missing = DOC_PAGES.flatMap(p => p.covers ?? [])
-      .map(route => route.split('#')[0])
+      .map(route => route.split(/[#?]/)[0])
       .filter(route => !existsSync(join(process.cwd(), 'app', route, 'page.tsx')))
     expect(missing).toEqual([])
   })
