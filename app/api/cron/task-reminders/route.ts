@@ -196,7 +196,7 @@ async function getHandler(request: NextRequest) {
             type: 'followup_due',
             title: `Follow-up due today: ${f.title}`,
             message: `Your follow-up "${f.title}"${client ? ` with ${client}` : ''} is due today.`,
-            link: '/followups',
+            link: '/tasks?type=follow-up',
             send_email: false,
           })
           if (!sent.success) continue

@@ -158,6 +158,15 @@ export const RATE_GROUPS: RateGroup[] = [
 // own API gate. __tests__/api/menu-page-gates.test.ts holds the union to the
 // middleware.
 export const TABBED_PAGES: TabbedPage[] = [
+  // Tasks and client follow-ups: two tables, two lists, one page. Both every
+  // staff role's, as each page was.
+  {
+    path: '/tasks', param: 'type',
+    tabs: [
+      { value: 'task', labelKey: 'tasks', icon: CheckSquare, roles: STAFF },
+      { value: 'follow-up', labelKey: 'followups', icon: CheckSquare, roles: STAFF },
+    ],
+  },
   // The two quote lists (/b2c/quotes managers and above, /b2b/quotes agents
   // and above). Each quote keeps its own address under /b2c or /b2b.
   {
@@ -235,8 +244,8 @@ export const MAIN_NAV: NavSection[] = [
   {
     key: 'operate', titleKey: 'operate', roles: STAFF,
     items: [
-      { labelKey: 'tasks', href: '/tasks', icon: CheckSquare, roles: STAFF },
-      { labelKey: 'followups', href: '/followups', icon: CheckSquare, roles: STAFF },
+      // Tasks · Follow-ups as tabs (Follow-ups is in ⌘K by name).
+      { labelKey: 'tasks', href: '/tasks', icon: CheckSquare, roles: STAFF, match: ['/followups'] },
       { labelKey: 'departures', href: '/departures', icon: Calendar, roles: AM },
       { labelKey: 'capacity', href: '/capacity', icon: CalendarDays, roles: AM },
       { labelKey: 'documents', href: '/documents', icon: FileText, roles: AM, keywords: ['vouchers'] },
@@ -365,6 +374,7 @@ export const JUMP_ONLY_PAGES: JumpPage[] = [
   { labelKey: 'copilotAnalytics', href: '/reports?tab=copilot', icon: BarChart3, roles: STAFF, hintKey: 'reports' },
   { labelKey: 'b2cQuotes', href: '/quotes?tab=b2c', icon: FileText, roles: AM, hintKey: 'quotes' },
   { labelKey: 'b2bQuotes', href: '/quotes?tab=b2b', icon: FileText, roles: STAFF, hintKey: 'quotes' },
+  { labelKey: 'followups', href: '/tasks?type=follow-up', icon: CheckSquare, roles: STAFF, hintKey: 'tasks' },
   { labelKey: 'newItinerary', href: '/itineraries/new', icon: PlusCircle, roles: STAFF, hintKey: 'itineraries' },
   { labelKey: 'conciergeLeads', href: '/concierge-briefs', icon: ConciergeBell, roles: STAFF, hintKey: 'communicate', keywords: ['leads', 'briefs'] },
   { labelKey: 'whatsappParser', href: '/whatsapp-parser', icon: MessageSquare, roles: STAFF, hintKey: 'communicate' },

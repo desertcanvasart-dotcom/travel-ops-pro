@@ -328,7 +328,7 @@ export default function DashboardPage() {
           icon={CheckSquare}
           badge={stats.overdueFollowups > 0 ? `${stats.overdueFollowups} ${t('overdue')}` : undefined}
           badgeColor="danger"
-          href={linkFor('/followups')}
+          href={linkFor('/tasks?type=follow-up')}
           color="warning"
         />
 
@@ -611,9 +611,9 @@ export default function DashboardPage() {
               <h3 className="text-base font-semibold text-gray-900">
                 {t('upcomingFollowups')}
               </h3>
-              {linkFor('/followups') && (
+              {linkFor('/tasks?type=follow-up') && (
                 <Link
-                  href="/followups"
+                  href="/tasks?type=follow-up"
                   className="text-sm text-primary-600 hover:text-primary-700 font-medium flex items-center gap-1"
                 >
                   {t('viewAll')}
