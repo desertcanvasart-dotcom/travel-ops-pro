@@ -249,7 +249,7 @@ describe('route no longer reads the unused params', () => {
 // The page is a client component with no render harness in this repo; these
 // pin the wiring that keeps it honest.
 describe('financial reports page', () => {
-  const page = readFileSync(join(process.cwd(), 'app/financial-reports/page.tsx'), 'utf8')
+  const page = readFileSync(join(process.cwd(), 'app/reports/_views/FinanceView.tsx'), 'utf8')
 
   it('requests the preferred currency but formats with the response currency', () => {
     expect(page).toContain('currency=${encodeURIComponent(requestedCurrency)}')

@@ -10,6 +10,8 @@
 //   RATE_GROUPS      the rate sheets, foldable under Suppliers & Rates
 //   SETTINGS_NAV     the Settings area: setup, configured once
 //   JUMP_ONLY_PAGES  pages only ⌘K lists (reached as a button elsewhere)
+//   TABBED_PAGES     pages whose sibling screens are tabs (?tab=, ?view=…),
+//                    each tab with the roles of the page it used to be
 //
 // ROLES ARE THE SERVER'S. Every entry carries exactly the roles middleware.ts
 // ROUTE_PERMISSIONS lets onto its page — __tests__/api/menu-page-gates.test.ts
@@ -83,6 +85,23 @@ export interface SettingsGroup {
   items: SettingsItem[]
 }
 
+export interface PageTab {
+  /** The query value that opens it (?<param>=<value>). */
+  value: string
+  labelKey: string
+  icon: LucideIcon
+  /** The roles of the page this tab used to be. */
+  roles?: UserRole[]
+}
+
+export interface TabbedPage {
+  path: string
+  /** The query parameter holding the tab: tab, view, channel or type. */
+  param: string
+  /** The first tab the viewer may see is the default. */
+  tabs: PageTab[]
+}
+
 export interface JumpPage extends NavItem {
   /** Where the page lives (a navigation key), shown as the hint in ⌘K. */
   hintKey: string
@@ -130,6 +149,32 @@ export const RATE_GROUPS: RateGroup[] = [
 ]
 
 // ============================================
+// Pages made of tabs
+// ============================================
+// Sibling pages merged into one, each keeping its own address as a tab
+// (components/nav/UrlTabs.tsx). The page's middleware gate is the UNION of its
+// tabs' roles; a tab the viewer may not see is not offered, and asking for it
+// by URL opens the first one they may see. The data behind each tab keeps its
+// own API gate. __tests__/api/menu-page-gates.test.ts holds the union to the
+// middleware.
+export const TABBED_PAGES: TabbedPage[] = [
+  {
+    path: '/reports', param: 'tab',
+    tabs: [
+      { value: 'analytics', labelKey: 'analytics', icon: TrendingUp, roles: AM },
+      { value: 'finance', labelKey: 'financialReports', icon: BarChart3, roles: AM },
+      { value: 'copilot', labelKey: 'copilotAnalytics', icon: Sparkles, roles: STAFF },
+    ],
+  },
+]
+
+export function tabbedPage(path: string): TabbedPage {
+  const page = TABBED_PAGES.find(p => p.path === path)
+  if (!page) throw new Error(`No tabs configured for ${path}`)
+  return page
+}
+
+// ============================================
 // The sidebar
 // ============================================
 export const MAIN_NAV: NavSection[] = [
@@ -137,9 +182,8 @@ export const MAIN_NAV: NavSection[] = [
     key: 'home', titleKey: 'home', untitled: true,
     items: [
       { labelKey: 'dashboard', href: '/dashboard', icon: LayoutDashboard },
-      { labelKey: 'analytics', href: '/analytics', icon: TrendingUp, roles: AM },
-      { labelKey: 'financialReports', href: '/financial-reports', icon: BarChart3, roles: AM },
-      { labelKey: 'copilotAnalytics', href: '/copilot-analytics', icon: BarChart3, roles: STAFF },
+      // Analytics · Finance · Copilot as tabs; each tab keeps its old roles.
+      { labelKey: 'reports', href: '/reports', icon: TrendingUp, roles: STAFF, match: ['/analytics', '/financial-reports', '/copilot-analytics'], keywords: ['analytics'] },
     ],
   },
   // Where the day starts (operator, 2026-10-10). Message templates is here AND
@@ -290,11 +334,15 @@ export const SETTINGS_NAV: SettingsGroup[] = [
 // ============================================
 // Pages only ⌘K lists
 // ============================================
-// None of these has had a sidebar link; each is reached from a button or a
-// link on another page. Listing them here keeps them findable. Roles follow
+// Pages reached from a button or a link on another page, and tabs of a page
+// under their old names. Listing them here keeps them findable. Roles follow
 // the middleware like everything else — no entry there means every signed-in
 // member, viewer included.
 export const JUMP_ONLY_PAGES: JumpPage[] = [
+  // Tabs of a page, findable by their old names.
+  { labelKey: 'analytics', href: '/reports?tab=analytics', icon: TrendingUp, roles: AM, hintKey: 'reports' },
+  { labelKey: 'financialReports', href: '/reports?tab=finance', icon: BarChart3, roles: AM, hintKey: 'reports' },
+  { labelKey: 'copilotAnalytics', href: '/reports?tab=copilot', icon: BarChart3, roles: STAFF, hintKey: 'reports' },
   { labelKey: 'newItinerary', href: '/itineraries/new', icon: PlusCircle, roles: STAFF, hintKey: 'itineraries' },
   { labelKey: 'conciergeLeads', href: '/concierge-briefs', icon: ConciergeBell, roles: STAFF, hintKey: 'communicate', keywords: ['leads', 'briefs'] },
   { labelKey: 'whatsappParser', href: '/whatsapp-parser', icon: MessageSquare, roles: STAFF, hintKey: 'communicate' },

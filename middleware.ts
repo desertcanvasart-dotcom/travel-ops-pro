@@ -40,7 +40,6 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // People › Partners: the managers' screen. With no entry here any member —
   // an agent included — opened it by URL.
   '/b2b/partners': ['admin', 'manager'],
-  '/financial-reports': ['admin', 'manager'],
   '/receipts': ['admin', 'manager'],
   '/supplier-invoices': ['admin', 'manager'],
   '/commissions': ['admin', 'manager'],
@@ -110,10 +109,11 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
 
   // All authenticated users (including viewer)
   '/dashboard': ['admin', 'manager', 'agent', 'viewer'],
-  '/analytics': ['admin', 'manager'],
-  // The menu shows it to agents and above; with no entry here a viewer could
-  // open it by URL (its data is behind the staff-only /api/copilot gate).
-  '/copilot-analytics': ['admin', 'manager', 'agent'],
+  // Reports: Analytics and Finance (managers and above) and Copilot (agents
+  // and above) as tabs — the page is the union, each tab keeps its own roles
+  // (lib/nav/config.ts TABBED_PAGES) and its data its own API gate
+  // (/api/analytics and /api/financial-reports are FINANCIAL_API_PREFIXES).
+  '/reports': ['admin', 'manager', 'agent'],
   // The menu shows the Calendar (Sell) to agents and above.
   '/calendar': ['admin', 'manager', 'agent'],
   '/notifications': ['admin', 'manager', 'agent', 'viewer'],

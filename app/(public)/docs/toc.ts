@@ -107,9 +107,9 @@ export const CATEGORIES: DocCategory[] = [
     menuSection: 'home',
     items: [
       { href: '/docs/dashboard', icon: LayoutDashboard, title: 'Dashboard', description: 'Your home base with quick stats, actions, and recent activity.', covers: ['/dashboard'] },
-      { href: '/docs/analytics', icon: BarChart, title: 'Analytics', description: 'Visual charts and metrics across bookings, revenue, and team performance.', covers: ['/analytics'] },
-      { href: '/docs/financial-reports', icon: BarChart3, title: 'Financial Reports', description: 'Monthly and quarterly revenue, cash flow analysis, tax summaries, commission reports, and year-over-year comparisons.', covers: ['/financial-reports'] },
-      { href: '/docs/copilot-analytics', icon: LineChart, title: 'Copilot Analytics', description: 'Measure Copilot conversations by channel, status and time, and use the insights to improve replies.', covers: ['/copilot-analytics'] },
+      { href: '/docs/analytics', icon: BarChart, title: 'Analytics', description: 'Visual charts and metrics across bookings, revenue, and team performance.', covers: ['/reports', '/reports?tab=analytics'] },
+      { href: '/docs/financial-reports', icon: BarChart3, title: 'Financial Reports', description: 'Monthly and quarterly revenue, cash flow analysis, tax summaries, commission reports, and year-over-year comparisons.', covers: ['/reports?tab=finance'] },
+      { href: '/docs/copilot-analytics', icon: LineChart, title: 'Copilot Analytics', description: 'Measure Copilot conversations by channel, status and time, and use the insights to improve replies.', covers: ['/reports?tab=copilot'] },
     ],
   },
   {

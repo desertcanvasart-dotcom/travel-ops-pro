@@ -133,10 +133,10 @@ describe('financial reports', () => {
 
   it('exports format money in the row currency, and the PDF margin is the year margin', () => {
     expect(cellText({ key: 'revenue', label: 'R', money: true }, { revenue: 1234.5, currency: 'JPY' })).toBe('1235')
-    for (const p of ['app/financial-reports/page.tsx', 'app/profit-loss/page.tsx']) {
+    for (const p of ['app/reports/_views/FinanceView.tsx', 'app/profit-loss/page.tsx']) {
       expect(src(p)).not.toContain("v.toFixed(2) : String(v ?? '')")
     }
-    const page = src('app/financial-reports/page.tsx')
+    const page = src('app/reports/_views/FinanceView.tsx')
     expect(page).toContain('currency: reportCurrency }))')
     expect(page).toContain('summary?.profit_margin')
     expect(page).not.toContain('avgMargin')
