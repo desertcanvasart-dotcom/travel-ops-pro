@@ -133,9 +133,9 @@ export const CATEGORIES: DocCategory[] = [
     items: [
       { href: '/docs/pricing-grid', icon: Calculator, title: 'Quote Builder', description: 'The one pricing engine — compare rates across tiers, dates and group sizes, pick a package type, and price a whole itinerary at once.', covers: ['/pricing-grid'] },
       { href: '/docs/b2c-pricing', icon: Calculator, title: 'B2C Pricing', description: 'Calculate itinerary pricing with automatic rate lookup and service costing.' },
-      { href: '/docs/b2c-quotes', icon: Tag, title: 'B2C Quotes', description: 'Priced offer-wrapper over an itinerary for direct selling, with revision history and a send flow.', covers: ['/b2c/quotes'] },
+      { href: '/docs/b2c-quotes', icon: Tag, title: 'B2C Quotes', description: 'Priced offer-wrapper over an itinerary for direct selling, with revision history and a send flow.', covers: ['/quotes?tab=b2c'] },
       { href: '/docs/b2b-pricing', icon: Briefcase, title: 'B2B Pricing', description: 'B2B rate-sheet calculator with pax tables (1–40) and single supplement, reached from the Quote Builder and B2B Quotes.' },
-      { href: '/docs/b2b-quotes', icon: FileCheck, title: 'B2B Quotes', description: 'Save, manage, and export B2B quotes with PDF generation.', covers: ['/b2b/quotes'] },
+      { href: '/docs/b2b-quotes', icon: FileCheck, title: 'B2B Quotes', description: 'Save, manage, and export B2B quotes with PDF generation.', covers: ['/quotes', '/quotes?tab=b2b'] },
       { href: '/docs/quote-revisions', icon: GitBranch, title: 'Quote Revisions', description: 'Versioned B2B quotes — snapshot, compare side-by-side, revert, plus bulk status operations.' },
       { href: '/docs/order-intake', icon: ClipboardPaste, title: 'Order Intake', description: 'Turn an incoming order — a tour-up.jp brief or a pasted request — into a structured booking with the deterministic intake and the hosted order form.', covers: ['/intake/order'] },
       { href: '/docs/itinerary-creation', icon: Wand2, title: 'Itinerary Creation', description: 'AI-powered itinerary generation from WhatsApp conversations and emails.' },

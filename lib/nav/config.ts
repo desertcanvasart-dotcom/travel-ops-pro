@@ -158,6 +158,15 @@ export const RATE_GROUPS: RateGroup[] = [
 // own API gate. __tests__/api/menu-page-gates.test.ts holds the union to the
 // middleware.
 export const TABBED_PAGES: TabbedPage[] = [
+  // The two quote lists (/b2c/quotes managers and above, /b2b/quotes agents
+  // and above). Each quote keeps its own address under /b2c or /b2b.
+  {
+    path: '/quotes', param: 'tab',
+    tabs: [
+      { value: 'b2c', labelKey: 'b2cQuotes', icon: FileText, roles: AM },
+      { value: 'b2b', labelKey: 'b2bQuotes', icon: FileText, roles: STAFF },
+    ],
+  },
   // The conversations (/communications), Gmail (/inbox) and WhatsApp
   // (/whatsapp-inbox) inboxes — every staff role's, as each was.
   {
@@ -215,8 +224,8 @@ export const MAIN_NAV: NavSection[] = [
     key: 'sell', titleKey: 'sell', roles: STAFF,
     items: [
       { labelKey: 'pricingGrid', href: '/pricing-grid', icon: Calculator, roles: STAFF, keywords: ['pricing grid'] },
-      { labelKey: 'b2cQuotes', href: '/b2c/quotes', icon: FileText, roles: AM },
-      { labelKey: 'b2bQuotes', href: '/b2b/quotes', icon: FileText, roles: STAFF },
+      // B2C · B2B as tabs; a quote's own page (/b2c/quotes/<id>) lights this.
+      { labelKey: 'quotes', href: '/quotes', icon: FileText, roles: STAFF, match: ['/b2c/quotes', '/b2b/quotes'] },
       { labelKey: 'orderIntake', href: '/intake/order', icon: ClipboardPaste, roles: STAFF },
       { labelKey: 'itineraries', href: '/itineraries', icon: Route, roles: STAFF },
       { labelKey: 'bookings', href: '/bookings', icon: Briefcase, roles: STAFF },
@@ -354,6 +363,8 @@ export const JUMP_ONLY_PAGES: JumpPage[] = [
   { labelKey: 'analytics', href: '/reports?tab=analytics', icon: TrendingUp, roles: AM, hintKey: 'reports' },
   { labelKey: 'financialReports', href: '/reports?tab=finance', icon: BarChart3, roles: AM, hintKey: 'reports' },
   { labelKey: 'copilotAnalytics', href: '/reports?tab=copilot', icon: BarChart3, roles: STAFF, hintKey: 'reports' },
+  { labelKey: 'b2cQuotes', href: '/quotes?tab=b2c', icon: FileText, roles: AM, hintKey: 'quotes' },
+  { labelKey: 'b2bQuotes', href: '/quotes?tab=b2b', icon: FileText, roles: STAFF, hintKey: 'quotes' },
   { labelKey: 'newItinerary', href: '/itineraries/new', icon: PlusCircle, roles: STAFF, hintKey: 'itineraries' },
   { labelKey: 'conciergeLeads', href: '/concierge-briefs', icon: ConciergeBell, roles: STAFF, hintKey: 'communicate', keywords: ['leads', 'briefs'] },
   { labelKey: 'whatsappParser', href: '/whatsapp-parser', icon: MessageSquare, roles: STAFF, hintKey: 'communicate' },

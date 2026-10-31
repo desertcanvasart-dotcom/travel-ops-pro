@@ -375,7 +375,7 @@ export default function QuoteDetailPage() {
   if (error || !quote) {
     return (
       <div className="min-h-screen bg-gray-50 p-6">
-        <Link href="/b2b/quotes" className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6">
+        <Link href="/quotes?tab=b2b" className="inline-flex items-center gap-2 text-gray-600 hover:text-gray-900 mb-6">
           <ArrowLeft className="w-4 h-4" />{t('backToQuotes')}
         </Link>
         <div className="bg-red-50 border border-red-200 rounded-lg p-6 max-w-md">
@@ -426,7 +426,7 @@ export default function QuoteDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-4">
-          <Link href="/b2b/quotes" className="p-2 hover:bg-gray-200 rounded-lg">
+          <Link href="/quotes?tab=b2b" className="p-2 hover:bg-gray-200 rounded-lg">
             <ArrowLeft className="w-5 h-5 text-gray-600" />
           </Link>
           <div>
