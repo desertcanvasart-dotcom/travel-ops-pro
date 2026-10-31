@@ -380,12 +380,11 @@ export default function TemplatesPage() {
   }
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
+    <div className="p-4 md:p-6 max-w-7xl">
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-y-2 mb-6">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">{t('title')}</h1>
-          <p className="text-sm text-gray-500 mt-1">
+          <p className="text-sm text-gray-500">
             {t('subtitle', { filtered: filteredTemplates.length, total: templates.length })}
           </p>
         </div>

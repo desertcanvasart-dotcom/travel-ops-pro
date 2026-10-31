@@ -284,14 +284,13 @@ export default function WritingRulesPage() {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-4">
               <Link
-                href="/content-library"
+                href="/settings/content-library"
                 className="p-2 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors"
               >
                 <ArrowLeft className="w-5 h-5" />
               </Link>
               <div>
-                <h1 className="text-2xl font-semibold text-gray-900">{t('title')}</h1>
-                <p className="text-sm text-gray-500 mt-0.5">
+                <p className="text-sm text-gray-500">
                   {t('rulesCount', { count: rules.length })}
                 </p>
               </div>

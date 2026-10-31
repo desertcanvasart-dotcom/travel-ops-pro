@@ -20,7 +20,7 @@ export default function CopilotPage() {
   }, [])
 
   return (
-    <div className="flex h-[calc(100vh-64px)] bg-gray-100">
+    <div className="flex h-[calc(100vh_-_var(--app-chrome))] bg-gray-100">
       {/* Thread List */}
       <div className="w-96 flex-shrink-0" key={refreshKey}>
         <CopilotThreadList

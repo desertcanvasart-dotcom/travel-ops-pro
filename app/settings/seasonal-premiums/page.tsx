@@ -252,11 +252,7 @@ export default function PricingSeasonsPage() {
             <ChevronLeft className="w-4 h-4" />
             {t('ratesHub')}
           </Link>
-          <h1 className="text-2xl font-bold text-gray-900 flex items-center gap-2">
-            <CalendarRange className="w-6 h-6 text-[#647C47]" />
-            {t('title')}
-          </h1>
-          <p className="text-sm text-gray-600 mt-1 max-w-2xl">{t('subtitle')}</p>
+          <p className="text-sm text-gray-600 max-w-2xl">{t('subtitle')}</p>
         </div>
         <button
           onClick={() => setShowAddSeason(true)}

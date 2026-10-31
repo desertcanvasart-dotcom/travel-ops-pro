@@ -13,8 +13,8 @@ const src = (f: string) => readFileSync(join(ROOT, f), 'utf8')
 const middleware = src('middleware.ts')
 
 describe('who reaches Message Templates (T1)', () => {
-  it('the /templates page is agent-and-above, as the menu shows it', () => {
-    expect(middleware).toContain("'/templates': ['admin', 'manager', 'agent'],")
+  it('the templates page (/settings/message-templates) is agent-and-above, as the menu shows it', () => {
+    expect(middleware).toContain("'/settings/message-templates': ['admin', 'manager', 'agent'],")
   })
   it('/api/templates reads are staff-only', () => {
     const block = middleware.match(/const STAFF_ONLY_API_PREFIXES = \[([\s\S]*?)\n\]/)
@@ -29,7 +29,7 @@ describe('saving and deleting templates (T4)', () => {
     expect(src('app/api/templates/[id]/route.ts')).toContain("templateSaveFailure(error, 'Failed to update template')")
   })
   it('the page tells the operator when a save or delete fails', () => {
-    const page = src('app/templates/page.tsx')
+    const page = src('app/settings/message-templates/page.tsx')
     expect(page).toContain("dialog.alert(t('errors.saveFailed')")
     expect(page).toContain("dialog.alert(t('errors.deleteFailed')")
   })
@@ -38,7 +38,7 @@ describe('saving and deleting templates (T4)', () => {
 describe('dead code removed (T5, T6)', () => {
   it('the /use route that called a non-existent RPC is gone, and nothing calls it', () => {
     expect(existsSync(join(ROOT, 'app/api/templates/[id]/use/route.ts'))).toBe(false)
-    expect(src('app/templates/page.tsx')).not.toContain('/use`')
+    expect(src('app/settings/message-templates/page.tsx')).not.toContain('/use`')
   })
   it('the send route no longer bumps usage_count on a (possibly shared) template row', () => {
     expect(src('app/api/templates/send/route.ts')).not.toMatch(/usage_count:/)

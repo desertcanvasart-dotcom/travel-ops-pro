@@ -20,9 +20,8 @@
 // not edited.
 
 import { useEffect, useState } from 'react'
-import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { User, Lock, Camera, Save, ArrowLeft, Loader2, CheckCircle, AlertCircle, ShieldCheck } from 'lucide-react'
+import { User, Lock, Camera, Save, Loader2, CheckCircle, AlertCircle, ShieldCheck } from 'lucide-react'
 import { createClient } from '@/app/supabase'
 import { useRole } from '@/hooks/useRole'
 import { LanguageSelector } from '@/components/LanguageSelector'
@@ -46,7 +45,7 @@ const readOnlyClass = 'w-full h-9 px-3 text-sm border border-gray-200 rounded-md
 export default function ProfilePage() {
   const t = useTranslations('settings')
   const tf = useTranslations('twoFactor')
-  const { role, canManageSettings } = useRole()
+  const { role } = useRole()
   const [activeTab, setActiveTab] = useState<'profile' | 'password' | 'twofactor'>('profile')
   const [profile, setProfile] = useState<Profile | null>(null)
   const [loading, setLoading] = useState(true)
@@ -138,26 +137,8 @@ export default function ProfilePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50/50">
-      <header className="bg-white border-b border-gray-200 shadow-sm">
-        <div className="px-6 py-4 flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold text-gray-900">{t('profileInformation')}</h1>
-            <p className="text-xs text-gray-500 mt-0.5">{t('updatePersonalInfo')}</p>
-          </div>
-          {canManageSettings && (
-            <Link
-              href="/settings?tab=profile"
-              className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 bg-white border border-gray-200 rounded-md hover:bg-gray-50"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              {t('backToSettings')}
-            </Link>
-          )}
-        </div>
-      </header>
-
-      <div className="p-6">
+    <div>
+      <div className="p-4 md:p-6">
         <div className="max-w-3xl mx-auto space-y-4">
           {notice && (
             <div

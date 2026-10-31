@@ -1,5 +1,7 @@
 import type { NextConfig } from 'next'
 import createNextIntlPlugin from 'next-intl/plugin'
+// CommonJS, shared with __tests__/lib/nav-redirects.test.ts.
+import navRedirects from './lib/nav/redirects.js'
 
 const withNextIntl = createNextIntlPlugin('./i18n/request.ts')
 
@@ -52,6 +54,11 @@ const nextConfig: NextConfig = {
   // (serverActions.bodySizeLimit: '60mb' removed — it applies ONLY to Server
   // Actions, and this app has none; the file imports it was added for are API
   // routes, which it never governed.)
+  // Old addresses → their new homes (lib/nav/redirects.js). Read at server
+  // start: restart `next dev` after changing the list.
+  async redirects() {
+    return navRedirects.nextRedirects()
+  },
   async headers() {
     return [
       {

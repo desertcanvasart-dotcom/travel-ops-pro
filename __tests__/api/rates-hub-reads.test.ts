@@ -78,7 +78,7 @@ describe('the hub page', () => {
   })
 
   it('every /rates#… menu link opens a hub tab', () => {
-    const nav = fs.readFileSync(path.join(process.cwd(), 'components/nav/navigation-config.ts'), 'utf8')
+    const nav = fs.readFileSync(path.join(process.cwd(), 'lib/nav/config.ts'), 'utf8')
     const anchors = [...nav.matchAll(/href: '\/rates#(\w+)'/g)].map(m => m[1])
     expect(anchors.length).toBeGreaterThan(0)
     for (const a of anchors) expect(tabForHash(`#${a}`), a).not.toBeNull()

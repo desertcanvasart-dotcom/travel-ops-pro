@@ -127,14 +127,14 @@ describe('tier counts', () => {
 
   it('inactive items are listed only when asked for', async () => {
     expect((await (await list.GET(req('GET', undefined, '/api/content-library'))).json()).data).toEqual([])
-    const page = readFileSync(join(process.cwd(), 'app/content-library/page.tsx'), 'utf8')
+    const page = readFileSync(join(process.cwd(), 'app/settings/content-library/page.tsx'), 'utf8')
     expect(page).toContain("if (includeInactive) url += 'active_only=false&'")
   })
 })
 
 describe('the pages', () => {
-  const editor = readFileSync(join(process.cwd(), 'app/content-library/[id]/page.tsx'), 'utf8')
-  const listPage = readFileSync(join(process.cwd(), 'app/content-library/page.tsx'), 'utf8')
+  const editor = readFileSync(join(process.cwd(), 'app/settings/content-library/[id]/page.tsx'), 'utf8')
+  const listPage = readFileSync(join(process.cwd(), 'app/settings/content-library/page.tsx'), 'utf8')
   it('the editor shows the API’s { error } and has an Active toggle', () => {
     expect(editor).toContain('error.error || t(\'errorSaving\')')
     expect(editor).not.toContain('error.message || t(\'errorSaving\')')

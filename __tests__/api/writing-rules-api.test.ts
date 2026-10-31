@@ -74,7 +74,7 @@ describe('active / inactive (WR5)', () => {
 })
 
 describe('the Writing Rules page', () => {
-  const page = readFileSync(join(process.cwd(), 'app/content-library/rules/page.tsx'), 'utf8')
+  const page = readFileSync(join(process.cwd(), 'app/settings/content-library/rules/page.tsx'), 'utf8')
   it('lists every rule, dims inactive ones and toggles them (WR5)', () => {
     expect(page).toContain("fetch('/api/content-library/writing-rules?active_only=false')")
     expect(page).toContain("rule.is_active ? '' : 'opacity-60'")

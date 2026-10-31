@@ -11,8 +11,7 @@
 // lib/settings/whatsapp-status.
 
 import { useState, useEffect } from 'react'
-import Link from 'next/link'
-import { MessageCircle, Send, Check, AlertCircle, Settings, Phone, ArrowLeft } from 'lucide-react'
+import { MessageCircle, Send, Check, AlertCircle, Settings, Phone } from 'lucide-react'
 import {
   whatsappStatusRows,
   whatsappTestBody,
@@ -83,16 +82,8 @@ export default function WhatsAppSettingsPage() {
   const rows = whatsappStatusRows(status)
 
   return (
-    <div className="min-h-screen bg-gray-50/50 p-4 md:p-6">
-      <div className="max-w-2xl mx-auto space-y-4">
-
-        <Link
-          href="/settings?tab=integrations"
-          className="inline-flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700"
-        >
-          <ArrowLeft className="w-3.5 h-3.5" />
-          Back to Settings
-        </Link>
+    <div className="p-4 md:p-6">
+      <div className="max-w-2xl space-y-4">
 
         {/* Header */}
         <div className="bg-white rounded-lg border border-gray-200 shadow-sm p-5">
@@ -101,7 +92,7 @@ export default function WhatsAppSettingsPage() {
               <MessageCircle className="w-4 h-4 text-primary-600" />
             </div>
             <div>
-              <h1 className="text-base font-semibold text-gray-900">WhatsApp</h1>
+              <h2 className="text-base font-semibold text-gray-900">WhatsApp</h2>
               <p className="text-xs text-gray-500">Quotes, invoices and updates sent to clients from your company&apos;s WhatsApp number</p>
             </div>
           </div>

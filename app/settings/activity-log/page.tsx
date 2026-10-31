@@ -9,7 +9,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { ScrollText, Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
+import { Loader2, ChevronLeft, ChevronRight } from 'lucide-react'
 import { readDetail, type ActivityChange } from '@/lib/activity-detail'
 
 interface Entry {
@@ -97,12 +97,7 @@ export default function ActivityPage() {
   const inputClass = 'px-3 py-2 border border-gray-300 rounded-lg text-sm'
 
   return (
-    <div className="p-6 max-w-6xl">
-      <div className="flex items-center gap-3 mb-1">
-        <ScrollText className="w-6 h-6 text-[#647C47]" />
-        <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
-      </div>
-      <p className="text-sm text-gray-500 mb-5">{t('subtitle')}</p>
+    <div className="p-4 md:p-6 max-w-6xl">
 
       <div className="flex flex-wrap gap-2 mb-4">
         <input className={inputClass} placeholder={t('filterUser')} value={filters.user_email}

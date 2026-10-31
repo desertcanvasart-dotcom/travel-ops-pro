@@ -9,8 +9,10 @@
 // (/itineraries open to agents while the menu shows it to managers) leaves the
 // screen one typed URL away.
 //
-// This test derives each menu item's roles from components/nav/navigation-
-// config.ts and the server's from middleware.ts, the way each applies them,
+// This test derives each menu item's roles from lib/nav/config.ts — the
+// sidebar, the rate sheets, the Settings area, the ⌘K-only pages and the
+// pinned Settings link — and the server's from middleware.ts, the way each
+// applies them,
 // and requires them to agree. KNOWN_GAPS lists the screens whose menu group
 // has not been audited yet; each group's audit removes its own lines. It is
 // exact, so a fixed gap must be deleted from it and a new gap fails.
@@ -18,7 +20,7 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
-import { navigationConfig } from '@/components/nav/navigation-config'
+import { navEntries, SETTINGS_HOME } from '@/lib/nav/config'
 
 const ALL_ROLES = ['admin', 'manager', 'agent', 'viewer']
 const source = readFileSync(join(process.cwd(), 'middleware.ts'), 'utf8')
@@ -43,19 +45,14 @@ function serverRoles(path: string): string[] {
   return match ? match[1] : ALL_ROLES
 }
 
-/** Every menu screen with the roles that see it (owner aside: it passes both). */
+/** Every menu link with the roles that see it (owner aside: it passes both).
+ *  A page listed in two menus (Message templates) is checked in each. */
 function menuScreens(): Array<{ path: string; roles: string[] }> {
-  const screens: Array<{ path: string; roles: string[] }> = []
-  for (const section of navigationConfig) {
-    for (const item of section.items) {
-      const roles = (item.roles ?? section.roles ?? ALL_ROLES).filter(r => r !== 'owner')
-      for (const href of [item.href, ...(item.children ?? []).map(c => c.href)]) {
-        const path = href.split('#')[0]
-        if (!screens.some(s => s.path === path)) screens.push({ path, roles })
-      }
-    }
-  }
-  return screens
+  const entries = [...navEntries().map(e => ({ href: e.item.href, roles: e.roles })), { href: SETTINGS_HOME.href, roles: SETTINGS_HOME.roles ?? null }]
+  return entries.map(e => ({
+    path: e.href.split(/[?#]/)[0],
+    roles: (e.roles ?? ALL_ROLES).filter(r => r !== 'owner'),
+  }))
 }
 
 const sorted = (roles: string[]) => [...roles].sort().join(',')

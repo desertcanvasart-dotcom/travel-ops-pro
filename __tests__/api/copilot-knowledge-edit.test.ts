@@ -88,7 +88,7 @@ describe('edit a 3000-character FAQ', () => {
 })
 
 describe('the Knowledge page', () => {
-  const page = readFileSync(join(process.cwd(), 'app/copilot-knowledge/page.tsx'), 'utf8')
+  const page = readFileSync(join(process.cwd(), 'app/settings/copilot-knowledge/page.tsx'), 'utf8')
   it('edits full_text, not chunk 0', () => {
     expect(page).toContain("useState(entry?.full_text ?? entry?.answer_text ?? '')")
   })

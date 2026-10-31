@@ -12,7 +12,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Building2, Loader2, Check, Plus, Trash2 } from 'lucide-react'
+import { Loader2, Check, Plus, Trash2 } from 'lucide-react'
 import { SERVICE_TYPE_ROUTING } from '@/lib/departments'
 
 interface Department {
@@ -241,12 +241,7 @@ export default function DepartmentsPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl">
-      <div className="flex items-center gap-3 mb-1">
-        <Building2 className="w-6 h-6 text-[#647C47]" />
-        <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
-      </div>
-      <p className="text-sm text-gray-500 mb-6">{t('subtitle')}</p>
+    <div className="p-4 md:p-6 max-w-4xl">
 
       {error && (
         <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-700">{error}</div>

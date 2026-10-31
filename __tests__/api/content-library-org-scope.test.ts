@@ -181,7 +181,7 @@ describe('writing rules', () => {
 // table and its rows stay (per company since 20261208).
 describe('prompt templates', () => {
   it('have no screen and no API any more', () => {
-    for (const f of ['app/content-library/prompts/page.tsx', 'app/api/content-library/prompts/route.ts']) {
+    for (const f of ['app/settings/content-library/prompts/page.tsx', 'app/api/content-library/prompts/route.ts']) {
       expect(existsSync(join(process.cwd(), f)), f).toBe(false)
     }
   })

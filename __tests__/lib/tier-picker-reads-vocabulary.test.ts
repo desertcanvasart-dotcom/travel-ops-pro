@@ -39,8 +39,8 @@ const TIER_PICKERS = [
   // for it. The variation modal rendered its own TIER_CONFIG and merely
   // relabelled the four built-ins.
   'app/tours/manage/TourManagerContent.tsx',
-  'app/content-library/page.tsx',
-  'app/content-library/[id]/page.tsx',
+  'app/settings/content-library/page.tsx',
+  'app/settings/content-library/[id]/page.tsx',
 ]
 
 // Routes that validate a tier or iterate "all tiers" — each carried a frozen

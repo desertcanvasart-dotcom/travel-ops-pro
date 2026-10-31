@@ -11,7 +11,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Globe, Loader2, Plus, Trash2, Check, MapPin, Star } from 'lucide-react'
+import { Loader2, Plus, Trash2, Check, MapPin, Star } from 'lucide-react'
 import { useConfirm } from '@/components/ConfirmDialog'
 import { useRole } from '@/hooks/useRole'
 import { clearDestinationCache, type Destination, type DestinationCity } from '@/app/components/useDestinationCities'
@@ -101,13 +101,7 @@ export default function DestinationsSettingsPage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl">
-      <div className="flex items-center gap-3 mb-1">
-        <Globe className="w-6 h-6 text-[#647C47]" />
-        <h1 className="text-xl font-semibold text-gray-900">{t('title')}</h1>
-      </div>
-      <p className="text-sm text-gray-500 mb-6">{t('subtitle')}</p>
-
+    <div className="p-4 md:p-6 max-w-4xl">
       {!isAdmin && (
         <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-800">{t('readOnly')}</div>
       )}

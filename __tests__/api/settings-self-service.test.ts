@@ -82,8 +82,10 @@ describe('profile: only name and phone, and nothing silently dropped', () => {
     }
     expect(h.updates).toEqual([])
   })
-  it('the Profile tab sends only those two and shows Email and Role read-only', () => {
-    const page = readFileSync('app/settings/page.tsx', 'utf8')
+  it('the Profile page sends only those two and shows Email and Role read-only', () => {
+    // The old Settings Profile tab was a copy of this page; /settings?tab=profile
+    // now redirects here.
+    const page = readFileSync('app/settings/profile/page.tsx', 'utf8')
     expect(page).toContain('JSON.stringify({ full_name: profile.full_name, phone: profile.phone ?? null })')
     expect(page).not.toMatch(/TIMEZONES|profile\?\.timezone|profile\?\.company_name/)
     expect(page).not.toMatch(/setProfile\(prev => prev \? \{ \.\.\.prev, (email|role):/)
@@ -96,11 +98,11 @@ describe('Settings › Email: no dead signature or auto-reply', () => {
     expect(await res.json()).toEqual({ gmail_connected: true, gmail_email: 'me@x.example', gmail_shared: false })
     expect((emailSettings as Record<string, unknown>).PUT).toBeUndefined()
   })
-  it('the tab links to the real signatures instead', () => {
-    const page = readFileSync('app/settings/page.tsx', 'utf8')
-    expect(page).not.toMatch(/auto_reply|SignatureEditor|saveEmailSettings/)
-    expect(page).toContain('href="/settings/email?tab=signatures"')
+  it('the old Email tab is gone: its address lands on the page with the real signatures', () => {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    expect(require('../../lib/nav/redirects.js').SETTINGS_TABS.email).toBe('/settings/email')
     expect(readFileSync('app/settings/email/page.tsx', 'utf8')).toMatch(/tab === 'signatures'/)
+    expect(readFileSync('app/settings/email/page.tsx', 'utf8')).not.toMatch(/auto_reply|saveEmailSettings/)
   })
 })
 

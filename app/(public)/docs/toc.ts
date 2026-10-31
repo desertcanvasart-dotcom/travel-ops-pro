@@ -73,7 +73,7 @@ export interface DocItem {
   description: string
   /** Shorter sidebar label where the full title would crowd it. */
   navLabel?: string
-  /** The app menu routes this page documents (components/nav/navigation-config.ts). */
+  /** The app menu routes this page documents (lib/nav/config.ts). */
   covers?: string[]
 }
 
@@ -86,9 +86,10 @@ export interface DocCategory {
 
 export const CATEGORIES: DocCategory[] = [
   // ============================================
-  // GROUPS MIRROR THE APP SIDE MENU (components/nav/navigation-config.ts):
-  // same groups, same order, same labels — Home · Communicate · Sell ·
-  // Operate · Tours · Suppliers & Rates · People · Finance · Settings — so the
+  // GROUPS MIRROR THE APP MENUS (lib/nav/config.ts): the sidebar's groups,
+  // then the Settings area — same order, same labels — Home · Communicate ·
+  // Sell · Operate · Products · Suppliers & Rates · Contacts · Finance ·
+  // Settings — so the
   // operator reads one map in both places. Getting Started is the one
   // docs-only group. `menuSection` names the menu group; `covers` lists the
   // menu routes a page documents. __tests__/app/docs-toc.test.ts holds both
@@ -115,15 +116,12 @@ export const CATEGORIES: DocCategory[] = [
     label: 'Communicate',
     menuSection: 'communication',
     items: [
-      { href: '/docs/communication', icon: MessageCircle, title: 'Unified Inbox', description: 'WhatsApp, email, portal messages and trip chats in one inbox: answer, assign, archive and restore.', covers: ['/communications'] },
+      { href: '/docs/communication', icon: MessageCircle, title: 'Unified Inbox', description: 'WhatsApp, email, portal messages and trip chats in one inbox: answer, assign, archive and restore.', covers: ['/communications', '/whatsapp-inbox'] },
       { href: '/docs/portal-messages', icon: MessagesSquare, title: 'Portal Messages', description: 'Travellers ask questions from their booking page; your team answers from the unified inbox, beside WhatsApp and email.' },
       { href: '/docs/email-inbox', icon: MailPlus, title: 'Email Inbox', description: 'Connect Gmail, read and send email, and understand what lands here versus the Unified Inbox.', covers: ['/inbox'] },
-      { href: '/docs/message-templates', icon: FileInput, title: 'Message Templates', description: 'Create and send pre-designed messages via WhatsApp and email with placeholder auto-fill.', covers: ['/templates'] },
+      { href: '/docs/message-templates', icon: FileInput, title: 'Message Templates', description: 'Create and send pre-designed messages via WhatsApp and email with placeholder auto-fill.', covers: ['/settings/message-templates'] },
       { href: '/docs/whatsapp-agent', icon: Bot, title: 'WhatsApp AI Agent', description: 'What exists today: a reply-suggestion engine that is built but not yet shown in the inbox, and where WhatsApp drafts come from now.' },
       { href: '/docs/copilot', icon: Sparkles, title: 'AI Copilot', description: 'Drafts replies to customer WhatsApp messages and emails from your knowledge base and client data, for you to review, approve and send.', covers: ['/copilot'] },
-      { href: '/docs/copilot-knowledge', icon: BookOpen, title: 'Copilot Knowledge', description: 'The FAQs, policies and tour texts the Copilot drafts from, plus your personal Copilot tone.', covers: ['/copilot-knowledge'] },
-      { href: '/docs/content-library', icon: BookOpen, title: 'Content Library', description: 'Your own descriptions of sites and experiences, one per service tier, given to the AI when it writes itineraries.', covers: ['/content-library'] },
-      { href: '/docs/writing-rules', icon: PenLine, title: 'Writing Rules', description: 'Style rules (Enforce, Prefer, Avoid) with priority and examples that the AI follows when it writes itinerary text.', covers: ['/content-library/rules'] },
       { href: '/docs/multi-language', icon: Languages, title: 'Languages', description: 'Copy and translate itineraries and B2B quotes between English and Japanese with one click — and relabel the product in your own words with Vocabulary.' },
       { href: '/docs/notifications', icon: BellRing, title: 'Notifications', description: 'In-app notifications for tasks, payments, bookings, and team activity.' },
       { href: '/docs/concierge', icon: ConciergeBell, title: 'Concierge Briefs', description: 'Trip briefs from the AI Concierge: triage them against the promised reply time and turn them into draft itineraries. Hidden from the menu.', covers: ['/concierge-briefs'] },
@@ -146,7 +144,6 @@ export const CATEGORIES: DocCategory[] = [
       { href: '/docs/traveller-portal', icon: Globe, title: 'Traveller Portal', description: 'The page your customers see: a private link per traveller, the form that replaces the posted 申込書, and who is allowed to see what.' },
       { href: '/docs/passport-documents', icon: IdCard, title: 'Passport & Documents', description: 'Travellers attach their passport from their own link. Stored privately, opened by a short-lived link, deleted automatically after the trip.' },
       { href: '/docs/calendar', icon: Calendar, title: 'Calendar', description: 'Month, week, and timeline views of all tours. Drag-to-reschedule, resource conflict detection, and team-wide visibility.', covers: ['/calendar'] },
-      { href: '/docs/extras', icon: Sparkles, title: 'Extras', description: 'Add-ons, upgrades and options offered on top of a trip — priced off-margin, per-row currency, and attached from the itinerary.', covers: ['/rates/extras'] },
     ],
   },
   {
@@ -162,12 +159,13 @@ export const CATEGORIES: DocCategory[] = [
     ],
   },
   {
-    label: 'Tours',
+    label: 'Products',
     menuSection: 'tours',
     items: [
       { href: '/docs/tour-programs', icon: ClipboardList, title: 'Tour Templates', description: 'Create tour templates one at a time or bulk-create them from a Sample CSV, manage variations, and feed the template into pricing.', covers: ['/tours/manage'] },
       { href: '/docs/tour-inventory', icon: Package, title: 'Tour Inventory', description: 'Browse active tours with cached "from" prices, refresh them, open a tour\'s itinerary, price it live and print its 日程表.', covers: ['/tours'] },
       { href: '/docs/transport-packages', icon: Bus, title: 'Transport Packages', description: 'Set flat per-vehicle prices for bundled transport such as cruise sightseeing, used to price cruise days, the Pricing Grid and the B2B calculator.', covers: ['/b2b/pricing-rules'] },
+      { href: '/docs/extras', icon: Sparkles, title: 'Extras', description: 'Add-ons, upgrades and options offered on top of a trip — priced off-margin, per-row currency, and attached from the itinerary.', covers: ['/rates/extras'] },
     ],
   },
   {
@@ -181,13 +179,12 @@ export const CATEGORIES: DocCategory[] = [
     ],
   },
   {
-    label: 'People',
+    label: 'Contacts',
     menuSection: 'crm',
     items: [
       { href: '/docs/clients', icon: Users, title: 'Clients', description: 'Add, search, and manage client profiles, notes, and follow-ups.', covers: ['/clients'] },
       { href: '/docs/partners', icon: Users, title: 'Partners', description: 'B2B partner accounts — company details, partner codes, default margins, and linking partners to quotes.', covers: ['/b2b/partners'] },
-      { href: '/docs/team-members', icon: UserRound, title: 'Team Members', description: 'Your operational staff directory — roles, departments, task assignment, and how it relates to User Management.', covers: ['/team-members'] },
-      { href: '/docs/departments', icon: GitBranch, title: 'Departments', description: 'Define departments, assign members, and route each service type so generated tasks reach the right team.', covers: ['/departments'] },
+      { href: '/docs/team-members', icon: UserRound, title: 'Team Members', description: 'Your operational staff directory — roles, departments, task assignment, and how it relates to User Management.', covers: ['/settings/staff-directory'] },
     ],
   },
   {
@@ -209,13 +206,17 @@ export const CATEGORIES: DocCategory[] = [
     label: 'Settings',
     menuSection: 'settings',
     items: [
-      { href: '/docs/team-settings', icon: Settings, title: 'Settings', description: 'Your profile, password, email, notifications and preferences; the company profile, payment terms and licence; who can change what by role.', covers: ['/settings'] },
+      { href: '/docs/team-settings', icon: Settings, title: 'Settings', description: 'Your profile, password, email, notifications and preferences; the company profile, payment terms and licence; who can change what by role.', covers: ['/settings/profile', '/settings/email', '/settings/notifications', '/settings/company', '/settings/preferences'] },
       { href: '/docs/vocabulary', icon: BookOpen, title: 'Vocabulary', description: 'The 44 lists behind the dropdowns, in 7 groups — rename, hide, add, reorder or reset each, in English and Japanese. Admins change them.', covers: ['/settings/vocabulary'] },
       { href: '/docs/destinations', icon: Globe, title: 'Destinations', description: 'The countries and cities you operate, the default country, and the brief and glossary the AI writes each country with.', covers: ['/settings/destinations'] },
-      { href: '/docs/seasonal-premiums', icon: CalendarRange, title: 'Seasonal Premiums', description: 'Your high-demand dates as a premium on the whole price after margin — set the dated windows once and every quote in them lifts automatically.', covers: ['/rates/seasons'] },
-      { href: '/docs/activity-log', icon: FileText, title: 'Activity Log', description: 'The audit trail: every change with who, when, what, endpoint and IP — filterable, and never editable.', covers: ['/activity'] },
-      { href: '/docs/integrations', icon: Link2, title: 'Integrations', description: 'The company\'s Xero or QuickBooks connection (push-only, one at a time), WhatsApp status and test, your Gmail, and partner platforms.' },
-      { href: '/docs/user-management', icon: Users, title: 'User Management', description: 'Login accounts and access: the Administrator / Manager / Agent / Viewer roles, invitations, activation, and deletion.', covers: ['/users'] },
+      { href: '/docs/seasonal-premiums', icon: CalendarRange, title: 'Seasonal Premiums', description: 'Your high-demand dates as a premium on the whole price after margin — set the dated windows once and every quote in them lifts automatically.', covers: ['/settings/seasonal-premiums'] },
+      { href: '/docs/activity-log', icon: FileText, title: 'Activity Log', description: 'The audit trail: every change with who, when, what, endpoint and IP — filterable, and never editable.', covers: ['/settings/activity-log'] },
+      { href: '/docs/integrations', icon: Link2, title: 'Integrations', description: 'The company\'s Xero or QuickBooks connection (push-only, one at a time), WhatsApp status and test, your Gmail, and partner platforms.', covers: ['/settings/accounting', '/settings/integrations', '/settings/whatsapp'] },
+      { href: '/docs/user-management', icon: Users, title: 'User Management', description: 'Login accounts and access: the Administrator / Manager / Agent / Viewer roles, invitations, activation, and deletion.', covers: ['/settings/users'] },
+      { href: '/docs/departments', icon: GitBranch, title: 'Departments', description: 'Define departments, assign members, and route each service type so generated tasks reach the right team.', covers: ['/settings/departments'] },
+      { href: '/docs/content-library', icon: BookOpen, title: 'Content Library', description: 'Your own descriptions of sites and experiences, one per service tier, given to the AI when it writes itineraries.', covers: ['/settings/content-library'] },
+      { href: '/docs/writing-rules', icon: PenLine, title: 'Writing Rules', description: 'Style rules (Enforce, Prefer, Avoid) with priority and examples that the AI follows when it writes itinerary text.', covers: ['/settings/content-library/rules'] },
+      { href: '/docs/copilot-knowledge', icon: BookOpen, title: 'Copilot Knowledge', description: 'The FAQs, policies and tour texts the Copilot drafts from, plus your personal Copilot tone.', covers: ['/settings/copilot-knowledge', '/settings/copilot'] },
     ],
   },
 ]

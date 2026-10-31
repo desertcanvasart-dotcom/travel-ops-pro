@@ -24,13 +24,19 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/settings/preferences': ['admin', 'manager', 'agent'],
   '/settings/email': ['admin', 'manager', 'agent'],
   '/settings/profile': ['admin', 'manager', 'agent'],
+  // Setup pages that moved into Settings (lib/nav/redirects.js) and were
+  // agent-visible where they lived before: message templates send to real
+  // customers and partners; the Copilot's knowledge and settings sat under
+  // '/copilot' and '/copilot-knowledge'. Same roles as before the move.
+  '/settings/message-templates': ['admin', 'manager', 'agent'],
+  '/settings/copilot-knowledge': ['admin', 'manager', 'agent'],
+  '/settings/copilot': ['admin', 'manager', 'agent'],
+  // Everything else under Settings — staff directory, departments, team &
+  // roles, activity log, content library and writing rules, seasonal
+  // premiums — is admin + manager, as each was before it moved.
   '/settings': ['admin', 'manager'],
-  '/activity': ['admin', 'manager'],
-  '/users': ['admin', 'manager'],
 
   // Admin and Manager
-  '/team-members': ['admin', 'manager'],
-  '/departments': ['admin', 'manager'],
   // People › Partners: the managers' screen. With no entry here any member —
   // an agent included — opened it by URL.
   '/b2b/partners': ['admin', 'manager'],
@@ -77,14 +83,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // to agent and above; a viewer opened them by URL.
   '/communications': ['admin', 'manager', 'agent'],
   '/copilot': ['admin', 'manager', 'agent'],
-  '/copilot-knowledge': ['admin', 'manager', 'agent'],
   '/concierge-briefs': ['admin', 'manager', 'agent'],
-  // Message templates send to real customers and partners — the menu shows
-  // the screen to agents and above; a viewer opened it by URL.
-  '/templates': ['admin', 'manager', 'agent'],
-  // Content library and writing rules (/content-library/rules): the menu
-  // shows them to managers and above, and their API is admin/manager.
-  '/content-library': ['admin', 'manager'],
   // Sell. The menu shows Pricing Grid, B2B Quotes and Order Intake to agents
   // and above (decided 2026-10-13: agents price and quote, reaching the grid
   // from the inboxes and the trip editor, and the B2B calculator from the
