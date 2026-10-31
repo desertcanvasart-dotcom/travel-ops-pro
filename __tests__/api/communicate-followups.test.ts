@@ -134,7 +134,7 @@ describe('2. assigning an email conversation notifies the assignee', () => {
     expect(notify).toHaveBeenCalledTimes(1)
     expect(notify.mock.calls[0][0]).toMatchObject({
       org_id: 'org-a', user_id: 'ua2', team_member_id: 'tm-a2', type: 'email_assigned',
-      link: '/communications?conversation=em-1',
+      link: '/inbox?channel=all&conversation=em-1',
     })
     expect(String(notify.mock.calls[0][0].message)).toContain('Sato')
   })

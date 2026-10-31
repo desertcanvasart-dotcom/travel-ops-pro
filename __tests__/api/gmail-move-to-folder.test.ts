@@ -42,7 +42,7 @@ describe('move', () => {
 })
 
 describe('the inbox page', () => {
-  const page = readFileSync('app/inbox/page.tsx', 'utf8')
+  const page = readFileSync('app/inbox/_views/EmailView.tsx', 'utf8')
   it('lists a made folder by its label, not a search inside the inbox', () => {
     expect(page).toContain('onClick={() => setFolder(`label:${label.id}`)}')
     expect(page).not.toContain('fetchEmails(`label:${label.name}`)')

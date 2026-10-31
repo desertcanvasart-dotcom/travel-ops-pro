@@ -169,13 +169,13 @@ describe('no page hands a conversation over through the URL again', () => {
   it('the inbox Parse button goes to the pricing module', () => {
     // An email that is a travel request is on its way to a quote, and the grid
     // parses the conversation itself.
-    const src = fs.readFileSync(path.join(ROOT, 'app/inbox/page.tsx'), 'utf8')
+    const src = fs.readFileSync(path.join(ROOT, 'app/inbox/_views/EmailView.tsx'), 'utf8')
     expect(src).toContain('/pricing-grid?${params.toString()}')
     expect(stripComments(src)).not.toContain('/whatsapp-parser?')
   })
 
   it('every conversation handover parks the text instead of encoding it into the URL', () => {
-    for (const file of ['app/inbox/page.tsx', 'app/whatsapp-inbox/page.tsx', 'components/unified/UnifiedMessageThread.tsx']) {
+    for (const file of ['app/inbox/_views/EmailView.tsx', 'app/inbox/_views/WhatsAppView.tsx', 'components/unified/UnifiedMessageThread.tsx']) {
       const code = stripComments(fs.readFileSync(path.join(ROOT, file), 'utf8'))
       expect(code, `${file} should stash the conversation`).toContain('stashHandoffText')
     }

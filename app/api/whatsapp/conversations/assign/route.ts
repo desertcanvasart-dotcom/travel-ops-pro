@@ -119,7 +119,7 @@ export async function POST(request: NextRequest) {
           type: 'whatsapp_assigned',
           title: 'New WhatsApp Chat Assigned',
           message: `You've been assigned a WhatsApp conversation with ${clientName}. Last message: "${conversation.last_message?.substring(0, 100) || 'No messages yet'}"`,
-          link: `/communications?conversation=${conversation_id}`,
+          link: `/inbox?channel=all&conversation=${conversation_id}`,
         })
         if (!result.success) console.error('Notification failed:', result.error)
       }

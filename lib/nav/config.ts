@@ -158,6 +158,16 @@ export const RATE_GROUPS: RateGroup[] = [
 // own API gate. __tests__/api/menu-page-gates.test.ts holds the union to the
 // middleware.
 export const TABBED_PAGES: TabbedPage[] = [
+  // The conversations (/communications), Gmail (/inbox) and WhatsApp
+  // (/whatsapp-inbox) inboxes — every staff role's, as each was.
+  {
+    path: '/inbox', param: 'channel',
+    tabs: [
+      { value: 'all', labelKey: 'unifiedInbox', icon: MessageSquare, roles: STAFF },
+      { value: 'email', labelKey: 'email', icon: Mail, roles: STAFF },
+      { value: 'whatsapp', labelKey: 'whatsapp', icon: Phone, roles: STAFF },
+    ],
+  },
   {
     path: '/reports', param: 'tab',
     tabs: [
@@ -191,9 +201,10 @@ export const MAIN_NAV: NavSection[] = [
   {
     key: 'communication', titleKey: 'communicate', roles: STAFF,
     items: [
-      { labelKey: 'unifiedInbox', href: '/communications', icon: MessageSquare, keywords: ['inbox', 'conversations'] },
-      { labelKey: 'emailInbox', href: '/inbox', icon: Mail, keywords: ['gmail'] },
-      { labelKey: 'whatsappInbox', href: '/whatsapp-inbox', icon: Phone },
+      // One /inbox page, three tabs — and a link to each, every day's work.
+      { labelKey: 'unifiedInbox', href: '/inbox?channel=all', icon: MessageSquare, match: ['/communications'], keywords: ['inbox', 'conversations'] },
+      { labelKey: 'email', href: '/inbox?channel=email', icon: Mail, badge: 'email', keywords: ['gmail', 'email inbox'] },
+      { labelKey: 'whatsapp', href: '/inbox?channel=whatsapp', icon: Phone, badge: 'whatsapp', match: ['/whatsapp-inbox'], keywords: ['whatsapp inbox'] },
       { labelKey: 'aiCopilot', href: '/copilot', icon: Sparkles, keywords: ['drafts'] },
       { labelKey: 'messageTemplates', href: '/settings/message-templates', icon: FileText, match: ['/templates'] },
     ],

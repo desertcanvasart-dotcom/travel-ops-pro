@@ -104,7 +104,7 @@ describe('folder colours', () => {
 })
 
 describe('the inbox page', () => {
-  const page = readFileSync('app/inbox/page.tsx', 'utf8')
+  const page = readFileSync('app/inbox/_views/EmailView.tsx', 'utf8')
   it('has Report spam, Print, Unsubscribe, folder colours, select-all-matching and Rules', () => {
     expect(page).toContain("handleEmailAction('spam', ids)")
     expect(page).toContain('title="Print"')

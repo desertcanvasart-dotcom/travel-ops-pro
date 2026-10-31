@@ -11,6 +11,7 @@
 // not see is not offered, and asking for it by URL opens the first tab they
 // may see. Only the open tab renders — its view, and its data fetches, mount
 // on demand. The caller's page wraps this in <Suspense> (useSearchParams).
+// The strip is --tab-strip high (app/globals.css), for full-height views.
 
 import { Loader2 } from 'lucide-react'
 import { useEffect } from 'react'
@@ -54,8 +55,8 @@ export default function UrlTabs({ page, render }: { page: TabbedPage; render: (v
   return (
     <>
       {visible.length > 1 && (
-        <div className="bg-white border-b border-gray-200 px-4 md:px-6">
-          <nav className="flex gap-6 overflow-x-auto" role="tablist">
+        <div className="h-[var(--tab-strip)] bg-white border-b border-gray-200 px-4 md:px-6">
+          <nav className="flex gap-6 h-full overflow-x-auto" role="tablist">
             {visible.map(tab => {
               const Icon = tab.icon
               const on = tab.value === active.value
@@ -65,7 +66,7 @@ export default function UrlTabs({ page, render }: { page: TabbedPage; render: (v
                   role="tab"
                   aria-selected={on}
                   onClick={() => router.push(hrefFor(tab.value), { scroll: false })}
-                  className={`flex items-center gap-2 py-3 border-b-2 text-sm font-medium whitespace-nowrap transition-colors ${
+                  className={`flex items-center gap-2 h-full border-b-2 text-sm font-medium whitespace-nowrap transition-colors ${
                     on ? 'border-[#647C47] text-[#647C47]' : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
                 >

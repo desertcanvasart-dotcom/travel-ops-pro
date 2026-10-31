@@ -131,7 +131,7 @@ describe('wiring', () => {
   })
 
   it('every email composer goes through the guard', () => {
-    for (const f of ['app/inbox/page.tsx', 'components/unified/UnifiedMessageThread.tsx', 'components/unified/ComposeEmailModal.tsx']) {
+    for (const f of ['app/inbox/_views/EmailView.tsx', 'components/unified/UnifiedMessageThread.tsx', 'components/unified/ComposeEmailModal.tsx']) {
       const src = readFileSync(f, 'utf8')
       expect(src, f).toContain('sendGuardedEmail(')
       expect(src, f).not.toContain("fetch('/api/gmail/send'")

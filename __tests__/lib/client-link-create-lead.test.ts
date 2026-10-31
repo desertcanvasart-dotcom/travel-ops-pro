@@ -66,7 +66,7 @@ describe('the empty state offers the lead', () => {
   })
 
   it('is given the sender name at both call sites', () => {
-    const inbox = read('app/inbox/page.tsx')
+    const inbox = read('app/inbox/_views/EmailView.tsx')
     expect(inbox.match(/fromName=\{extractName\(selectedEmail\.from\)\}/g) ?? []).toHaveLength(2)
   })
 })

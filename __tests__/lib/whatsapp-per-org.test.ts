@@ -309,7 +309,9 @@ describe('inbox routes are scoped to the caller org', () => {
       .toMatch(/from\('whatsapp_conversations'\)[\s\S]*?\.eq\('org_id', orgId\)[\s\S]*?portal_message_threads/)
     const client = scoped('app/api/unified/client/[clientId]/route.ts')
     expect(client).toMatch(/from\('whatsapp_conversations'\)[\s\S]*?\.eq\('org_id', orgId\)\s*\n\s*\.eq\('client_id', clientId\)/)
-    expect(code('app/api/dashboard/summary/route.ts'))
+    // The dashboard's (and the sidebar badges') unread counts.
+    expect(code('app/api/dashboard/summary/route.ts')).toContain('unreadWhatsAppRows(supabase, orgId)')
+    expect(code('lib/inbox/unread-counts.ts'))
       .toMatch(/from\('whatsapp_conversations'\)\s*\n\s*\.select\('unread_count'\)\s*\n\s*\.eq\('org_id', orgId\)/)
     // The copilot reindex route is gone: it selected columns whatsapp_messages
     // does not have and could only ever 500 (K3).

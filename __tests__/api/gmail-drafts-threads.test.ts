@@ -93,7 +93,7 @@ describe('/api/gmail/threads', () => {
 
 describe('send and the inbox page', () => {
   const send = readFileSync('app/api/gmail/send/route.ts', 'utf8')
-  const page = readFileSync('app/inbox/page.tsx', 'utf8')
+  const page = readFileSync('app/inbox/_views/EmailView.tsx', 'utf8')
   it('send takes Cc and Bcc, refuses what is not an address, stores them, removes a sent draft', () => {
     expect(send).toContain('const ccList = parseRecipients(cc)')
     expect(send).toContain('Not an email address:')

@@ -167,7 +167,7 @@ export async function GET(request: NextRequest) {
     }
 
     // The nonce is single-use: a connected flow spends it.
-    const done = NextResponse.redirect(new URL('/communications?gmail=connected', baseUrl))
+    const done = NextResponse.redirect(new URL('/inbox?channel=all&gmail=connected', baseUrl))
     clearNonceCookie(done)
     return done
   } catch (err: any) {

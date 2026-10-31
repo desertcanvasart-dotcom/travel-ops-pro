@@ -21,7 +21,7 @@ async function getHandler(request: NextRequest) {
   const result = await sendDueScheduledEmails({
     db: createServerClient(),
     gmailFor: async (mailboxUserId) => (await getAuthenticatedGmail(mailboxUserId)).gmail,
-    notify: (n) => createNotification({ ...n, type: 'email_failed', link: '/inbox', send_email: false }),
+    notify: (n) => createNotification({ ...n, type: 'email_failed', link: '/inbox?channel=email', send_email: false }),
   })
   const summary = `${result.sent} sent, ${result.retried} to retry, ${result.failed} failed`
   return NextResponse.json(

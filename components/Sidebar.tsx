@@ -9,8 +9,10 @@
 //
 // Sections fold, and the rate groups under Suppliers & Rates fold. What is
 // open is remembered per login in localStorage; the section and rate group
-// holding the current page always show open. Storage is read in an effect,
-// never during the first render, so the server's HTML and the browser's agree.
+// holding the current page always show open, and a folded section with
+// something new inside (an item's badge count) shows a dot. Storage is read
+// in an effect, never during the first render, so the server's HTML and the
+// browser's agree.
 
 import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
@@ -21,6 +23,7 @@ import { useAuth } from '@/app/contexts/AuthContext'
 import { useRole } from '@/hooks/useRole'
 import { MAIN_NAV, SETTINGS_HOME, type NavItem, type NavSection } from '@/lib/nav/config'
 import { activeHref } from '@/lib/nav/active'
+import { useNavBadges } from '@/lib/nav/use-nav-badges'
 
 interface SidebarProps {
   isCollapsed: boolean
@@ -113,6 +116,8 @@ function SidebarFrame({ isCollapsed, setIsCollapsed, mobileOpen, onMobileClose, 
     .filter(s => s.items.length > 0)
 
   const links = sections.flatMap(s => s.items.flatMap(i => i.children ?? [i]))
+  const badges = useNavBadges(links.some(l => l.badge))
+  const countOf = (item: NavItem) => (item.badge ? badges[item.badge] ?? 0 : 0)
   const current = activeHref(links, pathname, search)
   const currentSection = sections.find(s => s.items.some(i => (i.children ?? [i]).some(l => l.href === current)))?.key
   const currentGroup = sections.flatMap(s => s.items).find(i => i.children?.some(c => c.href === current))?.href
@@ -140,17 +145,22 @@ function SidebarFrame({ isCollapsed, setIsCollapsed, mobileOpen, onMobileClose, 
       >
         <Icon className={`${small ? 'w-4 h-4' : 'w-[18px] h-[18px]'} flex-shrink-0 ${active ? 'text-primary-600' : 'text-gray-500'}`} />
         <span className={`${small ? 'text-[12px]' : 'text-[13px]'} ${isCollapsed ? 'lg:hidden' : ''}`}>{t(item.labelKey)}</span>
+        {countOf(item) > 0 && (
+          <span className={`ml-auto min-w-[1.25rem] px-1.5 py-0.5 text-[10px] font-semibold leading-none text-center rounded-full bg-primary-600 text-white ${isCollapsed ? 'lg:hidden' : ''}`}>
+            {countOf(item) > 99 ? '99+' : countOf(item)}
+          </span>
+        )}
       </Link>
     )
   }
 
   return (
     <>
-      {mobileOpen && <div className="lg:hidden fixed inset-0 top-[var(--app-chrome)] bg-black/50 z-40" onClick={onMobileClose} />}
+      {mobileOpen && <div className="lg:hidden fixed inset-0 top-[var(--top-bar)] bg-black/50 z-40" onClick={onMobileClose} />}
 
       <aside
         className={`
-          fixed lg:static top-[var(--app-chrome)] bottom-0 left-0 z-40 lg:z-auto
+          fixed lg:static top-[var(--top-bar)] bottom-0 left-0 z-40 lg:z-auto
           bg-white border-r border-gray-200 flex flex-col shrink-0
           transition-all duration-300 ease-in-out w-56
           ${isCollapsed ? 'lg:w-16' : 'lg:w-56'}
@@ -160,15 +170,16 @@ function SidebarFrame({ isCollapsed, setIsCollapsed, mobileOpen, onMobileClose, 
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1 scrollbar-thin">
           {sections.map(section => {
             const open = section.untitled || isCollapsed || fold.sections.includes(section.key) || section.key === currentSection
+            const news = section.items.some(i => (i.children ?? [i]).some(l => countOf(l) > 0))
             return (
               <div key={section.key}>
                 {!section.untitled && (isCollapsed ? (
                   <>
                     <div className="hidden lg:block h-px bg-gray-200 my-2 mx-2" />
-                    <SectionHeader className="lg:hidden" title={t(section.titleKey)} open={open} onClick={() => toggle('sections', section.key)} />
+                    <SectionHeader className="lg:hidden" title={t(section.titleKey)} open={open} news={news} onClick={() => toggle('sections', section.key)} />
                   </>
                 ) : (
-                  <SectionHeader title={t(section.titleKey)} open={open} onClick={() => toggle('sections', section.key)} />
+                  <SectionHeader title={t(section.titleKey)} open={open} news={news} onClick={() => toggle('sections', section.key)} />
                 ))}
                 {open && (
                   <div className="space-y-0.5">
@@ -225,14 +236,17 @@ function SidebarFrame({ isCollapsed, setIsCollapsed, mobileOpen, onMobileClose, 
   )
 }
 
-function SectionHeader({ title, open, onClick, className = '' }: { title: string; open: boolean; onClick: () => void; className?: string }) {
+function SectionHeader({ title, open, news, onClick, className = '' }: { title: string; open: boolean; news: boolean; onClick: () => void; className?: string }) {
   return (
     <button
       onClick={onClick}
       aria-expanded={open}
       className={`flex items-center justify-between w-full px-2 py-1.5 mt-2 mb-0.5 rounded-md hover:bg-gray-50 transition-colors group ${className}`}
     >
-      <h3 className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider group-hover:text-gray-600">{title}</h3>
+      <h3 className="flex items-center gap-1.5 text-[10px] font-semibold text-gray-400 uppercase tracking-wider group-hover:text-gray-600">
+        {title}
+        {!open && news && <span className="w-1.5 h-1.5 rounded-full bg-primary-600" aria-label="new" />}
+      </h3>
       <ChevronDown className={`w-3 h-3 text-gray-400 transition-transform duration-200 ${open ? '' : '-rotate-90'}`} />
     </button>
   )

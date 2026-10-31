@@ -7,7 +7,7 @@ import { canOpenFromMenu, menuRolesFor } from '@/lib/dashboard/menu-access'
 describe('menu roles', () => {
   it('an item without roles takes its section’s; neither means everyone', () => {
     expect(menuRolesFor('/dashboard')).toBeNull()
-    expect(menuRolesFor('/communications')).toEqual(['admin', 'manager', 'agent'])
+    expect(menuRolesFor('/inbox?channel=all')).toEqual(['admin', 'manager', 'agent'])
     expect(menuRolesFor('/rates')).toEqual(['admin', 'manager'])
   })
   it('a sub-page is answered by the deepest menu item containing it', () => {
@@ -22,7 +22,7 @@ describe('menu roles', () => {
 })
 
 describe('what the dashboard links for each role', () => {
-  const LINKS = ['/rates', '/itineraries/new', '/tours', '/tasks', '/followups', '/clients', '/itineraries', '/communications', '/calendar']
+  const LINKS = ['/rates', '/itineraries/new', '/tours', '/tasks', '/followups', '/clients', '/itineraries', '/inbox?channel=all', '/calendar']
   const open = (role: string | null) => LINKS.filter(h => canOpenFromMenu(role, h))
 
   it('a viewer opens none of them', () => {
@@ -30,7 +30,7 @@ describe('what the dashboard links for each role', () => {
   })
   it('an agent does not get the Rates Hub', () => {
     expect(canOpenFromMenu('agent', '/rates')).toBe(false)
-    expect(open('agent')).toEqual(expect.arrayContaining(['/followups', '/clients', '/communications', '/calendar']))
+    expect(open('agent')).toEqual(expect.arrayContaining(['/followups', '/clients', '/inbox?channel=all', '/calendar']))
   })
   it('the owner and admins open all of them', () => {
     expect(open('owner')).toEqual(LINKS)
@@ -46,7 +46,7 @@ describe('the dashboard page asks the menu, not a list of its own', () => {
   it('every card, action and View all goes through linkFor', () => {
     expect(page).toContain("import { canOpenFromMenu } from '@/lib/dashboard/menu-access'")
     // No literal href on a StatCard or Quick Action any more
-    expect(page).not.toMatch(/href="\/(rates|tours|tasks|clients|calendar|bookings|communications)"/)
+    expect(page).not.toMatch(/href="\/(rates|tours|tasks|clients|calendar|bookings|communications|inbox)"/)
     expect(page).toMatch(/\.filter\(a => linkFor\(a\.href\)\)/)
   })
 })
