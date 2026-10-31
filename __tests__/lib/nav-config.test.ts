@@ -133,6 +133,12 @@ describe('redirects (lib/nav/redirects.js)', () => {
     expect(destinations.filter(d => !pageExists(d))).toEqual([])
   })
 
+  it('a page-only move keeps its sub-pages where they were (each quote)', () => {
+    for (const [from] of moved.filter(([f]) => !f.endsWith('/*') && f.endsWith('/quotes'))) {
+      expect(existsSync(join(process.cwd(), 'app', from, '[id]', 'page.tsx')), from).toBe(true)
+    }
+  })
+
   it('a moved section keeps its sub-pages (content library items, writing rules)', () => {
     for (const sub of ['rules', '[id]']) {
       expect(existsSync(join(process.cwd(), 'app/settings/content-library', sub, 'page.tsx'))).toBe(true)
@@ -166,7 +172,9 @@ describe('redirects (lib/nav/redirects.js)', () => {
         const src = readFileSync(p, 'utf8')
         for (const [from] of moved) {
           const base = from.replace(/\/\*$/, '')
-          if (new RegExp(`(href=|href:|push\\()\\s*["'\`]${base.replace(/\//g, '\\/')}(["'\`/?#])`).test(src)) offenders.push(`${p}: ${base}`)
+          // A page-only move (no /*) leaves its sub-pages where they were.
+          const after = from.endsWith('/*') ? `["'\`/?#]` : `["'\`?#]`
+          if (new RegExp(`(href=|href:|push\\()\\s*["'\`]${base.replace(/\//g, '\\/')}${after}`).test(src)) offenders.push(`${p}: ${base}`)
         }
         if (/["'`]\/settings\?tab=/.test(src)) offenders.push(`${p}: /settings?tab=`)
       }

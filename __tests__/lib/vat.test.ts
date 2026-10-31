@@ -204,11 +204,11 @@ describe('every document renders the marker, in both states', () => {
       expect(s, p).toContain('<VatToken')
       expect(s, p).toContain('<VatToggle')
     }
-    for (const p of ['app/b2b/quotes/page.tsx', 'app/b2c/quotes/page.tsx', 'app/itineraries/[id]/page.tsx', 'app/bookings/[id]/page.tsx', 'app/documents/receipt/[id]/page.tsx', 'app/documents/invoice/[id]/page.tsx']) {
+    for (const p of ['app/quotes/_views/B2BQuotesView.tsx', 'app/quotes/_views/B2CQuotesView.tsx', 'app/itineraries/[id]/page.tsx', 'app/bookings/[id]/page.tsx', 'app/documents/receipt/[id]/page.tsx', 'app/documents/invoice/[id]/page.tsx']) {
       expect(src(p), p).toContain('<VatToken')
     }
     expect(src('app/b2b/calculator/[id]/page.tsx')).toContain('vat_applied: vatApplied')
-    expect(src('app/b2c/quotes/page.tsx')).toContain('vat_applied: vatApplied')
+    expect(src('app/quotes/_views/B2CQuotesView.tsx')).toContain('vat_applied: vatApplied')
   })
 })
 

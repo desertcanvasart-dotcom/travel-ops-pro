@@ -93,6 +93,9 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/b2b/calculator': ['admin', 'manager', 'agent'],
   '/intake/order': ['admin', 'manager', 'agent'],
   '/b2c/quotes': ['admin', 'manager'],
+  // Quotes: B2C (managers and above) · B2B (agents and above) as tabs; the
+  // page is the union, each quote's own page keeps its gate above.
+  '/quotes': ['admin', 'manager', 'agent'],
   // Operate. Departures, Capacity, Documents and Guest Surveys are the
   // managers' screens in the menu; with no entry here any member opened them
   // by URL. Agents still open a single voucher, contract, invoice or receipt
