@@ -199,7 +199,7 @@ describe('every document renders the marker, in both states', () => {
   })
 
   it('the screens show the token, and the forms the toggle (source)', () => {
-    for (const p of ['app/b2b/quotes/[id]/page.tsx', 'app/b2c/quotes/[id]/page.tsx', 'app/invoices/[id]/page.tsx', 'app/invoices/invoices-content.tsx']) {
+    for (const p of ['app/b2b/quotes/[id]/page.tsx', 'app/b2c/quotes/[id]/page.tsx', 'app/invoices/[id]/page.tsx', 'app/invoices/_views/InvoicesView.tsx']) {
       const s = src(p)
       expect(s, p).toContain('<VatToken')
       expect(s, p).toContain('<VatToggle')
