@@ -339,7 +339,10 @@
     "resources": "Resource Management",
     "paymentReminders": "Payment Reminders",
     "opsBoard": "Ops Board",
-    "newItinerary": "New itinerary"
+    "newItinerary": "New itinerary",
+    "ratesOverview": "Overview",
+    "rateRows": "{count, plural, one {# row} other {# rows}}",
+    "rateCategories": "Rate categories"
   },
   "roles": {
     "admin": "Admin",
