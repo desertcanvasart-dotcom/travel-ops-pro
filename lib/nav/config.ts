@@ -158,6 +158,15 @@ export const RATE_GROUPS: RateGroup[] = [
 // own API gate. __tests__/api/menu-page-gates.test.ts holds the union to the
 // middleware.
 export const TABBED_PAGES: TabbedPage[] = [
+  // Invoices (agents and above: reservation staff issue them) and the
+  // receivables aging (/accounts-receivable, managers and above).
+  {
+    path: '/invoices', param: 'tab',
+    tabs: [
+      { value: 'all', labelKey: 'invoices', icon: FileText, roles: STAFF },
+      { value: 'unpaid', labelKey: 'receivables', icon: Wallet, roles: AM },
+    ],
+  },
   // Departures and the capacity month grid (/capacity), both managers and
   // above as each page was. Each departure keeps /departures/<id>.
   {
@@ -294,7 +303,9 @@ export const MAIN_NAV: NavSection[] = [
     key: 'finance', titleKey: 'finance', roles: STAFF,
     items: [
       { labelKey: 'invoices', href: '/invoices', icon: FileText, roles: STAFF },
-      { labelKey: 'receivables', href: '/accounts-receivable', icon: Wallet, roles: AM },
+      // A tab of Invoices AND its own link: used every day (the first cut,
+      // which hid it, was rejected on autoura-saas).
+      { labelKey: 'receivables', href: '/invoices?tab=unpaid', icon: Wallet, roles: AM, match: ['/accounts-receivable'], keywords: ['accounts receivable', 'unpaid', 'aging'] },
       { labelKey: 'payments', href: '/payments', icon: DollarSign, roles: STAFF },
       { labelKey: 'receipts', href: '/receipts', icon: Receipt, roles: AM },
       { labelKey: 'supplierInvoices', href: '/supplier-invoices', icon: ReceiptText, roles: AM, keywords: ['supplier bills'] },

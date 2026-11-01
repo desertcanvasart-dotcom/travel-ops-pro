@@ -414,7 +414,7 @@ export default function DashboardPage() {
               : undefined}
             badgeColor="danger"
             subtitle={t('invoicesCount', { count: money.receivables.count })}
-            href={linkFor('/accounts-receivable')}
+            href={linkFor('/invoices?tab=unpaid')}
             color="primary"
           />
           <StatCard

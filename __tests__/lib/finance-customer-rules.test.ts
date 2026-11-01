@@ -93,7 +93,7 @@ describe('Invoices: overdue and the money tiles', () => {
     expect(shown.filter(r => r.status === 'overdue')).toHaveLength(1)
     expect(shown.filter(r => r.status === 'sent')).toHaveLength(1)
     // …and the page no longer asks the API for a status.
-    const page = src('app/invoices/invoices-content.tsx')
+    const page = src('app/invoices/_views/InvoicesView.tsx')
     expect(page).not.toContain("params.append('status'")
     expect(page).toContain('!statusFilter || invoice.status === statusFilter')
   })

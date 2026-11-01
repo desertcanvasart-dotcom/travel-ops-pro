@@ -135,7 +135,7 @@ describe('numbers on documents', () => {
   it("dates are the business's, not UTC's", () => {
     expect(src('lib/booking-creation.ts')).toContain('booked_on: input.bookedOn ?? businessToday()')
     expect(src('app/api/whatsapp/send-contract/route.ts')).toContain('contractDate: `${businessToday()}T12:00:00Z`')
-    for (const p of ['app/itineraries/[id]/page.tsx', 'app/itineraries/[id]/edit/page.tsx', 'app/invoices/invoices-content.tsx']) {
+    for (const p of ['app/itineraries/[id]/page.tsx', 'app/itineraries/[id]/edit/page.tsx', 'app/invoices/_views/InvoicesView.tsx']) {
       expect(src(p), p).toContain('addDays(todayLocal(), 14)')
     }
   })

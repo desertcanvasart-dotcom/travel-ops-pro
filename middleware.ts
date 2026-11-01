@@ -44,7 +44,6 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/supplier-invoices': ['admin', 'manager'],
   '/commissions': ['admin', 'manager'],
   '/profit-loss': ['admin', 'manager'],
-  '/accounts-receivable': ['admin', 'manager'],
   '/accounts-payable': ['admin', 'manager'],
   '/rates': ['admin', 'manager'],
   // Suppliers & Rates: the supplier roster is the managers' screen; with no
@@ -60,6 +59,8 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   '/clients': ['admin', 'manager', 'agent'],
   '/itineraries': ['admin', 'manager', 'agent'],
   '/bookings': ['admin', 'manager', 'agent'],
+  // Invoices: All (agents and above) · Unpaid, the receivables aging
+  // (managers and above, and /api/accounts-receivable is FINANCIAL_API_PREFIXES).
   '/invoices': ['admin', 'manager', 'agent'],
   '/payments': ['admin', 'manager', 'agent'],
   // Tasks · Follow-ups as tabs (?type=), both agent-and-above.
