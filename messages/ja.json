@@ -339,7 +339,10 @@
     "resources": "リソース管理",
     "paymentReminders": "支払いリマインダー",
     "opsBoard": "運行ボード",
-    "newItinerary": "新規旅程"
+    "newItinerary": "新規旅程",
+    "ratesOverview": "概要",
+    "rateRows": "{count}件",
+    "rateCategories": "料金カテゴリー"
   },
   "roles": {
     "admin": "管理者",
