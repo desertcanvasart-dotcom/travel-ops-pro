@@ -182,7 +182,7 @@ describe('#5 counts are validated; a day can be reset; a limit cleared', () => {
   })
 
   it('the page opens on the user\'s own month, can reset days and clear limits', () => {
-    const s = src('app/capacity/page.tsx')
+    const s = src('app/departures/_views/CapacityView.tsx')
     expect(s).not.toContain('today.getUTCMonth()')
     expect(s).toContain('Number(todayLocal().slice(5, 7)) - 1')
     expect(s).toContain("fetch(`/api/capacity?start_date=${first}&end_date=${last}`, { method: 'DELETE' })")

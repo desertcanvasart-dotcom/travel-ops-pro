@@ -250,7 +250,7 @@ test('P&L returns ONLY the caller\'s own org (regression: no org filter)', async
 
 test('capacity page renders the month grid', async ({ page }) => {
   const errorsOf = watchConsole(page)
-  await page.goto('/capacity')
+  await page.goto('/departures?view=capacity')
   await expect(page.getByRole('heading', { name: 'Capacity' })).toBeVisible({ timeout: 20_000 })
   // The grid itself, not just the shell: seven weekday headers.
   await expect(page.getByText('Mon', { exact: true })).toBeVisible()

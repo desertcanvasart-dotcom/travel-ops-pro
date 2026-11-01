@@ -153,7 +153,7 @@ describe('departures', () => {
   it('"upcoming" uses the caller\'s today, which the page sends', () => {
     expect(src('app/api/departures/route.ts')).toContain('todayFromRequest(request.url)')
     expect(src('app/api/departures/route.ts')).not.toContain("new Date().toISOString().split('T')[0]")
-    expect(src('app/departures/page.tsx')).toContain('upcoming=true&today=${todayLocal()}')
+    expect(src('app/departures/_views/DeparturesListView.tsx')).toContain('upcoming=true&today=${todayLocal()}')
   })
 
   it('a single departure reads booking columns that exist', () => {
@@ -176,7 +176,7 @@ describe('departures', () => {
   })
 
   it('a clone keeps its price currency', () => {
-    const s = src('app/departures/page.tsx')
+    const s = src('app/departures/_views/DeparturesListView.tsx')
     // Operate audit (Departures #6): a new departure starts in the company's
     // own currency, not EUR.
     expect(s).toContain('currency: departure.currency || orgCurrency')
