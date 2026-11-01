@@ -1,0 +1,525 @@
+'use client'
+
+import { useEffect, useState } from 'react'
+import { useTranslations } from 'next-intl'
+import { useConfirm, useConfirmDialog } from '@/components/ConfirmDialog'
+import { fetchAllPages } from '@/lib/fetch-all-pages'
+import { emptyTotals, formatMoney, formatTotals } from '@/lib/currency-totals'
+import { isReceivedTripPayment, paymentStats, type PaymentStats } from '@/lib/payments/stats'
+import { invoicedTripIds, isOnInvoicedTrip } from '@/lib/payments/ledger'
+import { todayLocal } from '@/lib/today'
+import {
+  DollarSign,
+  TrendingUp,
+  Clock,
+  CheckCircle,
+  AlertCircle,
+  Search,
+  FileText,
+  ExternalLink,
+  Plus,
+  MapPin,
+  Download,
+  ArrowRightLeft
+} from 'lucide-react'
+import Link from 'next/link'
+import { exportFinanceCSV, exportFinancePDF } from '@/lib/finance-export'
+
+interface UnifiedPayment {
+  id: string
+  source: 'invoice' | 'itinerary'
+  source_id: string
+  source_reference: string
+  client_name: string
+  client_email?: string
+  amount: number
+  currency: string
+  payment_method: string
+  payment_date: string
+  transaction_reference: string | null
+  notes: string | null
+  created_at: string
+  /** A trip payment that is not money received (pending, failed, refunded, or a refund): shown, not counted. */
+  not_counted?: 'refund' | 'not_completed' | 'on_invoice'
+  /** A received trip payment on a trip that has a live invoice: can be moved onto that invoice. */
+  movable?: boolean
+}
+
+export default function PaymentsPage() {
+  const t = useTranslations('payments')
+  const tCommon = useTranslations('common')
+  const dialog = useConfirmDialog()
+  const confirmDialog = useConfirm()
+  const [payments, setPayments] = useState<UnifiedPayment[]>([])
+  const [filteredPayments, setFilteredPayments] = useState<UnifiedPayment[]>([])
+  const [loading, setLoading] = useState(true)
+  const [stats, setStats] = useState<PaymentStats>({
+    totalReceived: emptyTotals(),
+    pendingPayments: emptyTotals(),
+    overduePayments: emptyTotals(),
+    thisMonthRevenue: emptyTotals()
+  })
+
+  const [methodFilter, setMethodFilter] = useState('all')
+  const [sourceFilter, setSourceFilter] = useState('all')
+  const [searchQuery, setSearchQuery] = useState('')
+
+  useEffect(() => {
+    fetchAllPayments()
+  }, [])
+
+  useEffect(() => {
+    filterPayments()
+  }, [payments, methodFilter, sourceFilter, searchQuery])
+
+  const fetchAllPayments = async () => {
+    setLoading(true)
+    try {
+      // Fetch from both sources in parallel, walking every page: the stats
+      // cards (total received / pending / overdue) sum across ALL rows, and a
+      // one-shot capped request would silently truncate past the API's 1000-row
+      // page cap. Invoices come with their payments embedded
+      // (?include=payments) to avoid a per-invoice request waterfall.
+      const [itineraryPayments, invoices] = await Promise.all([
+        fetchAllPages<any>('/api/payments'),
+        fetchAllPages<any>('/api/invoices?include=payments')
+      ])
+
+      const allPayments: UnifiedPayment[] = []
+      // A trip with an invoice takes its money on the invoice; an older trip
+      // payment on such a trip is listed but not added again (lib/payments/ledger).
+      const invoiced = invoicedTripIds(invoices)
+
+      // Process itinerary payments
+      {
+        itineraryPayments.forEach((p: any) => {
+          allPayments.push({
+            id: p.id,
+            source: 'itinerary',
+            source_id: p.itinerary_id,
+            source_reference: p.itinerary_code || p.itineraries?.itinerary_code || 'N/A',
+            client_name: p.client_name || p.itineraries?.client_name || 'Unknown',
+            client_email: undefined,
+            amount: Number(p.amount) || 0,
+            currency: p.currency || 'EUR',
+            payment_method: p.payment_method || 'unknown',
+            payment_date: p.payment_date,
+            transaction_reference: p.transaction_reference,
+            notes: p.notes,
+            created_at: p.created_at,
+            movable: isOnInvoicedTrip(p, invoiced) && isReceivedTripPayment(p) ? true : undefined,
+            not_counted: isOnInvoicedTrip(p, invoiced) ? 'on_invoice' : isReceivedTripPayment(p) ? undefined : p.payment_type === 'refund' ? 'refund' : 'not_completed'
+          })
+        })
+      }
+
+      // Process invoice payments
+      {
+        for (const invoice of invoices) {
+          // Payments come embedded on the invoice (?include=payments) — no
+          // per-invoice fetch needed
+          const invoicePayments = invoice.invoice_payments
+          if (Array.isArray(invoicePayments)) {
+            invoicePayments.forEach((p: any) => {
+              allPayments.push({
+                id: p.id,
+                source: 'invoice',
+                source_id: invoice.id,
+                source_reference: invoice.invoice_number,
+                client_name: invoice.client_name || 'Unknown',
+                client_email: invoice.client_email,
+                amount: Number(p.amount) || 0,
+                currency: p.currency || invoice.currency || 'EUR',
+                payment_method: p.payment_method || 'unknown',
+                payment_date: p.payment_date,
+                transaction_reference: p.transaction_reference,
+                notes: p.notes,
+                created_at: p.created_at
+              })
+            })
+          }
+        }
+      }
+
+      // Sort all payments by date (newest first)
+      allPayments.sort((a, b) => {
+        const dateA = new Date(a.payment_date || a.created_at)
+        const dateB = new Date(b.payment_date || b.created_at)
+        return dateB.getTime() - dateA.getTime()
+      })
+
+      setPayments(allPayments)
+      // The four tiles (lib/payments/stats): completed payments only, overdue
+      // worked out the way the Invoices page does.
+      setStats(paymentStats(itineraryPayments, invoices, todayLocal()))
+
+    } catch (error) {
+      console.error('Error fetching payments:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const filterPayments = () => {
+    let filtered = payments
+
+    if (methodFilter !== 'all') {
+      filtered = filtered.filter(p => p.payment_method === methodFilter)
+    }
+
+    if (sourceFilter !== 'all') {
+      filtered = filtered.filter(p => p.source === sourceFilter)
+    }
+
+    if (searchQuery) {
+      const query = searchQuery.toLowerCase()
+      filtered = filtered.filter(p =>
+        p.client_name?.toLowerCase().includes(query) ||
+        p.source_reference?.toLowerCase().includes(query) ||
+        p.transaction_reference?.toLowerCase().includes(query)
+      )
+    }
+
+    setFilteredPayments(filtered)
+  }
+
+  // Re-records the payment on the trip's invoice and deletes the trip row; the
+  // server refuses (and says why) when it would exceed the invoice balance.
+  const handleMoveToInvoice = async (payment: UnifiedPayment) => {
+    if (!(await confirmDialog(t('confirmMoveToInvoice')))) return
+    try {
+      const response = await fetch(`/api/payments/${payment.id}/move-to-invoice`, { method: 'POST' })
+      if (response.ok) {
+        await fetchAllPayments()
+      } else {
+        const result = await response.json().catch(() => ({}))
+        await dialog.alert(tCommon('error'), result.error || t('failedToMoveToInvoice'), 'warning')
+        // The invoice payment may exist even though the delete failed.
+        if (result.moved) await fetchAllPayments()
+      }
+    } catch (error) {
+      console.error('Error moving the payment to the invoice:', error)
+      await dialog.alert(tCommon('error'), t('failedToMoveToInvoice'), 'warning')
+    }
+  }
+
+  const getMethodLabel = (method: string) => {
+    const methodKeys: Record<string, string> = {
+      bank_transfer: 'bankTransfer',
+      credit_card: 'creditCard',
+      cash: 'cash',
+      paypal: 'paypal',
+      wise: 'wise',
+      airwallex: 'airwallex',
+      stripe: 'stripe',
+      tab: 'tab'
+    }
+    const key = methodKeys[method]
+    return key ? t(key) : method
+  }
+
+  // The currency this screen is mostly in — what a zero tile should be
+  // denominated in, rather than defaulting to euro on a page of yen.
+  const listCurrency =
+    Object.entries(stats.totalReceived).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0]
+    || Object.entries(stats.pendingPayments).sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0]?.[0]
+    || 'EUR'
+
+  const getSourceLink = (payment: UnifiedPayment) => {
+    if (payment.source === 'invoice') {
+      return `/invoices/${payment.source_id}`
+    }
+    return `/itineraries/${payment.source_id}`
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen">
+        <div className="text-center">
+          <div className="w-8 h-8 border-4 border-primary-600 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+          <p className="text-sm text-gray-600">{t('loadingPayments')}</p>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-4 lg:p-6 space-y-4">
+      {/* Header */}
+      <div className="flex justify-between items-center flex-wrap gap-y-2">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">{t('paymentTracking')}</h1>
+          <p className="text-sm text-gray-600 mt-1">{t('allPaymentsDescription')}</p>
+        </div>
+        <div className="flex items-center gap-2 flex-wrap">
+          <button
+            onClick={() => {
+              const cols = [
+                { key: 'payment_date', label: 'Date' },
+                { key: 'source', label: 'Source' },
+                { key: 'source_reference', label: 'Reference' },
+                { key: 'client_name', label: 'Client' },
+                { key: 'amount', label: 'Amount', align: 'right' as const, money: true },
+                { key: 'payment_method', label: 'Method' },
+                { key: 'transaction_reference', label: 'Txn Ref' },
+              ]
+              exportFinanceCSV(filteredPayments as unknown as Record<string, unknown>[], cols, 'payments')
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <Download className="w-3.5 h-3.5" />
+            CSV
+          </button>
+          <button
+            onClick={() => {
+              const cols = [
+                { key: 'payment_date', label: 'Date' },
+                { key: 'source', label: 'Source' },
+                { key: 'source_reference', label: 'Reference' },
+                { key: 'client_name', label: 'Client' },
+                { key: 'amount', label: 'Amount', align: 'right' as const, money: true },
+                { key: 'payment_method', label: 'Method' },
+                { key: 'transaction_reference', label: 'Txn Ref' },
+              ]
+              exportFinancePDF({
+                title: 'Payments Report',
+                summary: [
+                  { label: 'Total Received', value: formatTotals(stats.totalReceived, { defaultCurrency: listCurrency }) },
+                  { label: 'Pending', value: formatTotals(stats.pendingPayments, { defaultCurrency: listCurrency }) },
+                  { label: 'Overdue', value: formatTotals(stats.overduePayments, { defaultCurrency: listCurrency }) },
+                  { label: 'This Month', value: formatTotals(stats.thisMonthRevenue, { defaultCurrency: listCurrency }) },
+                ],
+                data: filteredPayments as unknown as Record<string, unknown>[],
+                columns: cols,
+                filename: 'payments',
+              })
+            }}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-gray-600 border border-gray-200 rounded-lg hover:bg-gray-50 transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            PDF
+          </button>
+          <Link
+            href="/payments/new"
+            className="bg-primary-600 text-white px-3 py-1.5 text-sm rounded-lg hover:bg-primary-700 flex items-center gap-2 font-medium"
+          >
+            <Plus className="w-4 h-4" />
+            {t('addPayment')}
+          </Link>
+          <Link
+            href="/invoices"
+            className="bg-gray-100 text-gray-700 px-3 py-1.5 text-sm rounded-lg hover:bg-gray-200 flex items-center gap-2 font-medium"
+          >
+            <FileText className="w-4 h-4" />
+            {t('viewInvoices')}
+          </Link>
+        </div>
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <CheckCircle className="w-4 h-4 text-gray-400" />
+            <div className="w-1.5 h-1.5 rounded-full bg-green-500" />
+          </div>
+          <h3 className="text-xs text-gray-600 font-medium">{t('totalReceived')}</h3>
+          <p className="text-2xl font-bold text-gray-900 mt-1">
+            {formatTotals(stats.totalReceived, { defaultCurrency: listCurrency })}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">{t('allTimePayments')}</p>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <Clock className="w-4 h-4 text-gray-400" />
+            <div className="w-1.5 h-1.5 rounded-full bg-orange-500" />
+          </div>
+          <h3 className="text-xs text-gray-600 font-medium">{t('pendingPayments')}</h3>
+          <p className="text-2xl font-bold text-gray-900 mt-1">
+            {formatTotals(stats.pendingPayments, { defaultCurrency: listCurrency })}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">{t('outstandingBalance')}</p>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <AlertCircle className="w-4 h-4 text-gray-400" />
+            <div className="w-1.5 h-1.5 rounded-full bg-red-500" />
+          </div>
+          <h3 className="text-xs text-gray-600 font-medium">{t('overdue')}</h3>
+          <p className="text-2xl font-bold text-red-600 mt-1">
+            {formatTotals(stats.overduePayments, { defaultCurrency: listCurrency })}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">{t('pastDueDate')}</p>
+        </div>
+
+        <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp className="w-4 h-4 text-gray-400" />
+            <div className="w-1.5 h-1.5 rounded-full bg-primary-600" />
+          </div>
+          <h3 className="text-xs text-gray-600 font-medium">{t('thisMonth')}</h3>
+          <p className="text-2xl font-bold text-gray-900 mt-1">
+            {formatTotals(stats.thisMonthRevenue, { defaultCurrency: listCurrency })}
+          </p>
+          <p className="text-xs text-gray-500 mt-1">{t('revenueThisMonth')}</p>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3 flex flex-wrap gap-3">
+        <div className="flex-1 min-w-[200px] relative">
+          <input
+            type="text"
+            placeholder={t('searchPaymentsPlaceholder')}
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="w-full pl-3 pr-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
+        </div>
+        <select
+          value={sourceFilter}
+          onChange={(e) => setSourceFilter(e.target.value)}
+          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="all">{t('allSources')}</option>
+          <option value="invoice">{t('invoicePayments')}</option>
+          <option value="itinerary">{t('itineraryPayments')}</option>
+        </select>
+        <select
+          value={methodFilter}
+          onChange={(e) => setMethodFilter(e.target.value)}
+          className="px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="all">{t('allMethods')}</option>
+          <option value="bank_transfer">{t('bankTransfer')}</option>
+          <option value="credit_card">{t('creditCard')}</option>
+          <option value="cash">{t('cash')}</option>
+          <option value="paypal">{t('paypal')}</option>
+          <option value="wise">{t('wise')}</option>
+          <option value="airwallex">{t('airwallex')}</option>
+          <option value="stripe">{t('stripe')}</option>
+          <option value="tab">{t('tab')}</option>
+        </select>
+      </div>
+
+      <div className="text-xs text-gray-600">
+        {t('showingOfPayments', { count: filteredPayments.length, total: payments.length })}
+      </div>
+
+      {/* Payments Table */}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-50">
+              <tr>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('date')}</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('source')}</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('reference')}</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('client')}</th>
+                <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase tracking-wider">{t('amount')}</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('method')}</th>
+                <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">{t('txnRef')}</th>
+                <th className="px-4 py-2 text-center text-xs font-medium text-gray-500 uppercase tracking-wider">{t('actions')}</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-200">
+              {filteredPayments.map((payment) => (
+                <tr key={`${payment.source}-${payment.id}`} className="hover:bg-gray-50">
+                  <td className="px-4 py-3 text-sm text-gray-900">
+                    {payment.payment_date
+                      ? new Date(payment.payment_date).toLocaleDateString()
+                      : '-'
+                    }
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium ${
+                      payment.source === 'invoice'
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'bg-purple-100 text-purple-700'
+                    }`}>
+                      {payment.source === 'invoice' ? (
+                        <FileText className="w-3 h-3" />
+                      ) : (
+                        <MapPin className="w-3 h-3" />
+                      )}
+                      {payment.source === 'invoice' ? t('invoice') : t('itinerary')}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Link
+                      href={getSourceLink(payment)}
+                      className="text-sm font-mono text-blue-600 hover:text-blue-800 hover:underline"
+                    >
+                      {payment.source_reference}
+                    </Link>
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="text-sm font-medium text-gray-900">{payment.client_name}</div>
+                    {payment.client_email && (
+                      <div className="text-xs text-gray-500">{payment.client_email}</div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <span className={`text-sm font-bold ${payment.not_counted ? 'text-gray-400' : 'text-green-600'}`}>
+                      {formatMoney(payment.amount, payment.currency)}
+                    </span>
+                    {payment.not_counted && (
+                      <div className="text-xs text-gray-500">{payment.not_counted === 'refund' ? t('refundTag') : payment.not_counted === 'on_invoice' ? t('onInvoiceTag') : t('notCompletedTag')}</div>
+                    )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">
+                      {getMethodLabel(payment.payment_method)}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-600 font-mono">
+                    {payment.transaction_reference || '-'}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex gap-2 justify-center">
+                      <Link
+                        href={getSourceLink(payment)}
+                        className="text-gray-400 hover:text-blue-600 transition-colors"
+                        title={payment.source === 'invoice' ? t('invoice') : t('itinerary')}
+                      >
+                        <ExternalLink className="w-4 h-4" />
+                      </Link>
+                      {payment.movable && (
+                        <button
+                          onClick={() => handleMoveToInvoice(payment)}
+                          className="text-gray-400 hover:text-blue-600 transition-colors"
+                          title={t('moveToInvoice')}
+                          aria-label={t('moveToInvoice')}
+                        >
+                          <ArrowRightLeft className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {filteredPayments.length === 0 && (
+          <div className="text-center py-8 text-gray-500">
+            <DollarSign className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-base font-medium text-gray-900">{t('noPaymentsFound')}</p>
+            <p className="mt-2 text-sm text-gray-600">
+              <Link href="/payments/new" className="text-primary-600 hover:underline">
+                {t('recordFirstPayment')}
+              </Link>
+              {' '}{t('orCreateInvoice')}{' '}
+              <Link href="/invoices" className="text-primary-600 hover:underline">
+                {t('invoice')}
+              </Link>
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}

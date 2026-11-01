@@ -40,7 +40,6 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // People › Partners: the managers' screen. With no entry here any member —
   // an agent included — opened it by URL.
   '/b2b/partners': ['admin', 'manager'],
-  '/receipts': ['admin', 'manager'],
   '/supplier-invoices': ['admin', 'manager'],
   '/commissions': ['admin', 'manager'],
   '/profit-loss': ['admin', 'manager'],
@@ -62,6 +61,7 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // Invoices: All (agents and above) · Unpaid, the receivables aging
   // (managers and above, and /api/accounts-receivable is FINANCIAL_API_PREFIXES).
   '/invoices': ['admin', 'manager', 'agent'],
+  // Payments: Payments (agents and above) · Receipts (managers and above).
   '/payments': ['admin', 'manager', 'agent'],
   // Tasks · Follow-ups as tabs (?type=), both agent-and-above.
   '/tasks': ['admin', 'manager', 'agent'],
