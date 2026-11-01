@@ -158,6 +158,15 @@ export const RATE_GROUPS: RateGroup[] = [
 // own API gate. __tests__/api/menu-page-gates.test.ts holds the union to the
 // middleware.
 export const TABBED_PAGES: TabbedPage[] = [
+  // Departures and the capacity month grid (/capacity), both managers and
+  // above as each page was. Each departure keeps /departures/<id>.
+  {
+    path: '/departures', param: 'view',
+    tabs: [
+      { value: 'list', labelKey: 'departures', icon: Calendar, roles: AM },
+      { value: 'capacity', labelKey: 'capacity', icon: CalendarDays, roles: AM },
+    ],
+  },
   // Tasks and client follow-ups: two tables, two lists, one page. Both every
   // staff role's, as each page was.
   {
@@ -246,8 +255,8 @@ export const MAIN_NAV: NavSection[] = [
     items: [
       // Tasks · Follow-ups as tabs (Follow-ups is in ⌘K by name).
       { labelKey: 'tasks', href: '/tasks', icon: CheckSquare, roles: STAFF, match: ['/followups'] },
-      { labelKey: 'departures', href: '/departures', icon: Calendar, roles: AM },
-      { labelKey: 'capacity', href: '/capacity', icon: CalendarDays, roles: AM },
+      // List · Capacity as views (?view=); Capacity is in ⌘K by name.
+      { labelKey: 'departures', href: '/departures', icon: Calendar, roles: AM, match: ['/capacity'] },
       { labelKey: 'documents', href: '/documents', icon: FileText, roles: AM, keywords: ['vouchers'] },
       { labelKey: 'guestSurveys', href: '/surveys', icon: ClipboardList, roles: AM },
     ],
@@ -375,6 +384,7 @@ export const JUMP_ONLY_PAGES: JumpPage[] = [
   { labelKey: 'b2cQuotes', href: '/quotes?tab=b2c', icon: FileText, roles: AM, hintKey: 'quotes' },
   { labelKey: 'b2bQuotes', href: '/quotes?tab=b2b', icon: FileText, roles: STAFF, hintKey: 'quotes' },
   { labelKey: 'followups', href: '/tasks?type=follow-up', icon: CheckSquare, roles: STAFF, hintKey: 'tasks' },
+  { labelKey: 'capacity', href: '/departures?view=capacity', icon: CalendarDays, roles: AM, hintKey: 'departures', keywords: ['capacity calendar'] },
   { labelKey: 'newItinerary', href: '/itineraries/new', icon: PlusCircle, roles: STAFF, hintKey: 'itineraries' },
   { labelKey: 'conciergeLeads', href: '/concierge-briefs', icon: ConciergeBell, roles: STAFF, hintKey: 'communicate', keywords: ['leads', 'briefs'] },
   { labelKey: 'whatsappParser', href: '/whatsapp-parser', icon: MessageSquare, roles: STAFF, hintKey: 'communicate' },

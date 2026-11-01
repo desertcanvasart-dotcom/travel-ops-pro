@@ -96,13 +96,12 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // Quotes: B2C (managers and above) · B2B (agents and above) as tabs; the
   // page is the union, each quote's own page keeps its gate above.
   '/quotes': ['admin', 'manager', 'agent'],
-  // Operate. Departures, Capacity, Documents and Guest Surveys are the
+  // Operate. Departures (List · Capacity as ?view=), Documents and Guest Surveys are the
   // managers' screens in the menu; with no entry here any member opened them
   // by URL. Agents still open a single voucher, contract, invoice or receipt
   // from a trip, booking or payment — those pages come BEFORE '/documents'
   // (the first matching key wins).
   '/departures': ['admin', 'manager'],
-  '/capacity': ['admin', 'manager'],
   '/surveys': ['admin', 'manager'],
   '/documents/supplier': ['admin', 'manager', 'agent'],
   '/documents/contract': ['admin', 'manager', 'agent'],
