@@ -50,7 +50,7 @@ describe('supplier invoices', () => {
   })
 
   it('the pages report a failed create and gate matching on status and currency', () => {
-    expect(src('app/supplier-invoices/page.tsx')).toContain('Creating the supplier invoice failed')
+    expect(src('app/supplier-bills/_views/BillsView.tsx')).toContain('Creating the supplier invoice failed')
     const page = src('app/supplier-invoices/[id]/page.tsx')
     expect(page).toContain("const matchable = invoice.status === 'received' || invoice.status === 'matched'")
     expect(page).toContain('!== invoiceCurrency')

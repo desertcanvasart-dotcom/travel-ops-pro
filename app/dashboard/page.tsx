@@ -427,7 +427,7 @@ export default function DashboardPage() {
             })}
             icon={CreditCard}
             subtitle={t('itemsCount', { count: money.payables.expenseCount + money.payables.billCount })}
-            href={linkFor('/accounts-payable')}
+            href={linkFor('/supplier-bills?tab=payables')}
             color="warning"
           />
           <StatCard

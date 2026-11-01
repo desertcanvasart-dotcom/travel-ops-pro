@@ -41,9 +41,11 @@ const ROUTE_PERMISSIONS: Record<string, string[]> = {
   // an agent included — opened it by URL.
   '/b2b/partners': ['admin', 'manager'],
   '/supplier-invoices': ['admin', 'manager'],
+  // Supplier bills: Bills · Payables as tabs, both managers and above (each
+  // bill keeps /supplier-invoices/<id>, gated above).
+  '/supplier-bills': ['admin', 'manager'],
   '/commissions': ['admin', 'manager'],
   '/profit-loss': ['admin', 'manager'],
-  '/accounts-payable': ['admin', 'manager'],
   '/rates': ['admin', 'manager'],
   // Suppliers & Rates: the supplier roster is the managers' screen; with no
   // entry here any member opened it by URL.

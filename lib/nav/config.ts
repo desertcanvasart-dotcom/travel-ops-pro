@@ -158,6 +158,16 @@ export const RATE_GROUPS: RateGroup[] = [
 // own API gate. __tests__/api/menu-page-gates.test.ts holds the union to the
 // middleware.
 export const TABBED_PAGES: TabbedPage[] = [
+  // Supplier bills (/supplier-invoices) and the payables aging
+  // (/accounts-payable), both managers and above. Each bill keeps
+  // /supplier-invoices/<id>.
+  {
+    path: '/supplier-bills', param: 'tab',
+    tabs: [
+      { value: 'bills', labelKey: 'supplierInvoices', icon: ReceiptText, roles: AM },
+      { value: 'payables', labelKey: 'payables', icon: CreditCard, roles: AM },
+    ],
+  },
   // Payments (agents and above: they record customer payments) and the
   // receipts list (/receipts, managers and above).
   {
@@ -318,8 +328,10 @@ export const MAIN_NAV: NavSection[] = [
       { labelKey: 'payments', href: '/payments', icon: DollarSign, roles: STAFF },
       // A tab of Payments AND its own link, like Receivables.
       { labelKey: 'receipts', href: '/payments?tab=receipts', icon: Receipt, roles: AM, match: ['/receipts'] },
-      { labelKey: 'supplierInvoices', href: '/supplier-invoices', icon: ReceiptText, roles: AM, keywords: ['supplier bills'] },
-      { labelKey: 'payables', href: '/accounts-payable', icon: CreditCard, roles: AM },
+      // Bills · Payables as tabs of one page, each with its own link (daily).
+      // A bill's own page (/supplier-invoices/<id>) lights Bills.
+      { labelKey: 'supplierInvoices', href: '/supplier-bills', icon: ReceiptText, roles: AM, match: ['/supplier-invoices'], keywords: ['supplier bills', 'supplier invoices'] },
+      { labelKey: 'payables', href: '/supplier-bills?tab=payables', icon: CreditCard, roles: AM, match: ['/accounts-payable'], keywords: ['accounts payable', 'aging'] },
       { labelKey: 'expenses', href: '/expenses', icon: HandCoins, roles: AM },
       { labelKey: 'commissions', href: '/commissions', icon: Handshake, roles: AM },
       { labelKey: 'profitLoss', href: '/profit-loss', icon: TrendingUp, roles: AM, keywords: ['p&l'] },

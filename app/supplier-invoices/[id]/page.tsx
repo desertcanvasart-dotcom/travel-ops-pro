@@ -188,7 +188,7 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
     if (!(await confirmDialog('Delete this supplier invoice?'))) return
     const res = await fetch(`/api/supplier-invoices/${id}`, { method: 'DELETE' })
     if (await reportFailure(res, 'Delete')) return
-    router.push('/supplier-invoices')
+    router.push('/supplier-bills?tab=bills')
   }
 
   const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -290,7 +290,7 @@ export default function SupplierInvoiceDetailPage({ params }: { params: Promise<
     <div className="p-6 max-w-5xl mx-auto">
       {/* Header */}
       <div className="flex items-center gap-3 mb-6">
-        <button onClick={() => router.push('/supplier-invoices')} className="p-2 hover:bg-gray-100 rounded-lg">
+        <button onClick={() => router.push('/supplier-bills?tab=bills')} className="p-2 hover:bg-gray-100 rounded-lg">
           <ArrowLeft className="w-5 h-5 text-gray-600" />
         </button>
         <div className="flex-1">

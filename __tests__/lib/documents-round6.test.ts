@@ -130,7 +130,7 @@ describe('round 7', () => {
 
 describe('round 8', () => {
   it('accounts payable exports one numeric row per supplier and currency', () => {
-    const page = src('app/accounts-payable/page.tsx')
+    const page = src('app/supplier-bills/_views/PayablesView.tsx')
     expect(page).toContain('payableExportRows(filteredSuppliers)')
     expect(page).not.toContain('filteredSuppliers as unknown as Record<string, unknown>[]')
   })
