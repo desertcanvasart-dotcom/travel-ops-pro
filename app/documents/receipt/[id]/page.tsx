@@ -190,7 +190,7 @@ export default function ReceiptPage() {
           <FileText className="w-12 h-12 text-gray-300 mx-auto mb-4" />
           <h1 className="text-xl font-bold text-gray-900 mb-3">{t('paymentNotFound')}</h1>
           <p className="text-sm text-gray-600 mb-4">{t('receiptNotExist')}</p>
-          <Link href="/receipts" className="text-sm text-primary-600 hover:text-primary-700">
+          <Link href="/payments?tab=receipts" className="text-sm text-primary-600 hover:text-primary-700">
             ← {t('backToReceipts')}
           </Link>
         </div>
@@ -213,7 +213,7 @@ export default function ReceiptPage() {
         <div className="flex items-center justify-between mb-6">
           {/* Browser-history "back" left the app from a shared link or a new
               tab: back goes to where it was opened from (?from=), else Receipts. */}
-          <BackLink fallbackHref="/receipts" fallbackLabel={t('backToReceipts')} />
+          <BackLink fallbackHref="/payments?tab=receipts" fallbackLabel={t('backToReceipts')} />
 
           <div className="flex items-center gap-2">
             {/* WhatsApp Button */}

@@ -121,7 +121,7 @@ describe('receipt PDFs', () => {
     expect(receiptBrand({ name: 'Nile Journeys', website: 'nile.example', email: '', phone: '+20 1' }))
       .toEqual({ name: 'Nile Journeys', footer: 'nile.example | +20 1' })
     expect(receiptBrand(undefined)).toEqual({})
-    for (const f of ['app/documents/receipt/[id]/page.tsx', 'app/receipts/page.tsx']) {
+    for (const f of ['app/documents/receipt/[id]/page.tsx', 'app/payments/_views/ReceiptsView.tsx']) {
       expect(readFileSync(join(process.cwd(), f), 'utf8')).toContain('receiptBrand(company)')
     }
   })

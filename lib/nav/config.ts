@@ -158,6 +158,15 @@ export const RATE_GROUPS: RateGroup[] = [
 // own API gate. __tests__/api/menu-page-gates.test.ts holds the union to the
 // middleware.
 export const TABBED_PAGES: TabbedPage[] = [
+  // Payments (agents and above: they record customer payments) and the
+  // receipts list (/receipts, managers and above).
+  {
+    path: '/payments', param: 'tab',
+    tabs: [
+      { value: 'payments', labelKey: 'payments', icon: DollarSign, roles: STAFF },
+      { value: 'receipts', labelKey: 'receipts', icon: Receipt, roles: AM },
+    ],
+  },
   // Invoices (agents and above: reservation staff issue them) and the
   // receivables aging (/accounts-receivable, managers and above).
   {
@@ -307,7 +316,8 @@ export const MAIN_NAV: NavSection[] = [
       // which hid it, was rejected on autoura-saas).
       { labelKey: 'receivables', href: '/invoices?tab=unpaid', icon: Wallet, roles: AM, match: ['/accounts-receivable'], keywords: ['accounts receivable', 'unpaid', 'aging'] },
       { labelKey: 'payments', href: '/payments', icon: DollarSign, roles: STAFF },
-      { labelKey: 'receipts', href: '/receipts', icon: Receipt, roles: AM },
+      // A tab of Payments AND its own link, like Receivables.
+      { labelKey: 'receipts', href: '/payments?tab=receipts', icon: Receipt, roles: AM, match: ['/receipts'] },
       { labelKey: 'supplierInvoices', href: '/supplier-invoices', icon: ReceiptText, roles: AM, keywords: ['supplier bills'] },
       { labelKey: 'payables', href: '/accounts-payable', icon: CreditCard, roles: AM },
       { labelKey: 'expenses', href: '/expenses', icon: HandCoins, roles: AM },

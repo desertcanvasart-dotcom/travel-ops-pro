@@ -23,7 +23,7 @@ describe('invoice page: Cancel invoice', () => {
 })
 
 describe('receipts page: the on-invoice tag is translated', () => {
-  const page = src('app/receipts/page.tsx')
+  const page = src('app/payments/_views/ReceiptsView.tsx')
   it('uses useTranslations, not hard-coded English', () => {
     expect(page).toContain("useTranslations('payments')")
     expect(page).toContain("t('onInvoiceTag')")
@@ -36,7 +36,7 @@ describe('receipts page: the on-invoice tag is translated', () => {
 })
 
 describe('payments page: Move to invoice', () => {
-  const page = src('app/payments/page.tsx')
+  const page = src('app/payments/_views/PaymentsView.tsx')
   it('offers it only for a received trip payment on an invoiced trip, and posts to the route', () => {
     expect(page).toMatch(/movable: isOnInvoicedTrip\(p, invoiced\) && isReceivedTripPayment\(p\)/)
     expect(page).toMatch(/payment\.movable && \(/)

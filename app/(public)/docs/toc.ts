@@ -193,7 +193,7 @@ export const CATEGORIES: DocCategory[] = [
     items: [
       { href: '/docs/payments', icon: Wallet, title: 'Payments', description: 'Record a payment against an invoice or an itinerary — types, methods, references, and how balances update.', covers: ['/payments'] },
       { href: '/docs/invoices-payments', icon: FileText, title: 'Invoices', description: 'Create standard, deposit, and final invoices, and see recorded payments against them.', covers: ['/invoices'] },
-      { href: '/docs/receipts', icon: Receipt, title: 'Receipts', description: 'Generate branded receipt PDFs for payments and send them via WhatsApp or email.', covers: ['/receipts'] },
+      { href: '/docs/receipts', icon: Receipt, title: 'Receipts', description: 'Generate branded receipt PDFs for payments and send them via WhatsApp or email.', covers: ['/payments?tab=receipts'] },
       { href: '/docs/accounts-receivable', icon: Wallet, title: 'Receivables', description: 'Client-level aging analysis (current, 30, 60, 90+ days), outstanding balances, and payment reminder triggers.', covers: ['/invoices?tab=unpaid'] },
       { href: '/docs/accounts-payable', icon: CreditCard, title: 'Payables', description: 'Supplier-level aging reports, expense grouping by supplier, and payment approval workflows.', covers: ['/accounts-payable'] },
       { href: '/docs/supplier-invoices', icon: FileCheck, title: 'Bills', description: 'Supplier bills with three-way matching: bill → expense → payment. Upload, match, approve, pay, or dispute.', covers: ['/supplier-invoices'] },

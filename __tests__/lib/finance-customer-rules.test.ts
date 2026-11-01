@@ -159,7 +159,7 @@ describe('receipt numbers', () => {
   })
 
   it('every receipt output uses the one rule', () => {
-    for (const f of ['app/receipts/page.tsx', 'app/documents/receipt/[id]/page.tsx', 'app/api/whatsapp/send-receipt/route.ts', 'app/invoices/[id]/page.tsx']) {
+    for (const f of ['app/payments/_views/ReceiptsView.tsx', 'app/documents/receipt/[id]/page.tsx', 'app/api/whatsapp/send-receipt/route.ts', 'app/invoices/[id]/page.tsx']) {
       expect(src(f), f).toContain('receiptNumberFor(')
       expect(src(f), f).not.toMatch(/transaction_reference \|\| `RCP-/)
     }
