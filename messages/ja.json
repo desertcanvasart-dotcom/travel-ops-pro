@@ -2105,6 +2105,7 @@
         "forClient": "お客様向け",
         "internal": "社内用",
         "docNittei": "日程表",
+        "docConfirmation": "予約確認書兼請求書",
         "docQuote": "見積書PDF",
         "contractHint": "言語は契約書画面で選択",
         "docShareLink": "共有リンク",
@@ -2388,7 +2389,8 @@
       "created": "作成日",
       "saving": "保存中…",
       "pdf": "日程表PDF",
-      "print": "印刷"
+      "print": "印刷",
+      "tipsPage": "「チップは日本払い済」ページを付ける（日・アラビア・英）"
     },
     "fromProgramme": "ツアープログラムから作成",
     "fromScratch": "白紙から作成",
@@ -2411,6 +2413,34 @@
       "remarks": "備考",
       "pdf": "PDFを開く",
       "preview": "プレビュー (HTML)"
+    },
+    "confirmation": {
+      "title": "予約確認書兼請求書",
+      "hint": "この旅行・プログラム・参加者・請求書から作成します。フライトは旅行に保存され、その他は入力どおりに印刷されます。",
+      "invoice": "請求書",
+      "latestInvoice": "この旅行の最新の請求書",
+      "noInvoice": "請求書なし（ご請求額は空欄）",
+      "representative": "代表者名（様は自動）",
+      "staff": "担当者",
+      "created": "作成日",
+      "rooms": "部屋数（各ホテル）",
+      "roomType": "お部屋タイプ",
+      "flights": "フライトスケジュール",
+      "flightsHint": "旅行に保存されるので入力は一度だけです。時間は現地時間、翌日着は +1 と入力してください。",
+      "addFlight": "便を追加",
+      "removeFlight": "便を削除",
+      "fDate": "日付",
+      "fFrom": "出発地",
+      "fTo": "到着地",
+      "fNo": "便名",
+      "fDepart": "出発時間",
+      "fArrive": "到着時間",
+      "fStatus": "予約状況",
+      "profileHint": "振込先と備考は「設定 → 会社情報」から読み込みます。",
+      "flightsNotSaved": "書類は開きましたが、フライトを旅行に保存できませんでした。",
+      "saving": "保存中…",
+      "pdf": "確認書PDF",
+      "print": "印刷"
     }
   },
   "payments": {
@@ -4110,7 +4140,11 @@
       "documentContactsHint": "日程表ヘッダーに印刷される連絡先です。空欄はそのまま空欄で印刷されます。",
       "slots": {
         "emergency_japan": "緊急連絡先（日本）",
-        "cairo_office": "カイロ"
+        "cairo_office": "カイロ",
+        "bank_transfer": "振込先（予約確認書兼請求書に印刷）",
+        "bank_transferPlaceholder": "口座名　株式会社 エイ・ティ・エス\n三菱UFJ銀行　六本木支店　普通預金　0000000",
+        "confirmation_remarks": "予約確認書の備考（空欄＝標準の文面）",
+        "confirmation_remarksPlaceholder": "※乗継地（経由地）でのご搭乗手続きはお客様ご自身で…"
       },
       "save": "保存",
       "saved": "保存しました",
@@ -7239,7 +7273,8 @@
       "marginLine": "マージン（{percent}%）",
       "sellingPriceNote": "販売価格（会社の標準マージン適用）",
       "withdrawn": "このツアーは現在販売されていません。カタログから取り下げられています。",
-      "quoteThisTour": "このツアーの見積もりを作成"
+      "quoteThisTour": "このツアーの見積もりを作成",
+      "routeMap": "ルートマップ"
     },
     "views": {
       "grid": "グリッド",
@@ -8275,6 +8310,9 @@
       "incompleteTitle": "料金が未完成です",
       "incompleteConfirm": "この見積りには料金未設定のサービスが{count}件あります（{services}）。予約の合計と手付金にはそれらが含まれません。このまま予約しますか？",
       "continueAnyway": "このまま予約"
+    },
+    "documents": {
+      "applicationForm": "参加申込書を印刷"
     }
   },
   "supplierDocuments": {

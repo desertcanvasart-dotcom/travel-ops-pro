@@ -3,7 +3,7 @@
 //   &itinerary_id=…  one customer's copy — traveller and departure date read
 //                    from their trip, via itineraries.template_id
 //   [&departure_date=YYYY-MM-DD&cairo_guide=…&south_guide=…&author=…]
-//   [&customer_name=…&created_date=YYYY-MM-DD]
+//   [&customer_name=…&created_date=YYYY-MM-DD&tips=0]
 // Departure params fill the date column, the guide cells and 作成者 — the
 // office-held facts of one departure. Absent params render the blank template.
 // created_date overrides 作成日, which otherwise defaults to today. Explicit
@@ -95,6 +95,8 @@ export async function GET(request: NextRequest) {
           south_guide: params.get('south_guide'),
           author: params.get('author'),
           customer_name: params.get('customer_name') ?? trip?.client_name ?? null,
+          // &tips=0 leaves off the チップについて page.
+          tips_prepaid: params.get('tips') !== '0',
         },
       })
     } catch (err) {

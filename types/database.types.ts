@@ -7049,6 +7049,7 @@ export interface Database {
           assigned_at: string | null
           template_id: string | null
           fx_frozen: Json | null
+          flights: Json
           destination_id: string | null
           vat_applied: boolean
           vat_rate: number | null
@@ -7119,6 +7120,7 @@ export interface Database {
           assigned_at?: string | null
           template_id?: string | null
           fx_frozen?: Json | null
+          flights?: Json
           destination_id?: string | null
           vat_applied?: boolean
           vat_rate?: number | null
@@ -7189,6 +7191,7 @@ export interface Database {
           assigned_at?: string | null
           template_id?: string | null
           fx_frozen?: Json | null
+          flights?: Json
           destination_id?: string | null
           vat_applied?: boolean
           vat_rate?: number | null

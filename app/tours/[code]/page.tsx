@@ -16,6 +16,7 @@ import { useParams } from 'next/navigation'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { useOrgDocumentTemplates } from '@/lib/documents/use-org-templates'
+import TourRouteMap from '@/components/TourRouteMap'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { LanguageTabs, CreateVersionPrompt } from '@/components/multilingual'
 import type { Language } from '@/types/multilingual'
@@ -617,6 +618,17 @@ export default function TourDetailPage() {
               </div>
             )}
           </div>
+
+          {/* The route on a map of Egypt — the same drawing the 日程表 prints. */}
+          {tour.daily_itinerary && tour.daily_itinerary.length > 0 && (
+            <TourRouteMap
+              days={tour.daily_itinerary.map(d => ({
+                day: d.day_number,
+                description: d.day_description,
+                overnight_city: d.overnight_city || d.city,
+              }))}
+            />
+          )}
 
           {/* Daily Itinerary */}
           {tour.daily_itinerary && tour.daily_itinerary.length > 0 && (

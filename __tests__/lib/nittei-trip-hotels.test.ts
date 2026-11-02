@@ -41,11 +41,11 @@ describe('利用ホテル for a customer trip', () => {
 
   it('names the ship where the office leaves クルーズ船名： blank, and prints the trip\'s hotels with their dates', () => {
     expect(assemble(trip)).toEqual([
-      { hotel: 'ナイル川クルーズ船', check_in: '12/6', check_out: '12/10', phone: '', address: 'クルーズ船名：アル・ファリダ' },
+      { hotel: 'ナイル川クルーズ船', check_in: '12/6', check_out: '12/10', phone: '', address: 'クルーズ船名：アル・ファリダ', city: '船中泊', nights: 4 },
       // No Japanese name on file: the English name prints, never a guess.
-      { hotel: 'Seti Abu Simbel Lake Resort', check_in: '12/10', check_out: '12/11', phone: '097 3400727', address: 'Abu Simbel' },
+      { hotel: 'Seti Abu Simbel Lake Resort', check_in: '12/10', check_out: '12/11', phone: '097 3400727', address: 'Abu Simbel', city: 'アブ・シンベル', nights: 1 },
       // The trip's hotel, not the programme's standard Steigenberger Pyramids.
-      { hotel: 'シュタイゲンベルガー ナイル パレス', check_in: '12/11', check_out: '12/12', phone: '02 0000', address: 'Corniche, Cairo' },
+      { hotel: 'シュタイゲンベルガー ナイル パレス', check_in: '12/11', check_out: '12/12', phone: '02 0000', address: 'Corniche, Cairo', city: 'カイロ', nights: 1 },
     ])
   })
 

@@ -8,6 +8,7 @@
 
 import type { DailyItineraryContext, DailyItineraryDay } from './templates/ats-daily-itinerary'
 import { customerFacingOrgName } from '@/lib/org-name'
+import { renderEgyptRouteMap, routeStopsFromDays } from '@/lib/maps/egypt-route-map'
 
 /** The reverse of the importer's OVERNIGHT map — city back to the label the
  *  office writes in the 宿泊地 column. */
@@ -123,6 +124,9 @@ export interface AssembleProgramInput {
     /** The traveller this copy is for. Carries an honorific if the caller
      *  supplied one; gets 様 if not. */
     customer_name?: string | null
+    /** Print the チップについて page. Absent = printed: tips are prepaid in
+     *  Japan on every ATS tour, so the office leaves it off by exception. */
+    tips_prepaid?: boolean | null
   }
 }
 
@@ -167,8 +171,8 @@ function dateLabel(startDate: string, dayNumber: number): { md: string; wd: stri
  *  when they are the same place — two Cairo stays either side of a cruise are
  *  two separate hotel rows, and the office lists them as two.
  */
-function overnightRuns(days: SourceProgramDay[]): Array<{ startDay: number; endDay: number }> {
-  const runs: Array<{ key: string; startDay: number; endDay: number }> = []
+function overnightRuns(days: SourceProgramDay[]): Array<{ startDay: number; endDay: number; label: string }> {
+  const runs: Array<{ key: string; startDay: number; endDay: number; label: string }> = []
   for (const day of days) {
     const kind = day.overnight_kind ?? (day.is_cruise_day ? 'cruise' : null)
     if (kind === 'flight' || kind === 'none') continue
@@ -176,9 +180,9 @@ function overnightRuns(days: SourceProgramDay[]): Array<{ startDay: number; endD
     if (!key) continue
     const last = runs[runs.length - 1]
     if (last && last.key === key && last.endDay === day.day - 1) last.endDay = day.day
-    else runs.push({ key, startDay: day.day, endDay: day.day })
+    else runs.push({ key, startDay: day.day, endDay: day.day, label: overnightLabel(day) })
   }
-  return runs.map(({ startDay, endDay }) => ({ startDay, endDay }))
+  return runs.map(({ startDay, endDay, label }) => ({ startDay, endDay, label }))
 }
 
 /** Fill 利用ホテル check-in/check-out from the departure date.
@@ -196,16 +200,17 @@ function withStayDates<T extends { check_in: string; check_out: string }>(
   hotelRows: T[],
   days: SourceProgramDay[],
   startDate: string | null
-): T[] {
-  if (!startDate) return hotelRows
+): Array<T & { city?: string; nights?: number }> {
   const runs = overnightRuns(days)
   if (runs.length !== hotelRows.length) return hotelRows
+  if (!startDate) return hotelRows.map((row, i) => ({ ...row, city: runs[i].label, nights: runs[i].endDay - runs[i].startDay + 1 }))
 
   return hotelRows.map((row, i) => {
+    const stay = { city: runs[i].label, nights: runs[i].endDay - runs[i].startDay + 1 }
     const checkIn = dateLabel(startDate, runs[i].startDay)
     const checkOut = dateLabel(startDate, runs[i].endDay + 1)
-    if (!checkIn || !checkOut) return row
-    return { ...row, check_in: checkIn.md, check_out: checkOut.md }
+    if (!checkIn || !checkOut) return { ...row, ...stay }
+    return { ...row, ...stay, check_in: checkIn.md, check_out: checkOut.md }
   })
 }
 
@@ -229,7 +234,7 @@ export function tripHotelRows(
   stays: TripStay[],
   days: SourceProgramDay[],
   startDate: string | null
-): Array<{ hotel: string; check_in: string; check_out: string; phone: string; address: string }> {
+): Array<{ hotel: string; check_in: string; check_out: string; phone: string; address: string; city?: string; nights?: number }> {
   const runs = overnightRuns(days)
   const paired = imported.length === runs.length
   const shown = (s: TripStay) => (s.name_ja ?? '').trim() || s.name.trim()
@@ -253,6 +258,7 @@ export function tripHotelRows(
 
     return segments.map(seg => {
       const stay = seg.stay
+      const where = { city: run.label, nights: seg.endDay - seg.startDay + 1 }
       const row = !stay
         ? { ...base }
         : stay.kind === 'cruise'
@@ -261,9 +267,9 @@ export function tripHotelRows(
       if (startDate) {
         const checkIn = dateLabel(startDate, seg.startDay)
         const checkOut = dateLabel(startDate, seg.endDay + 1)
-        if (checkIn && checkOut) return { ...row, check_in: checkIn.md, check_out: checkOut.md }
+        if (checkIn && checkOut) return { ...row, ...where, check_in: checkIn.md, check_out: checkOut.md }
       }
-      return row
+      return { ...row, ...where }
     })
   })
 }
@@ -344,5 +350,7 @@ export function assembleProgramItinerary(input: AssembleProgramInput): DailyItin
       cairo_office: contacts.cairo_office ?? '',
     },
     author: input.departure?.author ?? '',
+    tips_prepaid: input.departure?.tips_prepaid !== false,
+    route_map: renderEgyptRouteMap(routeStopsFromDays(days), { language: 'ja', width: 240 }),
   }
 }

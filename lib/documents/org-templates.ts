@@ -17,6 +17,9 @@ export const ORG_DOCUMENT_TEMPLATES = [
   'ats-operations-sheet',
   'ats-daily-itinerary',
   'ats-questionnaire',
+  // 予約確認書兼請求書 and the printed 参加申込書 (migration 20270114).
+  'ats-booking-confirmation',
+  'ats-application-form',
 ] as const
 
 export type OrgDocumentTemplate = (typeof ORG_DOCUMENT_TEMPLATES)[number]

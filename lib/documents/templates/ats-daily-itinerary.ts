@@ -49,6 +49,11 @@ export interface DailyItineraryContext {
     check_out: string
     phone: string
     address: string
+    /** 宿泊地 label of the stay (カイロ, 船中泊 …) and its night count — known
+     *  whenever the rows pair with the programme's stays. The 日程表 does not
+     *  print them; the booking confirmation's 予定ご宿泊ホテル does. */
+    city?: string
+    nights?: number
   }>
   /** @font-face CSS for NotoSansJP; empty string is valid (tests, preview). */
   font_face_css: string
@@ -69,6 +74,16 @@ export interface DailyItineraryContext {
       fax: string
     }>
   }
+  /** The tour's route drawn on Egypt (lib/maps/egypt-route-map), or null
+   *  when fewer than two stops can be placed. Inline SVG — nothing fetched. */
+  route_map?: { svg: string; legend: Array<{ n: number; label: string }> } | null
+  /** Print the チップについて page: the card a traveller shows a guide or
+   *  driver who asks for a tip, saying in Japanese, Arabic and English that
+   *  tips were paid in Japan. The office's 日程表 ends with it. */
+  tips_prepaid?: boolean
+  /** The Arabic sentence as a data-URI image — the server has no Arabic
+   *  font. Absent = the text, for a browser preview that has one. */
+  tips_arabic_img?: string | null
   /** 作成者 — who generated this departure's document. Blank on the template. */
   author: string
   /** Values for the header contact slots; blank prints blank. */
@@ -231,6 +246,18 @@ export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
   .hotels-title { font-weight: 700; margin-bottom: 3pt; }
   .hotels td { height: 14pt; font-size: 8pt; }
   .hotels .h { background: #f3f3f3; font-weight: 700; text-align: center; }
+  .tips { break-before: page; padding-top: 30pt; text-align: center; }
+  .tips h2 { font-size: 18pt; margin-bottom: 14pt; letter-spacing: 0.1em; }
+  .tips .lead { font-size: 10pt; margin-bottom: 40pt; }
+  .tips .card { border: 2pt solid #333; border-radius: 8pt; padding: 30pt 16pt; }
+  .tips .card p { margin: 14pt 0; font-size: 22pt; font-weight: 700; }
+  .tips .card .ar { font-family: "Geeza Pro", "Noto Naskh Arabic", "Arial", sans-serif; direction: rtl; font-size: 26pt; }
+  .route { margin-top: 12pt; break-inside: avoid; }
+  .route .body { display: flex; gap: 14pt; align-items: flex-start; }
+  .route svg { border: 0.6pt solid #999; flex: none; }
+  .route ol { list-style: none; font-size: 9pt; line-height: 1.9; }
+  .route li span { display: inline-block; width: 14pt; height: 14pt; border-radius: 50%; background: #647C47;
+                   color: #fff; font-size: 7.5pt; font-weight: 700; text-align: center; line-height: 14pt; margin-right: 5pt; }
 </style>
 </head>
 <body>
@@ -263,6 +290,30 @@ export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
     <tr><td class="h" style="width:30%">ホテル</td><td class="h" style="width:12%">イン</td><td class="h" style="width:12%">アウト</td><td class="h" style="width:18%">電話</td><td class="h" style="width:28%">住所</td></tr>
     ${hotelRows}
   </table>
+  ${
+    ctx.route_map
+      ? `<div class="route">
+    <div class="hotels-title">ルートマップ</div>
+    <div class="body">
+      ${ctx.route_map.svg}
+      <ol>${ctx.route_map.legend.map(l => `<li><span>${l.n}</span>${esc(l.label)}</li>`).join('')}</ol>
+    </div>
+  </div>`
+      : ''
+  }
+  ${
+    ctx.tips_prepaid
+      ? `<div class="tips">
+    <h2>チップについて</h2>
+    <p class="lead">★ツアー中にアシスタント、ドライバーにチップを要求された際は、このページをご提示ください。</p>
+    <div class="card">
+      <p>チップは日本払い済です。</p>
+      <p class="ar" lang="ar">${ctx.tips_arabic_img ? `<img src="${esc(ctx.tips_arabic_img)}" alt="تم دفع الإكراميات في اليابان" style="height:30pt" />` : 'تم دفع الإكراميات في اليابان'}</p>
+      <p lang="en">Tips have already been paid in Japan.</p>
+    </div>
+  </div>`
+      : ''
+  }
 </body>
 </html>`
   },

@@ -12,6 +12,7 @@ import { loadTripVatExtras } from '@/lib/vat'
 import { checkAmountDeliverable } from '@/lib/pricing-guards'
 import { insertBookingWithCode } from '@/lib/bookings/booking-code'
 import { isItineraryStatus, ITINERARY_STATUSES } from '@/lib/itineraries/statuses'
+import { normaliseTripFlights } from '@/lib/itineraries/flights'
 import { loadTripDeleteFacts, removeTripFiles, tripDeleteBlockers, tripDeleteForeignKeyRefusal, tripDeleteRefusal } from '@/lib/itineraries/trip-delete'
 
 /**
@@ -152,6 +153,15 @@ export async function PUT(
         return NextResponse.json({ error: 'Programme not found' }, { status: 404 })
       }
       updateData.template_id = body.template_id || null
+    }
+    // The trip's own flights, printed on the booking confirmation
+    // (lib/itineraries/flights.ts). Not a list = refused, never a silent clear.
+    if (body.flights !== undefined) {
+      const flights = normaliseTripFlights(body.flights)
+      if (!flights) {
+        return NextResponse.json({ success: false, error: 'flights must be a list' }, { status: 400 })
+      }
+      updateData.flights = flights
     }
     if (body.start_date !== undefined) updateData.start_date = body.start_date
     if (body.end_date !== undefined) updateData.end_date = body.end_date

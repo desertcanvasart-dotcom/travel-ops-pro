@@ -12,8 +12,10 @@
 import type { DocumentTemplate } from './types'
 import { atsOperationsSheet } from './templates/ats-operations-sheet'
 import { atsDailyItinerary } from './templates/ats-daily-itinerary'
+import { atsBookingConfirmation } from './templates/ats-booking-confirmation'
+import { atsApplicationForm } from './templates/ats-application-form'
 
-const TEMPLATES: DocumentTemplate<any>[] = [atsOperationsSheet, atsDailyItinerary]
+const TEMPLATES: DocumentTemplate<any>[] = [atsOperationsSheet, atsDailyItinerary, atsBookingConfirmation, atsApplicationForm]
 
 export function listTemplates(): Array<Pick<DocumentTemplate<unknown>, 'slug' | 'label' | 'description'>> {
   return TEMPLATES.map(({ slug, label, description }) => ({ slug, label, description }))

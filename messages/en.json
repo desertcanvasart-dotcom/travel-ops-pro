@@ -1645,6 +1645,7 @@
         "forClient": "For the client",
         "internal": "Internal",
         "docNittei": "Itinerary / 日程表",
+        "docConfirmation": "Confirmation & invoice / 予約確認書",
         "docQuote": "Quote PDF",
         "contractHint": "Language chosen on the contract",
         "docShareLink": "Share link",
@@ -1928,7 +1929,8 @@
       "created": "Created (作成日)",
       "saving": "Saving…",
       "pdf": "Itinerary PDF",
-      "print": "Print"
+      "print": "Print",
+      "tipsPage": "Add the “tips paid in Japan” page (JA / AR / EN)"
     },
     "fromProgramme": "Start from a programme",
     "fromScratch": "Build from scratch",
@@ -1951,6 +1953,34 @@
       "remarks": "Remarks",
       "pdf": "Open PDF",
       "preview": "Preview (HTML)"
+    },
+    "confirmation": {
+      "title": "Booking confirmation & invoice (予約確認書兼請求書)",
+      "hint": "Filled from this trip, its programme, its travellers and one of its invoices. Flights are saved to the trip; the rest prints as typed.",
+      "invoice": "Invoice",
+      "latestInvoice": "Newest invoice for this trip",
+      "noInvoice": "No invoice yet — charges print blank",
+      "representative": "Lead name (様 is added)",
+      "staff": "Handled by (担当者)",
+      "created": "Created (作成日)",
+      "rooms": "Rooms per hotel",
+      "roomType": "Room type",
+      "flights": "Flights (フライトスケジュール)",
+      "flightsHint": "Saved to the trip so they are typed once. Times are local; write +1 for next-day arrival.",
+      "addFlight": "Add flight",
+      "removeFlight": "Remove flight",
+      "fDate": "Date",
+      "fFrom": "From",
+      "fTo": "To",
+      "fNo": "Flight",
+      "fDepart": "Departs",
+      "fArrive": "Arrives",
+      "fStatus": "Status",
+      "profileHint": "The bank account and the 備考 come from Settings → Company profile.",
+      "flightsNotSaved": "The document opened, but the flights could not be saved to the trip.",
+      "saving": "Saving…",
+      "pdf": "Confirmation PDF",
+      "print": "Print"
     }
   },
   "payments": {
@@ -3336,7 +3366,11 @@
       "documentContactsHint": "The contact slots printed in the itinerary document header. Blank slots print blank.",
       "slots": {
         "emergency_japan": "Emergency contact (Japan)",
-        "cairo_office": "Cairo office"
+        "cairo_office": "Cairo office",
+        "bank_transfer": "Bank account for transfers (振込先) — printed on the booking confirmation",
+        "bank_transferPlaceholder": "口座名　株式会社 エイ・ティ・エス\n三菱UFJ銀行　六本木支店　普通預金　0000000",
+        "confirmation_remarks": "Booking confirmation remarks (備考) — blank uses the standard wording",
+        "confirmation_remarksPlaceholder": "※乗継地（経由地）でのご搭乗手続きはお客様ご自身で…"
       },
       "save": "Save",
       "saved": "Saved",
@@ -7146,7 +7180,8 @@
       "marginLine": "Margin ({percent}%)",
       "sellingPriceNote": "Selling price, at the company's default margin",
       "withdrawn": "This tour is no longer offered. It has been withdrawn from the catalogue.",
-      "quoteThisTour": "Quote this tour"
+      "quoteThisTour": "Quote this tour",
+      "routeMap": "Route map"
     }
   },
   "b2bQuotes": {
@@ -7690,6 +7725,9 @@
       "incompleteTitle": "Incomplete price",
       "incompleteConfirm": "This quote has {count, plural, one {# service} other {# services}} with no rate ({services}), so the booking total and deposit leave them out. Book anyway?",
       "continueAnyway": "Book anyway"
+    },
+    "documents": {
+      "applicationForm": "Application forms / 参加申込書"
     }
   },
   "supplierDocuments": {
