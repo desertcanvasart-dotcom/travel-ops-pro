@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { normaliseTripFlights, airlineLegend } from '@/lib/itineraries/flights'
 import { routeStopsFromDays, renderEgyptRouteMap } from '@/lib/maps/egypt-route-map'
-import { confirmationPayments, jaDate } from '@/lib/documents/booking-confirmation-doc'
-import { atsBookingConfirmation } from '@/lib/documents/templates/ats-booking-confirmation'
+import { confirmationCharges, confirmationPayments, jaDate, slashDate } from '@/lib/documents/booking-confirmation-doc'
+import { atsBookingConfirmation, DEFAULT_CONFIRMATION_REMARKS } from '@/lib/documents/templates/ats-booking-confirmation'
 import { atsApplicationForm } from '@/lib/documents/templates/ats-application-form'
 import { assembleProgramItinerary } from '@/lib/documents/assemble-program-itinerary'
 import { atsDailyItinerary } from '@/lib/documents/templates/ats-daily-itinerary'
@@ -88,47 +88,100 @@ describe('route map', () => {
 })
 
 describe('予約確認書兼請求書', () => {
-  it('a deposit invoice prints deposit and balance that add up to the trip price', () => {
-    const { total, payments } = confirmationPayments(
+  it('a deposit invoice fills both boxes, and they add up to the trip price', () => {
+    const { total, deposit, balance } = confirmationPayments(
       { invoice_type: 'deposit', total_amount: 370873, deposit_percent: 20, full_trip_cost: 1854367, due_date: '2026-07-05', balance_due_date: '2026-07-31' },
       'JPY'
     )
     expect(total).toBe(1854367)
-    expect(payments).toEqual([
-      { label: '旅行代金申込金', amount: '¥370,873', due: '2026年7月5日' },
-      { label: '旅行代金残金', amount: '¥1,483,494', due: '2026年7月31日' },
+    expect(deposit).toEqual({ amount: '¥370,873', due: '2026/7/5' })
+    expect(balance).toEqual({ amount: '¥1,483,494', due: '2026/7/31' })
+  })
+
+  it('a single invoice, or none, is all balance — the sheet\'s 残金 = 合計 − 申込金', () => {
+    expect(confirmationPayments({ invoice_type: 'standard', total_amount: 600000, due_date: '2026-08-01' }, 'JPY')).toEqual({
+      total: 600000,
+      deposit: { amount: '', due: '' },
+      balance: { amount: '¥600,000', due: '2026/8/1' },
+    })
+    expect(confirmationPayments(null, 'JPY').balance.amount).toBe('¥0')
+  })
+
+  it('prints the sheet\'s nine rows with its unit prices and ¥0 before there is an invoice', () => {
+    const { rows, sum } = confirmationCharges([], 'JPY')
+    expect(rows.map(r => r.description)).toEqual([
+      '海外旅行代金', '燃油サーチャージ・航空保険料等', '成田空港使用税', '国際観光旅客税', '海外空港諸税等', '',
+      '日本語ガイド・英語ドライバーへのチップ (一組）', 'ナイル川クルーズ船チップ', '査証（ビザ）実費代　US＄36 現地カード払い',
     ])
+    expect(rows[1]).toEqual({ description: '燃油サーチャージ・航空保険料等', unit_price: '¥109,200', quantity: '', amount: '¥0' })
+    expect(rows[6].quantity).toBe('1')
+    expect(sum).toBe(0)
   })
 
-  it('a standard invoice is one amount', () => {
-    const { payments } = confirmationPayments({ invoice_type: 'standard', total_amount: 600000, due_date: '2026-08-01' }, 'JPY')
-    expect(payments).toEqual([{ label: '旅行代金', amount: '¥600,000', due: '2026年8月1日' }])
+  it('an invoice fills the matching rows; the airport tax keeps its own wording; others go in the blank row', () => {
+    const { rows, sum } = confirmationCharges(
+      [
+        { description: '海外旅行代金', unit_price: 229000, quantity: 2, amount: 458000 },
+        { description: '燃油サーチャージ', unit_price: 109200, quantity: 2, amount: 218400 },
+        { description: '関西空港 旅客サービス施設使用料', unit_price: 3100, quantity: 2, amount: 6200 },
+        { description: '日本語ガイド・英語ドライバーへのチップ', unit_price: 40000, quantity: 1, amount: 40000 },
+        { description: 'Single room supplement', unit_price: 30000, quantity: 1, amount: 30000 },
+      ],
+      'JPY'
+    )
+    expect(rows[0]).toEqual({ description: '海外旅行代金', unit_price: '¥229,000', quantity: '2', amount: '¥458,000' })
+    expect(rows[1].amount).toBe('¥218,400')
+    expect(rows[2]).toMatchObject({ description: '関西空港 旅客サービス施設使用料', amount: '¥6,200' })
+    expect(rows[5]).toMatchObject({ description: 'Single room supplement', amount: '¥30,000' })
+    expect(rows[6]).toMatchObject({ description: '日本語ガイド・英語ドライバーへのチップ (一組）', amount: '¥40,000' })
+    expect(rows[3]).toMatchObject({ unit_price: '¥3,000', amount: '¥0' })
+    expect(sum).toBe(752600)
   })
 
-  it('dates read as calendar dates, weekday in Japanese', () => {
+  it('dates read as calendar dates', () => {
     expect(jaDate('2026-09-29', true)).toBe('2026年9月29日（火）')
-    expect(jaDate(null)).toBe('')
+    expect(slashDate('2026-09-29')).toBe('2026/9/29')
+    expect(slashDate(null)).toBe('')
   })
 
-  it('renders the office sheet with names, flights, hotels, charges and the bank, escaping input', () => {
+  it('carries the sheet\'s 備考 word for word, including the 2027 visa change', () => {
+    expect(DEFAULT_CONFIRMATION_REMARKS).toContain('※2027年1月1日より、ビザ代33US$+システム利用料6US$：合計39US$に変更')
+    expect(DEFAULT_CONFIRMATION_REMARKS).toContain('ポーター・トイレチップ等が必要です。ご理解の上、各自、現地でのお支払いをお願いしております。ご理解の上、ご参加下さい。')
+  })
+
+  it('renders the sheet with logo, seal, names, flights, hotels, prices and both payment boxes, escaping input', () => {
     const html = atsBookingConfirmation.render({
       font_face_css: '',
-      letterhead: { logo_url: null, company_name: '株式会社 エイ・ティ・エス', lines: [], offices: [], email: 'info@ats-hj.com', website: '' },
-      representative: '山田 太郎', staff: 'Nada', created_date: '2026年7月2日', phone: '', email: '',
-      departure_date: '2026年9月29日（火）', tour_code: 'KEK802-ABS', tour_name: '<b>エジプト8日間</b>',
+      letterhead: { logo_url: 'data:image/jpeg;base64,LOGO', company_name: '株式会社　エイ・ティ・エス', lines: [], offices: [], email: 'info@ats-hj.com', website: '' },
+      seal_url: 'data:image/jpeg;base64,SEAL',
+      representative: '山田 太郎', staff: 'Nada', created_date: '2026/7/2', phone: '', email: '',
+      departure_date: '2026/9/29', tour_code: 'KEK802-ABS', tour_name: '<b>エジプト8日間</b>',
       travellers: ['YAMADA TARO'],
       flights: [{ date: '9/29', weekday: '火', from: '関西空港', to: 'ドバイ', flight_no: 'EK317', depart: '23:45', arrive: '04:35+1', status: 'OK' }],
       airline_legend: ['EK＝エミレーツ航空'],
       hotels: [{ city: 'カイロ', check_in: '9/30', check_out: '10/1', nights: '1', rooms: '1', room_type: 'ツイン', hotel: 'ラムセス ヒルトン' }],
       remarks: ['※乗継地での搭乗手続きはお客様ご自身で'],
-      charges: [{ description: '海外旅行代金', unit_price: '¥229,000', quantity: '2', amount: '¥458,000' }],
-      total: '¥458,000', bank_lines: ['三菱UFJ銀行　六本木支店'],
-      payments: [{ label: '旅行代金', amount: '¥458,000', due: '2026年8月1日' }],
+      charges: confirmationCharges([], 'JPY').rows,
+      total: '¥0', bank_lines: ['口座名　株式会社　エイ・ティ・エス', '振込銀行　三菱UFJ銀行'],
+      deposit: { amount: '¥120,000', due: '2026/7/5' },
+      balance: { amount: '¥480,000', due: '2026/7/31' },
     })
-    for (const text of ['予約確認書兼請求書', '山田 太郎　様', 'YAMADA TARO', 'EK317', '04:35+1', 'ラムセス ヒルトン', '1泊', '海外旅行代金', '¥458,000', '三菱UFJ銀行', '●旅行代金']) {
+    for (const text of ['予約確認書兼請求書', 'data:image/jpeg;base64,LOGO', 'data:image/jpeg;base64,SEAL', '山田 太郎', 'YAMADA TARO', 'EK317', '04:35+1', 'ラムセス ヒルトン', '燃油サーチャージ・航空保険料等', '¥109,200', '三菱UFJ銀行', '●旅行代金申込金', '¥120,000', '●旅行代金残金', '2026/7/31', '#1F4E6E']) {
       expect(html).toContain(text)
     }
     expect(html).toContain('&lt;b&gt;エジプト8日間&lt;/b&gt;')
+  })
+
+  it('a row with only its status is not a flight', () => {
+    expect(normaliseTripFlights([{ status: 'OK' }, { from: '関西空港', status: 'OK' }])).toHaveLength(1)
+  })
+
+  it('the logo and seal from the ATS sheet ship with the app', () => {
+    for (const f of ['ats-logo.jpeg', 'ats-seal.jpeg']) {
+      const buf = readFileSync(`public/documents/${f}`)
+      expect(buf[0]).toBe(0xff)
+      expect(buf[1]).toBe(0xd8)
+    }
   })
 })
 

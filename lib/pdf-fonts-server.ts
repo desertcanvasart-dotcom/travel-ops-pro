@@ -52,3 +52,22 @@ export async function getTipsArabicImage(): Promise<string> {
   cachedTipsArabic = `data:image/png;base64,${buf.toString('base64')}`
   return cachedTipsArabic
 }
+
+const atsImages = new Map<string, string>()
+
+// The ATS sheet's own logo and company seal (public/documents/ats-logo.jpeg,
+// ats-seal.jpeg — taken from 予約確認書兼請求書_ATS.xlsx) as data URIs: the
+// renderer fetches nothing. A missing file prints without it rather than
+// failing the document.
+export async function getAtsDocumentImage(file: 'ats-logo.jpeg' | 'ats-seal.jpeg'): Promise<string | null> {
+  const hit = atsImages.get(file)
+  if (hit) return hit
+  try {
+    const buf = await readFile(join(process.cwd(), 'public', 'documents', file))
+    const uri = `data:image/jpeg;base64,${buf.toString('base64')}`
+    atsImages.set(file, uri)
+    return uri
+  } catch {
+    return null
+  }
+}

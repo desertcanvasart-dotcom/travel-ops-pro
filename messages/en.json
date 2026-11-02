@@ -1966,7 +1966,7 @@
       "rooms": "Rooms per hotel",
       "roomType": "Room type",
       "flights": "Flights (フライトスケジュール)",
-      "flightsHint": "Saved to the trip so they are typed once. Times are local; write +1 for next-day arrival.",
+      "flightsHint": "Saved to the trip so they are typed once. Local times; +1 means next-day arrival. Example: 2026-09-29 · 関西空港 → ドバイ · EK317 · 23:45 · 04:35+1 · OK",
       "addFlight": "Add flight",
       "removeFlight": "Remove flight",
       "fDate": "Date",

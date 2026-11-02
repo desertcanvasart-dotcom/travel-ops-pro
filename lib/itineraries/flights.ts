@@ -52,7 +52,9 @@ export function normaliseTripFlights(input: unknown): TripFlight[] | null {
         status: text(r.status, 10).toUpperCase(),
       }
     })
-    .filter(f => FIELDS.some(k => f[k] !== ''))
+    // A row is a flight once anything but its status is typed — a new row
+    // starts with status OK, and that alone must not print as a flight.
+    .filter(f => FIELDS.some(k => k !== 'status' && f[k] !== ''))
 }
 
 /** Airline codes the ATS paper spells out under the table (略語説明). */

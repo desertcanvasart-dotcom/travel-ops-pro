@@ -21,12 +21,17 @@ import { inlineImage } from './inline-image'
 import { loadTripStays } from './trip-stays'
 import { assembleProgramItinerary, type OrgBranding } from './assemble-program-itinerary'
 import { orgHasDocumentTemplate } from './org-templates'
-import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
+import { getAtsDocumentImage, getJapaneseFontFace } from '@/lib/pdf-fonts-server'
 import { customerFacingOrgName } from '@/lib/org-name'
 import { formatMoney } from '@/lib/currency-totals'
 import { tripCostBreakdown, effectiveDueDate } from '@/lib/invoice-pdf-generator'
 import { airlineLegend, normaliseTripFlights } from '@/lib/itineraries/flights'
-import { DEFAULT_CONFIRMATION_REMARKS, type BookingConfirmationContext } from './templates/ats-booking-confirmation'
+import {
+  ATS_COMPANY_LINE,
+  DEFAULT_BANK_LINES,
+  DEFAULT_CONFIRMATION_REMARKS,
+  type BookingConfirmationContext,
+} from './templates/ats-booking-confirmation'
 import type { DocumentPage } from './types'
 
 const SLUG = 'ats-booking-confirmation'
@@ -54,6 +59,12 @@ export function jaDate(raw: string | null | undefined, withWeekday = false): str
   return withWeekday ? `${base}（${WEEKDAYS_JA[d.getUTCDay()]}）` : base
 }
 
+/** 「2026/9/29」 — the sheet's own date format (its yyyy/m/d cells). */
+export function slashDate(raw: string | null | undefined): string {
+  const d = day(raw)
+  return d ? `${d.getUTCFullYear()}/${d.getUTCMonth() + 1}/${d.getUTCDate()}` : ''
+}
+
 /** Today on the server's calendar as YYYY-MM-DD — the 作成日 default. */
 function todayISO(): string {
   return new Date().toISOString().slice(0, 10)
@@ -75,9 +86,10 @@ const num = (v: unknown): number => {
   return Number.isFinite(n) ? n : 0
 }
 
-/** The payment rows: deposit and balance on a deposit invoice, the balance on
- *  a final one, one amount otherwise. Deposit + balance = trip price exactly
- *  (tripCostBreakdown derives the balance by subtraction). */
+/** The two payment boxes the sheet always prints. A deposit invoice fills
+ *  both; a final one prints what was paid and the balance; a single invoice
+ *  — or none — is all balance, as the sheet's own 残金 = 合計 − 申込金 has it.
+ *  Deposit + balance = trip price exactly (tripCostBreakdown subtracts). */
 export function confirmationPayments(
   invoice: {
     invoice_type?: string | null
@@ -86,29 +98,113 @@ export function confirmationPayments(
     full_trip_cost?: number | string | null
     due_date?: string | null
     balance_due_date?: string | null
-  },
+  } | null,
   currency: string
-): { total: number; payments: BookingConfirmationContext['payments'] } {
-  const type = invoice.invoice_type === 'deposit' || invoice.invoice_type === 'final' ? invoice.invoice_type : 'standard'
+): { total: number; deposit: BookingConfirmationContext['deposit']; balance: BookingConfirmationContext['balance'] } {
   const money = (n: number) => formatMoney(n, currency)
+  const none = { amount: '', due: '' }
+  if (!invoice) return { total: 0, deposit: none, balance: { amount: money(0), due: '' } }
+  const type = invoice.invoice_type === 'deposit' || invoice.invoice_type === 'final' ? invoice.invoice_type : 'standard'
   if (type === 'standard') {
     const total = num(invoice.total_amount)
-    return { total, payments: [{ label: '旅行代金', amount: money(total), due: jaDate(invoice.due_date) }] }
+    return { total, deposit: none, balance: { amount: money(total), due: slashDate(invoice.due_date) } }
   }
   const b = tripCostBreakdown(invoice, type)
   if (type === 'final') {
     return {
       total: b.fullTripCost,
-      payments: [{ label: '旅行代金残金', amount: money(b.balanceAmount), due: jaDate(effectiveDueDate(invoice, 'final')) }],
+      deposit: { amount: money(b.depositAmount), due: '' },
+      balance: { amount: money(b.balanceAmount), due: slashDate(effectiveDueDate(invoice, 'final')) },
     }
   }
   return {
     total: b.fullTripCost,
-    payments: [
-      { label: '旅行代金申込金', amount: money(b.depositAmount), due: jaDate(invoice.due_date) },
-      { label: '旅行代金残金', amount: money(b.balanceAmount), due: jaDate(invoice.balance_due_date) },
-    ],
+    deposit: { amount: money(b.depositAmount), due: slashDate(invoice.due_date) },
+    balance: { amount: money(b.balanceAmount), due: slashDate(invoice.balance_due_date) },
   }
+}
+
+interface StandardRow {
+  label: string
+  /** The sheet's printed unit price, used until an invoice line fills the row. */
+  unit?: number
+  qty?: number
+  match: RegExp | null
+  /** Print the invoice line's own wording (the airport tax differs by airport). */
+  ownLabel?: boolean
+}
+
+/** The sheet's nine price rows (A53–A61), in its order and with its standard
+ *  unit prices. Row 6 is the sheet's blank row; anything on the invoice that
+ *  is none of the others is printed there. */
+export const STANDARD_CHARGE_ROWS: StandardRow[] = [
+  { label: '海外旅行代金', match: /旅行代金|ツアー代金|tour|package/i },
+  { label: '燃油サーチャージ・航空保険料等', unit: 109200, match: /燃油|サーチャージ|fuel|surcharge/i },
+  { label: '成田空港使用税', unit: 3160, match: /空港使用税|空港使用料|施設使用料|airport (tax|fee|charge)/i, ownLabel: true },
+  { label: '国際観光旅客税', unit: 3000, match: /国際観光旅客税|departure tax/i },
+  { label: '海外空港諸税等', unit: 10800, match: /海外空港|空港諸税|overseas/i },
+  { label: '', match: null },
+  { label: '日本語ガイド・英語ドライバーへのチップ (一組）', qty: 1, match: /(ガイド|ドライバー).*チップ|guide.*tip|driver.*tip/i },
+  { label: 'ナイル川クルーズ船チップ', match: /クルーズ.*チップ|cruise.*tip/i },
+  { label: '査証（ビザ）実費代　US＄36 現地カード払い', match: /査証|ビザ|visa/i },
+]
+
+/** Which row a line belongs to: the specific rows first, the tour price last
+ *  ("海外旅行代金" is the catch-all word, so it must not swallow the others). */
+const MATCH_ORDER = [1, 2, 3, 4, 6, 7, 8, 0]
+
+/**
+ * The sheet's price table from an invoice's lines. Every standard row always
+ * prints — with the sheet's unit price and ¥0 until the invoice fills it,
+ * exactly as the Excel does before the office types the numbers in.
+ */
+export function confirmationCharges(
+  lines: LineItem[],
+  currency: string
+): { rows: BookingConfirmationContext['charges']; sum: number } {
+  const money = (n: number) => formatMoney(n, currency)
+  const filled = new Map<number, LineItem>()
+  const extra: LineItem[] = []
+  for (const line of lines) {
+    const text = String(line.description ?? '')
+    const row = MATCH_ORDER.find(i => !filled.has(i) && STANDARD_CHARGE_ROWS[i].match?.test(text))
+    if (row === undefined) extra.push(line)
+    else filled.set(row, line)
+  }
+  const has = (v: unknown) => v !== undefined && v !== null && v !== ''
+  const fromLine = (l: LineItem, label: string) => ({
+    description: label,
+    unit_price: has(l.unit_price) ? money(num(l.unit_price)) : '',
+    quantity: has(l.quantity) ? String(num(l.quantity)) : '',
+    amount: money(num(l.amount)),
+  })
+
+  let sum = 0
+  const rows: BookingConfirmationContext['charges'] = []
+  STANDARD_CHARGE_ROWS.forEach((std, i) => {
+    if (std.match === null) {
+      // The blank row: the invoice's other lines, or the sheet's empty row.
+      if (extra.length === 0) rows.push({ description: '', unit_price: '', quantity: '', amount: '' })
+      for (const l of extra) {
+        rows.push(fromLine(l, String(l.description ?? '').trim()))
+        sum += num(l.amount)
+      }
+      return
+    }
+    const line = filled.get(i)
+    if (line) {
+      rows.push(fromLine(line, std.ownLabel ? String(line.description ?? '').trim() || std.label : std.label))
+      sum += num(line.amount)
+      return
+    }
+    rows.push({
+      description: std.label,
+      unit_price: std.unit ? money(std.unit) : '',
+      quantity: std.qty ? String(std.qty) : '',
+      amount: money(0),
+    })
+  })
+  return { rows, sum }
 }
 
 export async function buildBookingConfirmationHtml(input: {
@@ -177,21 +273,23 @@ export async function buildBookingConfirmationHtml(input: {
   )
   // The balance date lives on the booking (its payment schedule), not the
   // invoice — the same join /api/invoices/[id] makes.
-  const pay = invoice
-    ? confirmationPayments({ ...invoice, balance_due_date: party.balance_due_date } as never, currency)
-    : null
+  const pay = confirmationPayments(invoice ? ({ ...invoice, balance_due_date: party.balance_due_date } as never) : null, currency)
+  const charges = confirmationCharges(lines, currency)
+  const [logo, seal] = await Promise.all([getAtsDocumentImage('ats-logo.jpeg'), getAtsDocumentImage('ats-seal.jpeg')])
 
   const contacts = org?.document_contacts ?? {}
 
   const context: BookingConfirmationContext = {
     font_face_css: await getJapaneseFontFace(),
-    letterhead: await documentLetterhead(org),
+    // The sheet's own logo and company line, whatever the profile's logo is.
+    letterhead: { ...(await documentLetterhead(org)), logo_url: logo, company_name: ATS_COMPANY_LINE },
+    seal_url: seal,
     representative: (overrides.representative ?? trip.client_name ?? '').trim().replace(/様$/, ''),
     staff: (overrides.staff ?? '').trim(),
-    created_date: jaDate(overrides.created_date || todayISO()),
+    created_date: slashDate(overrides.created_date || todayISO()),
     phone: (trip.client_phone ?? '').trim(),
     email: (trip.client_email ?? '').trim(),
-    departure_date: jaDate(trip.start_date, true),
+    departure_date: slashDate(trip.start_date),
     tour_code: programme?.template_code ?? trip.itinerary_code ?? '',
     tour_name: programme?.template_name ?? trip.trip_name ?? '',
     travellers: party.names,
@@ -224,18 +322,19 @@ export async function buildBookingConfirmationHtml(input: {
       .split('\n')
       .map(l => l.trimEnd())
       .filter(l => l.trim()),
-    charges: lines.map(l => ({
-      description: (l.description ?? '').trim(),
-      unit_price: l.unit_price !== undefined && l.unit_price !== null && l.unit_price !== '' ? money(num(l.unit_price)) : '',
-      quantity: l.quantity !== undefined && l.quantity !== null && l.quantity !== '' ? String(num(l.quantity)) : '',
-      amount: money(num(l.amount)),
-    })),
-    total: pay ? money(pay.total) : '',
-    bank_lines: String(contacts.bank_transfer ?? '')
-      .split('\n')
-      .map(l => l.trim())
-      .filter(Boolean),
-    payments: pay?.payments ?? [],
+    charges: charges.rows,
+    // Invoice: the trip price (deposit + balance). None: the rows' ¥0.
+    total: money(invoice ? pay.total : charges.sum),
+    // The company profile's 振込先, else the sheet's own account.
+    bank_lines: (() => {
+      const own = String(contacts.bank_transfer ?? '')
+        .split('\n')
+        .map(l => l.trim())
+        .filter(Boolean)
+      return own.length ? own : DEFAULT_BANK_LINES
+    })(),
+    deposit: pay.deposit,
+    balance: pay.balance,
   }
 
   return {
