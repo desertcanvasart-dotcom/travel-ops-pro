@@ -157,7 +157,7 @@ export default function GenerateConfirmationButton({ itineraryId, clientName, fl
             </div>
             <div>
               <label className={label}>{t('roomType')}</label>
-              <input value={form.room_type} onChange={set('room_type')} className={field} placeholder="ツイン" />
+              <input value={form.room_type} onChange={set('room_type')} className={field} />
             </div>
           </div>
 
@@ -181,11 +181,11 @@ export default function GenerateConfirmationButton({ itineraryId, clientName, fl
               {rows.map((r, i) => (
                 <div key={i} className="grid grid-cols-[8.5rem_1fr_1fr_5.5rem_4.5rem_4.5rem_3.5rem_1.5rem] gap-1 items-center">
                   <input type="date" value={r.date} onChange={e => setRow(i, 'date', e.target.value)} className={field} />
-                  <input value={r.from} onChange={e => setRow(i, 'from', e.target.value)} className={field} placeholder="関西空港" />
-                  <input value={r.to} onChange={e => setRow(i, 'to', e.target.value)} className={field} placeholder="ドバイ" />
-                  <input value={r.flight_no} onChange={e => setRow(i, 'flight_no', e.target.value)} className={field} placeholder="EK317" />
-                  <input value={r.depart} onChange={e => setRow(i, 'depart', e.target.value)} className={field} placeholder="23:45" />
-                  <input value={r.arrive} onChange={e => setRow(i, 'arrive', e.target.value)} className={field} placeholder="04:35+1" />
+                  <input value={r.from} onChange={e => setRow(i, 'from', e.target.value)} className={field} />
+                  <input value={r.to} onChange={e => setRow(i, 'to', e.target.value)} className={field} />
+                  <input value={r.flight_no} onChange={e => setRow(i, 'flight_no', e.target.value)} className={field} />
+                  <input value={r.depart} onChange={e => setRow(i, 'depart', e.target.value)} className={field} />
+                  <input value={r.arrive} onChange={e => setRow(i, 'arrive', e.target.value)} className={field} />
                   <input value={r.status} onChange={e => setRow(i, 'status', e.target.value)} className={field} />
                   <button
                     type="button"
