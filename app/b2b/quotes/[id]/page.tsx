@@ -464,7 +464,7 @@ export default function QuoteDetailPage() {
           booking all ask before going ahead with a total that leaves them out. */}
       {websitePriced && (
         <div className="mb-6">
-          <WebsitePriceNote gaps={completeness.gaps} canViewFinancials={canViewFinancials} dayLabel={(day, name) => t('gapOnDay', { day, name })} />
+          <WebsitePriceNote />
         </div>
       )}
       {!websitePriced && !completeness.complete && (
@@ -559,9 +559,6 @@ export default function QuoteDetailPage() {
                               <span className={service.unpriced && !websitePriced ? 'text-red-800 font-medium' : undefined}>{service.service_name || t('serviceColumn')}</span>
                               {service.unpriced && !websitePriced && (
                                 <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] font-medium bg-red-600 text-white">{t('noRate')}</span>
-                              )}
-                              {service.unpriced && websitePriced && canViewFinancials && (
-                                <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-500">{tWeb('noCostRate')}</span>
                               )}
                               {!service.unpriced && service.included && (
                                 <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-500">{service.issue || t('included')}</span>

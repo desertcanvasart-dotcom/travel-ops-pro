@@ -34,7 +34,7 @@ import ItineraryExpenses from '@/app/components/ItineraryExpenses'
 import { createClient } from '@/lib/supabase'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
-import { itineraryCompleteness, costGapReason } from '@/lib/pricing/itinerary-completeness'
+import { itineraryCompleteness } from '@/lib/pricing/itinerary-completeness'
 import { describeGaps } from '@/lib/pricing/quote-completeness'
 import { isWebsitePriced } from '@/lib/pricing/website-price'
 import WebsitePriceNote from '@/app/components/WebsitePriceNote'
@@ -243,7 +243,7 @@ export default function ViewItineraryPage() {
   const supabase = createClient()
   const intlLocale = useLocale() as Language
   // Generating commissions is a manager's action (the route refuses agents).
-  const { canAccess, canViewFinancials } = useRole()
+  const { canAccess } = useRole()
   const canGenerateCommissions = canAccess(['admin', 'manager'])
   // The money screens are a manager's (the finance routes answer an agent 403):
   // Add expense, the expenses panel, the actual P&L and the P&L card are theirs too.
@@ -1933,14 +1933,14 @@ export default function ViewItineraryPage() {
 
       {/* Success Messages */}
       {(() => {
-        const { complete, gaps } = itineraryCompleteness(days)
         if (isWebsitePriced(itinerary)) {
           return (
             <div className="container mx-auto px-4 pt-3">
-              <WebsitePriceNote gaps={gaps.map(g => ({ ...g, issue: costGapReason(g.issue) }))} canViewFinancials={canViewFinancials} dayLabel={(day, name) => t('gapOnDay', { day, name })} />
+              <WebsitePriceNote />
             </div>
           )
         }
+        const { complete, gaps } = itineraryCompleteness(days)
         if (complete) return null
         return (
           <div className="container mx-auto px-4 pt-3">

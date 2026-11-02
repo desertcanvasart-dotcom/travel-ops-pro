@@ -76,7 +76,6 @@ export default function OrderIntakePage() {
 
 function OrderIntakeInner() {
   const t = useTranslations('orderIntake')
-  const tWeb = useTranslations('websitePrice')
   const { canViewFinancials } = useRole()
   const params = useSearchParams()
   // The paste box, folded away unless an order was handed in or asked for.
@@ -250,12 +249,6 @@ function OrderIntakeInner() {
               {preview.pricing.holes.length > 0 && !websitePrice && (
                 <div className="mt-3 bg-amber-50 border border-amber-200 rounded-lg p-3 text-amber-900">
                   <p className="font-medium flex items-center gap-1"><AlertTriangle className="w-4 h-4" />{t('holes', { count: preview.pricing.holes.length })}</p>
-                  <ul className="list-disc ml-5 mt-1 text-xs">{preview.pricing.holes.map((h, i) => <li key={i}>{h.message}</li>)}</ul>
-                </div>
-              )}
-              {preview.pricing.holes.length > 0 && websitePrice && canViewFinancials && (
-                <div className="mt-3 bg-gray-50 border border-gray-200 rounded-lg p-3 text-gray-600">
-                  <p className="text-xs">{tWeb('costGaps', { count: preview.pricing.holes.length })}</p>
                   <ul className="list-disc ml-5 mt-1 text-xs">{preview.pricing.holes.map((h, i) => <li key={i}>{h.message}</li>)}</ul>
                 </div>
               )}
