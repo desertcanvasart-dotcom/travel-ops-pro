@@ -34,7 +34,6 @@ import ItineraryExpenses from '@/app/components/ItineraryExpenses'
 import { createClient } from '@/lib/supabase'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
-import { itineraryCompleteness } from '@/lib/pricing/itinerary-completeness'
 import { describeGaps } from '@/lib/pricing/quote-completeness'
 import { isWebsitePriced } from '@/lib/pricing/website-price'
 import WebsitePriceNote from '@/app/components/WebsitePriceNote'
@@ -213,17 +212,10 @@ export default function ViewItineraryPage() {
   // share link all refuse to send them without the operator's go-ahead, and
   // ask first here (lib/pricing/itinerary-completeness).
   const confirmIncompleteSend = async (days: Array<{ day_number: number; services: Array<{ service_name: string; rate_eur: number; total_cost: number; notes: string }> }>): Promise<'complete' | 'go' | 'stop'> => {
-    const { complete, gaps } = itineraryCompleteness(days)
-    // A website order is sent at the website's price: a missing cost is the
-    // office's to fill, not a reason to ask (lib/pricing/website-price).
-    if (complete || isWebsitePriced(itinerary)) return 'complete'
-    const ok = await dialog.confirm({
-      title: t('incompleteTitle'),
-      message: t('sendIncompleteConfirm', { count: gaps.length, services: describeGaps(gaps) }),
-      confirmText: t('continueAnyway'),
-      variant: 'warning',
-    })
-    return ok ? 'go' : 'stop'
+    // Missing costs never stop or warn (operator, 2026-11-02: "hide it
+    // everywhere"). Kept as a function so the send paths read as before.
+    void days
+    return 'complete'
   }
 
   /** The server is the authority. If it finds services with no cost this
@@ -1943,21 +1935,8 @@ export default function ViewItineraryPage() {
             </div>
           )
         }
-        const { complete, gaps } = itineraryCompleteness(days)
-        if (complete) return null
-        return (
-          <div className="container mx-auto px-4 pt-3">
-            <div className="rounded-lg border border-red-300 bg-red-50 p-4">
-              <p className="text-sm font-semibold text-red-900">{t('incompleteTitle')}</p>
-              <p className="text-sm text-red-800 mt-1">{t('incompleteBody', { count: gaps.length })}</p>
-              <ul className="mt-2 space-y-0.5 text-sm text-red-900 list-disc pl-5">
-                {gaps.map((g, i) => (
-                  <li key={i}>{g.day ? t('gapOnDay', { day: g.day, name: g.name }) : g.name}</li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        )
+        // No "Incomplete price" box on any trip (operator, 2026-11-02).
+        return null
       })()}
 
       {sendSuccess && (
@@ -2366,18 +2345,14 @@ export default function ViewItineraryPage() {
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
                                   {day.services.map((service) => {
-                                    const noCost = (Number(service.rate_eur) || 0) === 0 && (Number(service.total_cost) || 0) === 0
                                     const typeLabel = tEdit.has(`serviceTypes.${service.service_type}`) ? tEdit(`serviceTypes.${service.service_type}`) : service.service_type.replace('_', ' ')
                                     return (
-                                      <tr key={service.id} className={noCost ? 'bg-red-50' : ''}>
+                                      <tr key={service.id}>
                                         <td className="py-2 pr-2 align-top">
                                           <div className="flex items-start gap-1.5">
                                             <span className="text-base leading-5">{getServiceIcon(service.service_type)}</span>
                                             <div className="min-w-0">
-                                              <p className={`font-medium ${noCost ? 'text-red-800' : 'text-gray-900'}`}>
-                                                {service.service_name}
-                                                {noCost && <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] font-medium bg-red-600 text-white align-middle">{t('noCost')}</span>}
-                                              </p>
+                                              <p className="font-medium text-gray-900">{service.service_name}</p>
                                               <p className="text-xs text-gray-500 sm:hidden">{typeLabel}</p>
                                               {service.notes && !service.notes.startsWith('__grid:') && <p className="text-xs text-gray-600 mt-0.5">{service.notes}</p>}
                                             </div>

@@ -10,7 +10,6 @@ import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import { VatToggle } from '@/app/components/Vat'
 import { useTranslations } from 'next-intl'
-import { useConfirm } from '@/components/ConfirmDialog'
 import { useTierLabel } from '@/hooks/useTierLabel'
 import { useTierOptions } from '@/hooks/useTierOptions'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
@@ -246,7 +245,6 @@ function AttractionInput({ onAdd, placeholder }: { onAdd: (name: string) => void
 function TourPriceCalculatorInner() {
   const { rateSymbol } = useCurrency()
   const t = useTranslations('b2bCalculator')
-  const confirmDialog = useConfirm()
   const tierLabel = useTierLabel()
   const tierOptions = useTierOptions(key => t(`tiers.${key}`))
   const guideGradeLabel = useVocabLabel('guide_grade')
@@ -814,15 +812,7 @@ function TourPriceCalculatorInner() {
 
   const handleSaveQuote = async () => {
     if (!result) return
-    if (result.complete === false) {
-      const gaps = result.services.filter(s => s.unpriced).length || (result.holes ?? []).length || 1
-      const ok = await confirmDialog(t('saveIncompleteBody', { count: gaps }), {
-        title: t('saveIncompleteTitle'),
-        confirmText: t('saveAnyway'),
-        variant: 'warning',
-      })
-      if (!ok) return
-    }
+    // Missing rates never stop a save (operator, 2026-11-02).
 
     setSaving(true)
     setError(null)
@@ -1171,7 +1161,6 @@ function TourPriceCalculatorInner() {
                   <p className="text-xs text-gray-500 mb-2">{t('extrasHint')}</p>
                   <div className="space-y-1.5 max-h-48 overflow-y-auto">
                     {availableExtras.map(x => {
-                      const unpriced = x.supplier_cost == null && x.selling_price == null && !x.activity_rate_id
                       const label = x.selling_price != null
                         ? `${extraMoney(x, x.selling_price)} · ${t('extrasSetPrice')}`
                         : x.activity_rate_id
@@ -1189,7 +1178,7 @@ function TourPriceCalculatorInner() {
                           />
                           <span className="text-sm leading-tight">
                             {x.name}
-                            <span className={`block text-xs ${unpriced ? 'text-red-600' : 'text-gray-500'}`}>
+                            <span className="block text-xs text-gray-500">
                               {label} · {x.unit === 'per_person' ? t('extrasPerPerson') : t('extrasPerBooking')}
                             </span>
                           </span>
@@ -1665,22 +1654,7 @@ function TourPriceCalculatorInner() {
                 {/* An incomplete price says so ABOVE the totals, not beside
                     them. Each missing service is also listed at 0, in red,
                     on its own day in the breakdown below. */}
-                {result.complete === false && (
-                  <div className="mb-4 rounded-lg border border-red-300 bg-red-50 p-4">
-                    <p className="text-sm font-semibold text-red-900">{t('incompleteTitle')}</p>
-                    <p className="text-sm text-red-800 mt-1">
-                      {t('incompleteBody', { count: result.services.filter(s => s.unpriced).length || (result.holes ?? []).length })}
-                    </p>
-                    {result.holes && result.holes.length > 0 && (
-                      <details className="mt-2">
-                        <summary className="text-xs text-red-800 cursor-pointer">{t('couldNotPrice')} ({result.holes.length})</summary>
-                        <ul className="mt-1 space-y-0.5 text-sm text-red-900 list-disc pl-5">
-                          {result.holes.map((h, i) => <li key={`h-${i}`}><span className="font-mono text-xs mr-1">{h.kind}</span>{h.message}</li>)}
-                        </ul>
-                      </details>
-                    )}
-                  </div>
-                )}
+                {/* No "Incomplete price" box (operator, 2026-11-02). */}
                 {result.warnings && result.warnings.length > 0 && (
                   <details className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2">
                     <summary className="text-xs text-amber-800 cursor-pointer">{t('pricingNotes')} ({result.warnings.length})</summary>
@@ -1741,11 +1715,11 @@ function TourPriceCalculatorInner() {
                     )}
                   </div>
                   <div className="bg-[#647C47]/10 rounded-lg p-4">
-                    <p className="text-xs text-gray-500 mb-1">{t('sellingPrice')}{result.complete === false && <span className="ml-1 font-semibold text-red-600">· {t('incompleteBadge')}</span>}</p>
+                    <p className="text-xs text-gray-500 mb-1">{t('sellingPrice')}</p>
                     <p className="text-xl font-bold text-[#647C47]">{sym}{result.selling_price.toFixed(2)}</p>
                   </div>
                   <div className="bg-[#647C47]/10 rounded-lg p-4">
-                    <p className="text-xs text-gray-500 mb-1">{t('perPerson')}{result.complete === false && <span className="ml-1 font-semibold text-red-600">· {t('incompleteBadge')}</span>}</p>
+                    <p className="text-xs text-gray-500 mb-1">{t('perPerson')}</p>
                     <p className="text-xl font-bold text-[#647C47]">{sym}{result.price_per_person.toFixed(2)}</p>
                     {/* The divisor is the PAYING pax — a tour leader rides on
                         the group's cost without paying a share of it. */}
@@ -1841,7 +1815,6 @@ function TourPriceCalculatorInner() {
                       const dayLabel = dayNum === -1
                         ? t('wholeTrip')
                         : place ? t('dayWithPlace', { day: dayNum, place }) : t('dayNumber', { day: dayNum })
-                      const dayGaps = daySvcs.filter(s => s.unpriced).length
 
                       return (
                         <Fragment key={dayNum}>
@@ -1852,13 +1825,9 @@ function TourPriceCalculatorInner() {
                             day={dayNum}
                             label={dayLabel}
                             meta={`(${daySvcs.length} ${daySvcs.length === 1 ? t('service') : t('services')})`}
-                            badge={dayGaps > 0 && (
-                              <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-700">
-                                {t('dayGaps', { count: dayGaps })}
-                              </span>
-                            )}
+                            badge={null}
                             total={`${sym}${dayTotal.toFixed(2)}`}
-                            hasGaps={dayGaps > 0}
+                            hasGaps={false}
                             expanded={isExpanded}
                             onToggle={() => toggleDay(dayNum)}
                           />
@@ -1872,25 +1841,22 @@ function TourPriceCalculatorInner() {
                             <tr
                               key={idx}
                               className={`border-b border-gray-100 ${
-                                state === 'unpriced' ? 'bg-red-50 hover:bg-red-100/60'
-                                : state === 'included' ? 'text-gray-400 hover:bg-gray-50'
+                                state === 'included' ? 'text-gray-400 hover:bg-gray-50'
                                 : state === 'note' ? 'bg-amber-50/60 hover:bg-amber-50'
                                 : 'hover:bg-gray-50'
                               }`}
                             >
                               <td className={`px-4 py-2 pl-10 ${DAY_LINE_EDGE}`}>
-                                <div className={state === 'unpriced' ? 'text-red-800 font-medium' : undefined}>{service.service_name}</div>
-                                {service.issue && state !== 'included' && (
-                                  <div className={`text-xs mt-0.5 ${state === 'unpriced' ? 'text-red-700' : 'text-amber-800'}`}>{service.issue}</div>
+                                <div>{service.service_name}</div>
+                                {service.issue && state !== 'included' && state !== 'unpriced' && (
+                                  <div className="text-xs mt-0.5 text-amber-800">{service.issue}</div>
                                 )}
                                 {service.pricing_note && (
                                   <div className="text-xs text-gray-400 mt-0.5">{service.pricing_note}</div>
                                 )}
                               </td>
                               <td className="px-4 py-2 text-center">
-                                {state === 'unpriced' ? (
-                                  <span className="px-2 py-0.5 rounded text-xs font-medium bg-red-600 text-white">{t('noRate')}</span>
-                                ) : state === 'included' ? (
+                                {state === 'included' ? (
                                   <span className="px-2 py-0.5 rounded text-xs bg-gray-100 text-gray-500">{service.issue || t('included')}</span>
                                 ) : state === 'note' ? (
                                   <span className="px-2 py-0.5 rounded text-xs bg-amber-100 text-amber-800">{t('checkLine')}</span>
