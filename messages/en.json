@@ -7182,7 +7182,8 @@
       "withdrawn": "This tour is no longer offered. It has been withdrawn from the catalogue.",
       "quoteThisTour": "Quote this tour",
       "routeMap": "Route map",
-      "routeStops": "{count, plural, one {# stop} other {# stops}}"
+      "routeStops": "{count, plural, one {# stop} other {# stops}}",
+      "route": "Route"
     }
   },
   "b2bQuotes": {

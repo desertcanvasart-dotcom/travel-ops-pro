@@ -78,7 +78,7 @@ const MERGE_INTO: Record<string, string> = {
 }
 
 /** Japanese names the office writes, for the map labels. */
-const PLACE_JA: Record<string, string> = {
+export const PLACE_JA: Record<string, string> = {
   Cairo: 'カイロ',
   Alexandria: 'アレキサンドリア',
   Aswan: 'アスワン',
@@ -104,7 +104,7 @@ const PLACE_JA: Record<string, string> = {
  *  the coordinate keys. The
  *  importer only records where each NIGHT is spent; a stop visited and left
  *  the same day (Aswan on the way to Abu Simbel) is only in the text. */
-const TEXT_PLACES: Array<[RegExp, string]> = [
+export const TEXT_PLACES: Array<[RegExp, string]> = [
   [/カイロ|\bcairo\b/i, 'Cairo'],
   [/ギザ|サッカラ|ダハシュール|メンフィス|\b(giza|saqqara|sakkara|dahshur|memphis)\b/i, 'Cairo'],
   [/アレキサンドリア|アレクサンドリア|\balexandria\b/i, 'Alexandria'],
@@ -134,11 +134,11 @@ export interface RouteDay {
 }
 
 /** "Nile Cruise" and the like are not places on a map. */
-function isPlace(city: string | null | undefined): city is string {
+export function isPlace(city: string | null | undefined): city is string {
   return Boolean(city && city.trim() && !/cruise|flight|train/i.test(city))
 }
 
-function canonical(city: string): string {
+export function canonical(city: string): string {
   const c = city.trim()
   return MERGE_INTO[c] ?? c
 }

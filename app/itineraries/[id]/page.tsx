@@ -66,6 +66,8 @@ import { withReturnTo } from '@/lib/nav/return-to'
 import { useRole } from '@/hooks/useRole'
 
 // The route drawn on Egypt — the same map the 日程表 prints.
+import { tripTransport } from '@/lib/maps/trip-transport'
+
 const TourRouteMap = dynamic(() => import('@/components/TourRouteMap'), {
   ssr: false,
   loading: () => <div className="h-12 bg-gray-100 rounded-xl animate-pulse" />,
@@ -2261,14 +2263,14 @@ export default function ViewItineraryPage() {
                 {/* ROUTE MAP */}
                 {days.length > 0 && (
                   <TourRouteMap
-                    collapsible
-                    defaultExpanded={false}
+                    mapOpen={false}
                     days={days.map(d => ({
                       day: d.day_number,
                       // The title and the text name the places visited by day,
                       // not only where the night is spent.
                       description: `${d.title ?? ''}\n${d.description ?? ''}`,
                       overnight_city: d.overnight_city || d.city,
+                      transport: tripTransport(d.services),
                     }))}
                   />
                 )}

@@ -7275,7 +7275,8 @@
       "withdrawn": "このツアーは現在販売されていません。カタログから取り下げられています。",
       "quoteThisTour": "このツアーの見積もりを作成",
       "routeMap": "ルートマップ",
-      "routeStops": "{count}か所"
+      "routeStops": "{count}か所",
+      "route": "ルート"
     },
     "views": {
       "grid": "グリッド",

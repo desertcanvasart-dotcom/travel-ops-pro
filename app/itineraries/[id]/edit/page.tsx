@@ -65,6 +65,8 @@ import { frozenToExchangeRates, parseFrozenFx } from '@/lib/itinerary-fx'
 import { LegCityOptions, useAirports } from '@/app/components/AirportOptions'
 
 // The route drawn on Egypt — the same map the 日程表 prints.
+import { tripTransport } from '@/lib/maps/trip-transport'
+
 const TourRouteMap = dynamic(() => import('@/components/TourRouteMap'), {
   ssr: false,
   loading: () => <div className="h-12 bg-gray-100 rounded-xl animate-pulse" />,
@@ -2344,11 +2346,12 @@ export default function ItineraryEditorPage() {
           {/* Route Map */}
           {days.length > 0 && (
             <TourRouteMap
-              collapsible
               days={days.map(d => ({
                 day: d.day_number,
                 description: `${d.title ?? ''}\n${d.description ?? ''}`,
                 overnight_city: d.overnight_city || d.city,
+                // The day's services live in their own list on this page.
+                transport: tripTransport(services.filter(sv => sv.itinerary_day_id === d.id)),
               }))}
             />
           )}
