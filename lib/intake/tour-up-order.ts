@@ -318,9 +318,12 @@ export function matchTemplateCode<T extends { template_code: string }>(code: str
   const wanted = norm(code)
   const exact = templates.find(t => norm(t.template_code) === wanted)
   if (exact) return exact
-  const stem = wanted.split('-')[0]
+  // The stem is the whole prefix with its number: KEK802 (Kansai) is not
+  // EK802, and MSN-601 is MSN601, not every MSN programme.
+  const stemOf = (s: string) => s.match(/^[A-Z]+-?\d{3,4}/)?.[0].replace('-', '') ?? null
+  const stem = stemOf(wanted)
   if (!stem) return null
-  const byStem = templates.filter(t => norm(t.template_code).split('-')[0] === stem)
+  const byStem = templates.filter(t => stemOf(norm(t.template_code)) === stem)
   return byStem.length === 1 ? byStem[0] : null
 }
 
