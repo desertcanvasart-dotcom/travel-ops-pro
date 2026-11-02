@@ -11,7 +11,7 @@
 // Ported from the sibling app (autoura-saas). See PRICING-HARNESS-PLAN.md.
 
 import type { PricingHole } from './pricing-types'
-import { quoteCompleteness, describeGaps, type QuoteGap } from './pricing/quote-completeness'
+import { quoteCompleteness, type QuoteGap } from './pricing/quote-completeness'
 
 export interface DeliverablePriceInput {
   /** From the engine result — when present, must be true. */
@@ -126,8 +126,9 @@ export function checkDeliverablePrice(input: DeliverablePriceInput): Deliverable
  * lines include services with NO RATE is refused as well (lib/pricing/
  * quote-completeness). Until 2026-09-16 a stored quote carried no completeness
  * at all, so a quote missing every hotel night and transfer passed this gate
- * and went out as a customer PDF, an itinerary, and a booking. The operator may
- * still knowingly proceed — `allowIncomplete` — but never by default.
+ * and went out as a customer PDF, an itinerary, and a booking. Since
+ * 2026-11-02 the operator's rule is that missing rates never block or warn —
+ * see the note in the body.
  */
 export function checkAmountDeliverable(
   amount: number | null | undefined,
@@ -148,20 +149,14 @@ export function checkAmountDeliverable(
   })
   if (opts.servicesSnapshot === undefined) return check
 
-  const { complete, gaps } = quoteCompleteness(opts.servicesSnapshot)
-  if (complete || opts.allowIncomplete) return { ...check, gaps }
-  const violations = [
-    ...check.violations,
-    `${gaps.length} service(s) have no rate: ${describeGaps(gaps)}.`,
-  ]
-  return {
-    ok: false,
-    violations,
-    holes: check.holes,
-    // Only incomplete — nothing structurally wrong — is overridable.
-    incomplete: check.ok,
-    gaps,
-  }
+  // Services with no rate no longer stop anything (operator, 2026-11-02:
+  // "hide it everywhere"). The gaps are still returned for whoever wants to
+  // list them; the structural checks above still refuse a price that is not a
+  // positive amount in a currency. `allowIncomplete` is kept so existing
+  // callers compile — it no longer changes the outcome.
+  const { gaps } = quoteCompleteness(opts.servicesSnapshot)
+  void opts.allowIncomplete
+  return { ...check, gaps }
 }
 
 export class PriceNotDeliverableError extends Error {

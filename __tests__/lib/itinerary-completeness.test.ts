@@ -62,9 +62,13 @@ describe('a quote gap survives conversion into the itinerary', () => {
 describe('the delivery gate reads the itinerary lines', () => {
   const lines = itineraryServiceLines([{ day_number: 6, services: [noCost] }])
 
-  it('refuses, as an overridable refusal', () => {
+  // Operator, 2026-11-02: missing costs never stop or warn — "hide it
+  // everywhere". The gaps are still read and returned.
+  it('goes ahead without asking, still naming the gaps', () => {
     const r = checkAmountDeliverable(2142.26, { currency: 'USD', servicesSnapshot: lines })
-    expect(r).toMatchObject({ ok: false, incomplete: true })
+    expect(r.ok).toBe(true)
+    expect(r.incomplete).toBeUndefined()
+    expect(r.gaps?.length).toBeGreaterThan(0)
   })
 
   it('goes ahead only on an explicit yes', () => {

@@ -59,12 +59,13 @@ describe('describeGaps', () => {
 })
 
 describe('checkAmountDeliverable with the saved lines', () => {
-  it('refuses a quote with services that have no rate, as an overridable refusal', () => {
+  // Operator, 2026-11-02: missing rates never stop or warn ("hide it
+  // everywhere"); the gaps are still returned for whoever lists them.
+  it('lets a quote with services that have no rate through, still naming the gaps', () => {
     const r = checkAmountDeliverable(2142.26, { currency: 'USD', servicesSnapshot: [priced, noHotel] })
-    expect(r.ok).toBe(false)
-    expect(r.incomplete).toBe(true)
+    expect(r.ok).toBe(true)
+    expect(r.incomplete).toBeUndefined()
     expect(r.gaps).toHaveLength(1)
-    expect(r.violations.join(' ')).toMatch(/Hotel \(Abu Simbel\) \(day 6\)/)
   })
 
   it('lets it through when the operator knowingly goes ahead', () => {
@@ -76,8 +77,8 @@ describe('checkAmountDeliverable with the saved lines', () => {
     const r = checkAmountDeliverable(0, { currency: 'USD', servicesSnapshot: [noHotel], allowIncomplete: true })
     expect(r.ok).toBe(false)
     const blocked = checkAmountDeliverable(0, { currency: 'USD', servicesSnapshot: [noHotel] })
-    // Broken AND incomplete: not marked overridable, so the UI does not offer "continue anyway".
-    expect(blocked.incomplete).toBe(false)
+    // A zero price is still refused, missing rates or not.
+    expect(blocked.ok).toBe(false)
   })
 
   it('without saved lines it is the structural check it always was', () => {

@@ -20,8 +20,7 @@ import type { Language } from '@/types/multilingual'
 import { formatMoney } from '@/lib/currency-totals'
 import { readVat, totalWithVat } from '@/lib/vat'
 import { VatToken, VatToggle } from '@/app/components/Vat'
-import { useConfirm, useConfirmDialog } from '@/components/ConfirmDialog'
-import { quoteCompleteness, describeGaps } from '@/lib/pricing/quote-completeness'
+import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { isWebsitePriced } from '@/lib/pricing/website-price'
 import WebsitePriceNote from '@/app/components/WebsitePriceNote'
 import { useRole } from '@/hooks/useRole'
@@ -120,7 +119,6 @@ export default function QuoteDetailPage() {
   const tVat = useTranslations('vat')
   const tWeb = useTranslations('websitePrice')
   const { canViewFinancials } = useRole()
-  const confirmDialog = useConfirm()
   const dialog = useConfirmDialog()
 
   const [quote, setQuote] = useState<Quote | null>(null)
@@ -214,13 +212,7 @@ export default function QuoteDetailPage() {
 
   const convertToItinerary = async () => {
     if (!quote) return
-    // A quote with services that have no rate converts only when the operator
-    // says so: the itinerary would carry a total that leaves them out.
-    const { complete, gaps } = quoteCompleteness(quote.services_snapshot)
-    // A website order's price is final: nothing to confirm (lib/pricing/website-price).
-    if (!complete && !isWebsitePriced(quote) && !(await confirmDialog(t('convertIncompleteConfirm', { count: gaps.length, services: describeGaps(gaps) }), {
-      title: t('incompleteTitle'), confirmText: t('continueAnyway'), variant: 'warning',
-    }))) return
+    // Missing rates never stop a convert (operator, 2026-11-02).
     // No travel date: ask for the trip's first day. The itinerary was dated
     // TODAY, so its vouchers, deposit and balance dates were all invented.
     let startDate: string | undefined
@@ -235,7 +227,7 @@ export default function QuoteDetailPage() {
       const res = await fetch(`/api/b2b/quotes/${quoteId}/convert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...(complete ? {} : { allow_incomplete: true }), ...(startDate ? { start_date: startDate } : {}) })
+        body: JSON.stringify({ ...(startDate ? { start_date: startDate } : {}) })
       })
       const data = await res.json()
       if (data.success) {
@@ -391,7 +383,6 @@ export default function QuoteDetailPage() {
   const partner = quote.b2b_partners
   const itinerarySource = quote.itineraries
   const services = quote.services_snapshot || []
-  const completeness = quoteCompleteness(services)
   // A website order: the website's price is final, the lines are a cost
   // estimate — shown to admins and managers only, its holes never in red.
   const websitePriced = isWebsitePriced(quote)
@@ -401,15 +392,8 @@ export default function QuoteDetailPage() {
   const money = (v: number | null | undefined) => formatMoney(Number(v) || 0, quote.currency || 'EUR')
 
   const downloadPdf = async () => {
-    const url = `/api/b2b/quotes/${quote.id}/pdf`
-    if (completeness.complete || websitePriced) {
-      window.open(url, '_blank')
-      return
-    }
-    const ok = await confirmDialog(t('pdfIncompleteConfirm', { count: completeness.gaps.length, services: describeGaps(completeness.gaps) }), {
-      title: t('incompleteTitle'), confirmText: t('continueAnyway'), variant: 'warning',
-    })
-    if (ok) window.open(`${url}?allow_incomplete=1`, '_blank')
+    // Missing rates never stop the PDF (operator, 2026-11-02).
+    window.open(`/api/b2b/quotes/${quote.id}/pdf`, '_blank')
   }
 
   // Derive display values from either template or itinerary
@@ -467,20 +451,7 @@ export default function QuoteDetailPage() {
           <WebsitePriceNote />
         </div>
       )}
-      {!websitePriced && !completeness.complete && (
-        <div className="mb-6 rounded-lg border border-red-300 bg-red-50 p-4">
-          <p className="text-sm font-semibold text-red-900">{t('incompleteTitle')}</p>
-          <p className="text-sm text-red-800 mt-1">{t('incompleteBody', { count: completeness.gaps.length })}</p>
-          <ul className="mt-2 space-y-0.5 text-sm text-red-900 list-disc pl-5">
-            {completeness.gaps.map((g, i) => (
-              <li key={i}>
-                <span className="font-medium">{g.day ? t('gapOnDay', { day: g.day, name: g.name }) : g.name}</span>
-                <span className="text-red-700"> · {g.issue}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      )}
+      {/* No "Incomplete price" box on any quote (operator, 2026-11-02). */}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Main Content */}
@@ -537,7 +508,7 @@ export default function QuoteDetailPage() {
                   {groupLinesByDay(services as any[], (s: any) => ({ id: s.service_id, category: s.service_category, dayNumber: s.day_number })).map((group, groupIndex) => {
                     const gaps = group.lines.filter((s: any) => s.unpriced).length
                     // Red only where a gap is a hole in the price.
-                    const redGaps = gaps > 0 && !websitePriced
+                    const redGaps = false
                     const total = group.lines.reduce((sum: number, s: any) => sum + (Number(s.line_total) || 0), 0)
                     return (
                       <Fragment key={group.day}>
@@ -554,19 +525,16 @@ export default function QuoteDetailPage() {
                           hasGaps={redGaps}
                         />
                         {group.lines.map((service: any, idx: number) => (
-                          <tr key={idx} className={`border-b border-gray-100 ${service.unpriced && !websitePriced ? 'bg-red-50' : service.included ? 'text-gray-400 hover:bg-gray-50' : 'hover:bg-gray-50'}`}>
+                          <tr key={idx} className={`border-b border-gray-100 ${service.included ? 'text-gray-400 hover:bg-gray-50' : 'hover:bg-gray-50'}`}>
                             <td className={`px-4 py-2 ${DAY_LINE_EDGE}`}>
-                              <span className={service.unpriced && !websitePriced ? 'text-red-800 font-medium' : undefined}>{service.service_name || t('serviceColumn')}</span>
-                              {service.unpriced && !websitePriced && (
-                                <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] font-medium bg-red-600 text-white">{t('noRate')}</span>
-                              )}
+                              <span>{service.service_name || t('serviceColumn')}</span>
                               {!service.unpriced && service.included && (
                                 <span className="ml-2 px-1.5 py-0.5 rounded text-[11px] bg-gray-100 text-gray-500">{service.issue || t('included')}</span>
                               )}
                             </td>
                             <td className="px-4 py-2 text-right">{service.quantity || 1}</td>
-                            {showCosts && <td className={`px-4 py-2 text-right ${service.unpriced && !websitePriced ? 'text-red-700' : ''}`}>{money(service.unit_cost)}</td>}
-                            {showCosts && <td className={`px-4 py-2 text-right font-medium ${service.unpriced && !websitePriced ? 'text-red-700' : ''}`}>{money(service.line_total)}</td>}
+                            {showCosts && <td className={`px-4 py-2 text-right `}>{money(service.unit_cost)}</td>}
+                            {showCosts && <td className={`px-4 py-2 text-right font-medium `}>{money(service.line_total)}</td>}
                           </tr>
                         ))}
                       </Fragment>
