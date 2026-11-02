@@ -56,6 +56,9 @@ interface Profile {
 // the itinerary level, never here; the programme document prints them blank
 // exactly like the office's own template files.
 const CONTACT_SLOTS = ['emergency_japan', 'cairo_office'] as const
+// Multi-line standing text for the 予約確認書兼請求書: the bank account it asks
+// customers to pay into, and its 備考 (blank = the office's own wording).
+const CONTACT_TEXT_SLOTS = ['bank_transfer', 'confirmation_remarks'] as const
 
 export default function CompanyProfileCard() {
   const t = useTranslations('settings.companyProfile')
@@ -414,6 +417,18 @@ export default function CompanyProfileCard() {
             <input
               className={inputClass}
               value={form.document_contacts[slot] ?? ''}
+              onChange={e => setContact(slot, e.target.value)}
+            />
+          </div>
+        ))}
+        {CONTACT_TEXT_SLOTS.map(slot => (
+          <div key={slot} className="md:col-span-2">
+            <label className="block text-xs font-medium text-gray-600 mb-1">{t(`slots.${slot}`)}</label>
+            <textarea
+              className={inputClass}
+              rows={slot === 'bank_transfer' ? 3 : 6}
+              value={form.document_contacts[slot] ?? ''}
+              placeholder={t(`slots.${slot}Placeholder`)}
               onChange={e => setContact(slot, e.target.value)}
             />
           </div>

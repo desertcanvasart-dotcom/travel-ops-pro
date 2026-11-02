@@ -1,7 +1,10 @@
 'use client'
 
 import { useState, useEffect, useCallback } from 'react'
-import { Users, Plus, Loader2, Star, Mail, Phone, BadgeCheck } from 'lucide-react'
+import { useTranslations } from 'next-intl'
+import { Users, Plus, Loader2, Star, Mail, Phone, BadgeCheck, FileText } from 'lucide-react'
+import { useOrgDocumentTemplates } from '@/lib/documents/use-org-templates'
+import { useRole } from '@/hooks/useRole'
 
 interface Passenger {
   id: string
@@ -54,6 +57,10 @@ const EMPTY = {
 }
 
 export default function PassengerManifest({ bookingId }: { bookingId: string }) {
+  const tDocs = useTranslations('bookings.documents')
+  const orgDocuments = useOrgDocumentTemplates()
+  const { canAccess } = useRole()
+  const canPrintForms = canAccess(['admin', 'manager'])
   const [passengers, setPassengers] = useState<Passenger[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -119,12 +126,26 @@ export default function PassengerManifest({ bookingId }: { bookingId: string }) 
         <h3 className="font-medium text-gray-900 flex items-center gap-2">
           <Users className="w-4 h-4" /> Passengers <span className="text-gray-400">({passengers.length})</span>
         </h3>
-        <button
-          onClick={() => setShowForm((s) => !s)}
-          className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] transition-colors"
-        >
-          <Plus className="w-4 h-4" /> Add passenger
-        </button>
+        <div className="flex items-center gap-2">
+          {/* The printed 参加申込書: what each traveller gave the portal, with
+              their passport page. Manager+ only — it prints the passport. */}
+          {orgDocuments.has('ats-application-form') && canPrintForms && passengers.length > 0 && (
+            <a
+              href={`/api/documents/application-form?booking_id=${encodeURIComponent(bookingId)}`}
+              target="_blank"
+              rel="noopener"
+              className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium border border-[#647C47] text-[#647C47] rounded-lg hover:bg-[#647C47]/10 transition-colors"
+            >
+              <FileText className="w-4 h-4" /> {tDocs('applicationForm')}
+            </a>
+          )}
+          <button
+            onClick={() => setShowForm((s) => !s)}
+            className="inline-flex items-center gap-1 px-3 py-1.5 text-sm font-medium bg-[#647C47] text-white rounded-lg hover:bg-[#4f6238] transition-colors"
+          >
+            <Plus className="w-4 h-4" /> Add passenger
+          </button>
+        </div>
       </div>
 
       {showForm && (

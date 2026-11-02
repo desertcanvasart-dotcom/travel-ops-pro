@@ -84,6 +84,7 @@ export default function GenerateNitteiButton({
     south_guide: '',
     author: '',
     created_date: todayLocalISO(),
+    tips_prepaid: true,
   })
 
   // The programme list is only needed once the dialog is open — a trip page
@@ -141,6 +142,7 @@ export default function GenerateNitteiButton({
     if (form.south_guide) qs.set('south_guide', form.south_guide)
     if (form.author) qs.set('author', form.author)
     if (form.created_date) qs.set('created_date', form.created_date)
+    if (!form.tips_prepaid) qs.set('tips', '0')
     qs.set('format', format === 'pdf' ? 'pdf' : 'html')
     if (format === 'print') qs.set('print', '1')
     window.open(`/api/documents/program-itinerary?${qs.toString()}`, '_blank', 'noopener')
@@ -261,6 +263,15 @@ export default function GenerateNitteiButton({
                   />
                 </div>
               </div>
+
+              <label className="flex items-center gap-2 text-sm text-gray-700">
+                <input
+                  type="checkbox"
+                  checked={form.tips_prepaid}
+                  onChange={e => setForm(p => ({ ...p, tips_prepaid: e.target.checked }))}
+                />
+                {t('tipsPage')}
+              </label>
 
               {error && <p className="text-xs text-red-600">{error}</p>}
             </div>

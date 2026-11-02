@@ -20,6 +20,7 @@ const generateItineraryPDF = async (...args: Parameters<typeof import('@/lib/pdf
 import { useCompanyInfo } from '@/lib/use-company-info'
 import PDFPreviewModal from '@/app/components/PDFPreviewModal'
 import GenerateNitteiButton from '@/components/GenerateNitteiButton'
+import GenerateConfirmationButton from '@/components/GenerateConfirmationButton'
 import GenerateOpsSheetButton from '@/components/GenerateOpsSheetButton'
 import { useOrgDocumentTemplates } from '@/lib/documents/use-org-templates'
 import ResourceAssignmentV2 from '@/app/components/ResourceAssignmentV2'
@@ -99,6 +100,8 @@ interface Itinerary {
   trip_name: string
   /** The programme this trip follows, when it follows one. */
   template_id?: string | null
+  /** The trip's own flights (lib/itineraries/flights.ts). */
+  flights?: unknown
   start_date: string
   end_date: string
   total_days: number
@@ -1405,6 +1408,7 @@ export default function ViewItineraryPage() {
   const [expenseSignal, setExpenseSignal] = useState(0)
   const [nitteiSignal, setNitteiSignal] = useState(0)
   const [opsSheetSignal, setOpsSheetSignal] = useState(0)
+  const [confirmationSignal, setConfirmationSignal] = useState(0)
   const [tasksRefresh, setTasksRefresh] = useState(0)
   const [showCancel, setShowCancel] = useState(false)
   const [closingOut, setClosingOut] = useState(false)
@@ -1747,6 +1751,7 @@ export default function ViewItineraryPage() {
                     title: days.length === 0 ? t('pdfNeedsDays') : documentLanguageReady(lang) ? t('pdfTooltip') : tLayout('translateFirst', { language: LANGUAGE_NAMES[lang] }),
                   })),
                   ...(orgDocuments.has('ats-daily-itinerary') ? [{ label: tLayout('docNittei'), icon: <FileText className="w-4 h-4" />, onSelect: () => setNitteiSignal(n => n + 1) }] : []),
+                  ...(orgDocuments.has('ats-booking-confirmation') ? [{ label: tLayout('docConfirmation'), icon: <FileText className="w-4 h-4" />, onSelect: () => setConfirmationSignal(n => n + 1) }] : []),
                   { label: t('contract'), icon: <FileText className="w-4 h-4" />, href: fromThisTrip(`/documents/contract/${itinerary.id}`) },
                   ...(orgDocuments.has('ats-questionnaire') ? [{ label: tLayout('docSurvey'), icon: <ClipboardList className="w-4 h-4" />, onSelect: () => window.open(`/api/itineraries/${itinerary.id}/survey-pdf`, '_blank', 'noopener') }] : []),
                   ...(orgDocuments.has('ats-operations-sheet') ? [{ label: tLayout('docOpsSheet'), icon: <FileText className="w-4 h-4" />, onSelect: () => setOpsSheetSignal(n => n + 1), title: tLayout('staffLanguage') }] : []),
@@ -1856,6 +1861,13 @@ export default function ViewItineraryPage() {
         hideTrigger
       />
       <GenerateOpsSheetButton itineraryId={itinerary.id} itineraryCode={itinerary.itinerary_code} openSignal={opsSheetSignal} hideTrigger />
+      <GenerateConfirmationButton
+        itineraryId={itinerary.id}
+        clientName={itinerary.client_name}
+        flights={itinerary.flights}
+        onFlightsSaved={flights => setItinerary(prev => (prev ? { ...prev, flights } : prev))}
+        openSignal={confirmationSignal}
+      />
       {showPickup && (
         <PickupDetailsDialog
           itineraryId={itinerary.id}

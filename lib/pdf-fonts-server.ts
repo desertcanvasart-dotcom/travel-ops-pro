@@ -38,3 +38,17 @@ export async function getJapaneseFontFace(): Promise<string> {
   font-display: block;
 }`
 }
+
+let cachedTipsArabic: string | null = null
+
+// The 日程表's tips card says "tips were paid in Japan" in Arabic for the
+// driver who asks. The server ships no Arabic font and the Japanese one has no
+// Arabic glyphs, so the one sentence is an image (public/documents/
+// tips-paid-ar.png, rendered once from a system Arabic face) — 32KB, against
+// the megabytes a second embedded font would add to every render.
+export async function getTipsArabicImage(): Promise<string> {
+  if (cachedTipsArabic) return cachedTipsArabic
+  const buf = await readFile(join(process.cwd(), 'public', 'documents', 'tips-paid-ar.png'))
+  cachedTipsArabic = `data:image/png;base64,${buf.toString('base64')}`
+  return cachedTipsArabic
+}

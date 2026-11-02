@@ -17,7 +17,7 @@ import { getTemplate } from './registry'
 import { assembleProgramItinerary } from './assemble-program-itinerary'
 import { inlineImage } from './inline-image'
 import { loadTripStays } from './trip-stays'
-import { getJapaneseFontFace } from '@/lib/pdf-fonts-server'
+import { getJapaneseFontFace, getTipsArabicImage } from '@/lib/pdf-fonts-server'
 import { orgHasDocumentTemplate } from './org-templates'
 import type { DocumentPage } from './types'
 
@@ -38,6 +38,8 @@ export interface ProgramItineraryDeparture {
   south_guide: string | null
   author: string | null
   customer_name: string | null
+  /** false leaves off the チップについて page; absent prints it. */
+  tips_prepaid?: boolean | null
 }
 
 /** 作成日 as the office writes it — "19 August 2026". An absent or unparseable
@@ -121,6 +123,8 @@ export async function buildProgramItineraryHtml(input: {
     org: orgForDoc,
     departure,
   })
+
+  if (context.tips_prepaid) context.tips_arabic_img = await getTipsArabicImage()
 
   return {
     html: template.render(context),
