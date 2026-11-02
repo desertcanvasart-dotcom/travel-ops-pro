@@ -7274,7 +7274,8 @@
       "sellingPriceNote": "販売価格（会社の標準マージン適用）",
       "withdrawn": "このツアーは現在販売されていません。カタログから取り下げられています。",
       "quoteThisTour": "このツアーの見積もりを作成",
-      "routeMap": "ルートマップ"
+      "routeMap": "ルートマップ",
+      "routeStops": "{count}か所"
     },
     "views": {
       "grid": "グリッド",

@@ -63,6 +63,18 @@ describe('route map', () => {
     expect(map.svg).not.toMatch(/https?:\/\/(?!www\.w3\.org)/)
   })
 
+  it('reads an English trip too — the trip page feeds its own titles and text', () => {
+    const trip = [
+      { day: 1, description: 'Overnight flight\n成田空港発 エミレーツ航空', overnight_city: null },
+      { day: 2, description: 'Arrival Cairo\nGiza pyramids', overnight_city: 'Cairo' },
+      { day: 3, description: 'Fly to Aswan, drive to Abu Simbel', overnight_city: 'Abu Simbel' },
+      { day: 4, description: 'Embark Nile cruise in Aswan', overnight_city: 'Nile Cruise' },
+      { day: 5, description: 'Kom Ombo and Edfu', overnight_city: 'Nile Cruise' },
+      { day: 7, description: 'Luxor West Bank, fly to Cairo', overnight_city: 'Cairo' },
+    ]
+    expect(routeStopsFromDays(trip)).toEqual(['Cairo', 'Aswan', 'Abu Simbel', 'Aswan', 'Kom Ombo', 'Edfu', 'Luxor', 'Cairo'])
+  })
+
   it('draws no map for a single place or places outside Egypt', () => {
     expect(renderEgyptRouteMap(['Cairo'])).toBeNull()
     expect(renderEgyptRouteMap(['Cairo', 'Petra'])).toBeNull()

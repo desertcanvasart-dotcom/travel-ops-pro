@@ -100,29 +100,30 @@ const PLACE_JA: Record<string, string> = {
   Farafra: '白砂漠',
 }
 
-/** Places the office's Japanese day text names, to the coordinate keys. The
+/** Places the day text names — the office's Japanese, or an English trip — to
+ *  the coordinate keys. The
  *  importer only records where each NIGHT is spent; a stop visited and left
  *  the same day (Aswan on the way to Abu Simbel) is only in the text. */
 const TEXT_PLACES: Array<[RegExp, string]> = [
-  [/カイロ/, 'Cairo'],
-  [/ギザ|サッカラ|ダハシュール|メンフィス/, 'Cairo'],
-  [/アレキサンドリア|アレクサンドリア/, 'Alexandria'],
-  [/アスワン/, 'Aswan'],
-  [/ルクソール|王家の谷|カルナック/, 'Luxor'],
-  [/アブ・?シンベル/, 'Abu Simbel'],
-  [/ハルガダ/, 'Hurghada'],
-  [/バハレヤ/, 'Bahariya Oasis'],
-  [/白砂漠|ファラフラ/, 'Farafra'],
-  [/エドフ/, 'Edfu'],
-  [/コム・?オンボ/, 'Kom Ombo'],
-  [/エスナ/, 'Esna'],
-  [/デンデラ/, 'Dendera'],
-  [/アビドス/, 'Abydos'],
-  [/ファイユーム/, 'Fayoum'],
-  [/シワ/, 'Siwa'],
-  [/シャルム/, 'Sharm El Sheikh'],
-  [/シナイ山|カトリーナ/, 'Saint Catherine'],
-  [/マルサ・?アラム/, 'Marsa Alam'],
+  [/カイロ|\bcairo\b/i, 'Cairo'],
+  [/ギザ|サッカラ|ダハシュール|メンフィス|\b(giza|saqqara|sakkara|dahshur|memphis)\b/i, 'Cairo'],
+  [/アレキサンドリア|アレクサンドリア|\balexandria\b/i, 'Alexandria'],
+  [/アスワン|\baswan\b/i, 'Aswan'],
+  [/ルクソール|王家の谷|カルナック|\b(luxor|karnak|valley of the kings)\b/i, 'Luxor'],
+  [/アブ・?シンベル|\babu ?simbel\b/i, 'Abu Simbel'],
+  [/ハルガダ|\bhurghada\b/i, 'Hurghada'],
+  [/バハレヤ|\bbahariya\b/i, 'Bahariya Oasis'],
+  [/白砂漠|ファラフラ|\b(white desert|farafra)\b/i, 'Farafra'],
+  [/エドフ|\bedfu\b/i, 'Edfu'],
+  [/コム・?オンボ|\bkom ?ombo\b/i, 'Kom Ombo'],
+  [/エスナ|\besna\b/i, 'Esna'],
+  [/デンデラ|\bdendera\b/i, 'Dendera'],
+  [/アビドス|\babydos\b/i, 'Abydos'],
+  [/ファイユーム|\bfa[iy]y?oum\b/i, 'Fayoum'],
+  [/シワ|\bsiwa\b/i, 'Siwa'],
+  [/シャルム|\bsharm\b/i, 'Sharm El Sheikh'],
+  [/シナイ山|カトリーナ|\b(mount sinai|st\.? catherine|saint catherine)\b/i, 'Saint Catherine'],
+  [/マルサ・?アラム|\bmarsa alam\b/i, 'Marsa Alam'],
 ]
 
 export interface RouteDay {

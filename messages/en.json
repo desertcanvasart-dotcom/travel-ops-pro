@@ -7181,7 +7181,8 @@
       "sellingPriceNote": "Selling price, at the company's default margin",
       "withdrawn": "This tour is no longer offered. It has been withdrawn from the catalogue.",
       "quoteThisTour": "Quote this tour",
-      "routeMap": "Route map"
+      "routeMap": "Route map",
+      "routeStops": "{count, plural, one {# stop} other {# stops}}"
     }
   },
   "b2bQuotes": {
