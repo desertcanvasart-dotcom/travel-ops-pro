@@ -77,6 +77,9 @@ export interface DailyItineraryContext {
   /** The tour's route drawn on Egypt (lib/maps/egypt-route-map), or null
    *  when fewer than two stops can be placed. Inline SVG — nothing fetched. */
   route_map?: { svg: string; legend: Array<{ n: number; label: string }> } | null
+  /** The route as one strip above the day table — stops in order, how each
+   *  leg is travelled, nights (lib/maps/route-strip). Self-contained HTML. */
+  route_strip_html?: string | null
   /** Print the チップについて page: the card a traveller shows a guide or
    *  driver who asks for a tip, saying in Japanese, Arabic and English that
    *  tips were paid in Japan. The office's 日程表 ends with it. */
@@ -252,6 +255,7 @@ export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
   .tips .card { border: 2pt solid #333; border-radius: 8pt; padding: 30pt 16pt; }
   .tips .card p { margin: 14pt 0; font-size: 22pt; font-weight: 700; }
   .tips .card .ar { font-family: "Geeza Pro", "Noto Naskh Arabic", "Arial", sans-serif; direction: rtl; font-size: 26pt; }
+  .strip { border: 0.6pt solid #bbb; border-radius: 4pt; padding: 6pt 8pt 5pt; margin: 2pt 0 6pt; }
   .route { margin-top: 12pt; break-inside: avoid; }
   .route .body { display: flex; gap: 14pt; align-items: flex-start; }
   .route svg { border: 0.6pt solid #999; flex: none; }
@@ -272,6 +276,8 @@ export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
     <span class="cust">${esc(ctx.customer_name)}</span>
     <span>${esc(ctx.program_code)}</span>
   </div>
+
+  ${ctx.route_strip_html ? `<div class="strip">${ctx.route_strip_html}</div>` : ''}
 
   <table class="itin">
     <thead>

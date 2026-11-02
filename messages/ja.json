@@ -7274,7 +7274,9 @@
       "sellingPriceNote": "販売価格（会社の標準マージン適用）",
       "withdrawn": "このツアーは現在販売されていません。カタログから取り下げられています。",
       "quoteThisTour": "このツアーの見積もりを作成",
-      "routeMap": "ルートマップ"
+      "routeMap": "ルートマップ",
+      "routeStops": "{count}か所",
+      "route": "ルート"
     },
     "views": {
       "grid": "グリッド",
@@ -9311,8 +9313,6 @@
     "title": "ウェブサイトの料金",
     "body": "このご注文はウェブサイトのフォームから届きました。料金は確定しています。下記は旅行に含まれるサービスです。",
     "costEstimate": "原価見積もり",
-    "costGaps": "原価が未設定のサービスが{count}件あるため、原価と利益の見積もりには含まれていません。お客様の料金には影響しません。",
-    "noCostRate": "原価未設定",
     "estimatedCost": "見込み原価",
     "estimatedProfit": "見込み利益",
     "websitePrice": "ウェブサイト料金"

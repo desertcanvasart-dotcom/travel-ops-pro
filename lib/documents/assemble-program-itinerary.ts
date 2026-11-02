@@ -9,6 +9,7 @@
 import type { DailyItineraryContext, DailyItineraryDay } from './templates/ats-daily-itinerary'
 import { customerFacingOrgName } from '@/lib/org-name'
 import { renderEgyptRouteMap, routeStopsFromDays } from '@/lib/maps/egypt-route-map'
+import { renderRouteStrip, routeStripFromDays } from '@/lib/maps/route-strip'
 
 /** The reverse of the importer's OVERNIGHT map — city back to the label the
  *  office writes in the 宿泊地 column. */
@@ -352,5 +353,9 @@ export function assembleProgramItinerary(input: AssembleProgramInput): DailyItin
     author: input.departure?.author ?? '',
     tips_prepaid: input.departure?.tips_prepaid !== false,
     route_map: renderEgyptRouteMap(routeStopsFromDays(days), { language: 'ja', width: 240 }),
+    route_strip_html: (() => {
+      const strip = routeStripFromDays(days)
+      return strip ? renderRouteStrip(strip, { language: 'ja' }) : null
+    })(),
   }
 }

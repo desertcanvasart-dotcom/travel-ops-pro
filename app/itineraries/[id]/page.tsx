@@ -34,7 +34,7 @@ import ItineraryExpenses from '@/app/components/ItineraryExpenses'
 import { createClient } from '@/lib/supabase'
 import GenerateDocumentsButton from '@/app/components/GenerateDocumentsButton'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
-import { itineraryCompleteness, costGapReason } from '@/lib/pricing/itinerary-completeness'
+import { itineraryCompleteness } from '@/lib/pricing/itinerary-completeness'
 import { describeGaps } from '@/lib/pricing/quote-completeness'
 import { isWebsitePriced } from '@/lib/pricing/website-price'
 import WebsitePriceNote from '@/app/components/WebsitePriceNote'
@@ -65,7 +65,10 @@ import { formatPhoneForWhatsApp, generateWhatsAppLink } from '@/lib/whatsapp-lin
 import { withReturnTo } from '@/lib/nav/return-to'
 import { useRole } from '@/hooks/useRole'
 
-const ItineraryMap = dynamic(() => import('@/components/ItineraryMap'), {
+// The route drawn on Egypt — the same map the 日程表 prints.
+import { tripTransport } from '@/lib/maps/trip-transport'
+
+const TourRouteMap = dynamic(() => import('@/components/TourRouteMap'), {
   ssr: false,
   loading: () => <div className="h-12 bg-gray-100 rounded-xl animate-pulse" />,
 })
@@ -243,7 +246,7 @@ export default function ViewItineraryPage() {
   const supabase = createClient()
   const intlLocale = useLocale() as Language
   // Generating commissions is a manager's action (the route refuses agents).
-  const { canAccess, canViewFinancials } = useRole()
+  const { canAccess } = useRole()
   const canGenerateCommissions = canAccess(['admin', 'manager'])
   // The money screens are a manager's (the finance routes answer an agent 403):
   // Add expense, the expenses panel, the actual P&L and the P&L card are theirs too.
@@ -1933,14 +1936,14 @@ export default function ViewItineraryPage() {
 
       {/* Success Messages */}
       {(() => {
-        const { complete, gaps } = itineraryCompleteness(days)
         if (isWebsitePriced(itinerary)) {
           return (
             <div className="container mx-auto px-4 pt-3">
-              <WebsitePriceNote gaps={gaps.map(g => ({ ...g, issue: costGapReason(g.issue) }))} canViewFinancials={canViewFinancials} dayLabel={(day, name) => t('gapOnDay', { day, name })} />
+              <WebsitePriceNote />
             </div>
           )
         }
+        const { complete, gaps } = itineraryCompleteness(days)
         if (complete) return null
         return (
           <div className="container mx-auto px-4 pt-3">
@@ -2259,13 +2262,15 @@ export default function ViewItineraryPage() {
 
                 {/* ROUTE MAP */}
                 {days.length > 0 && (
-                  <ItineraryMap
-                    days={days.map((d) => ({
-                      day_number: d.day_number,
-                      title: d.title,
-                      city: d.city,
-                      overnight_city: d.overnight_city,
-                      date: d.date,
+                  <TourRouteMap
+                    mapOpen={false}
+                    days={days.map(d => ({
+                      day: d.day_number,
+                      // The title and the text name the places visited by day,
+                      // not only where the night is spent.
+                      description: `${d.title ?? ''}\n${d.description ?? ''}`,
+                      overnight_city: d.overnight_city || d.city,
+                      transport: tripTransport(d.services),
                     }))}
                   />
                 )}

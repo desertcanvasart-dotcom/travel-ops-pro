@@ -7181,7 +7181,9 @@
       "sellingPriceNote": "Selling price, at the company's default margin",
       "withdrawn": "This tour is no longer offered. It has been withdrawn from the catalogue.",
       "quoteThisTour": "Quote this tour",
-      "routeMap": "Route map"
+      "routeMap": "Route map",
+      "routeStops": "{count, plural, one {# stop} other {# stops}}",
+      "route": "Route"
     }
   },
   "b2bQuotes": {
@@ -8726,8 +8728,6 @@
     "title": "Price from the website",
     "body": "This order came from the website form. Its price is final; the services below are what the trip includes.",
     "costEstimate": "Cost estimate",
-    "costGaps": "{count, plural, one {# service has} other {# services have}} no cost rate yet, so the cost and profit estimate leaves {count, plural, one {it} other {them}} out. The customer's price is not affected.",
-    "noCostRate": "No cost rate",
     "estimatedCost": "Estimated cost",
     "estimatedProfit": "Estimated profit",
     "websitePrice": "Website price"
