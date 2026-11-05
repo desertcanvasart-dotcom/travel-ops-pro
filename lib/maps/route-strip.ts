@@ -202,6 +202,16 @@ function icon(mode: TransportMode | 'arrow', size: number): string {
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICON[mode]}</svg>`
 }
 
+/** Sizes for a strip of `stops` stops — smaller as the tour gets longer,
+ *  so the strip stays on one line. */
+function stripSize(stops: number) {
+  if (stops <= 8) return { badge: 24, badgeFont: 10, name: 9, sub: 7, icon: 18, legMax: 56, gap: 2, legNote: true }
+  if (stops <= 11) return { badge: 20, badgeFont: 9, name: 8, sub: 6.5, icon: 14, legMax: 44, gap: 1, legNote: true }
+  // A long tour: the legs keep only their icon (the key says what each
+  // means), so the stops get the width.
+  return { badge: 16, badgeFont: 8, name: 6.5, sub: 5.5, icon: 11, legMax: 14, gap: 0, legNote: false }
+}
+
 /**
  * The strip as self-contained HTML: numbered stops (the same numbers as the
  * map legend — a city visited twice keeps its number), the transport icon
@@ -213,20 +223,26 @@ export function renderRouteStrip(strip: RouteStrip, opts: { language?: 'ja' | 'e
   const numbers = new Map<string, number>()
   for (const s of strip.stops) if (s.city && !numbers.has(s.city)) numbers.set(s.city, numbers.size + 1)
 
+  // ONE line, always (operator, 2026-11-05): the strip never wraps. A tour
+  // with more stops draws them smaller, and each stop shares the width that
+  // is left after the legs, so even a long tour fits across the page.
+  const z = stripSize(strip.stops.length)
+
   const stop = (s: StripStop) => {
     const n = s.city ? numbers.get(s.city) : null
     const name = s.city ? (en ? s.city : s.label) : s.label
+    const circle = `width:${z.badge}px;height:${z.badge}px;border-radius:50%;margin:0 auto;text-align:center`
     const badge = s.end
-      ? `<div style="width:24px;height:24px;border-radius:50%;margin:0 auto;border:1.2px dashed #888;color:#555;font-size:9px;line-height:21px;text-align:center">${s.end === 'from' ? (en ? 'Dep' : '発') : en ? 'Arr' : '着'}</div>`
-      : `<div style="width:24px;height:24px;border-radius:50%;margin:0 auto;background:${accent};color:#fff;font-size:10px;font-weight:700;line-height:24px;text-align:center">${n}</div>`
+      ? `<div style="${circle};border:1.2px dashed #888;color:#555;font-size:${z.badgeFont - 1}px;line-height:${z.badge - 3}px">${s.end === 'from' ? (en ? 'Dep' : '発') : en ? 'Arr' : '着'}</div>`
+      : `<div style="${circle};background:${accent};color:#fff;font-size:${z.badgeFont}px;font-weight:700;line-height:${z.badge}px">${n}</div>`
     const when = en
       ? `Day ${s.day}${s.nights ? ` · ${s.nights} night${s.nights > 1 ? 's' : ''}` : ''}`
       : `${s.day}日目${s.nights ? `・${s.nights}泊` : ''}`
-    return `<div style="text-align:center;min-width:58px;max-width:84px">${badge}<div style="font-size:9pt;font-weight:700;margin-top:3px;line-height:1.25">${esc(name)}</div><div style="font-size:7pt;color:#666;line-height:1.3">${esc(when)}</div></div>`
+    return `<div style="flex:1 1 0;min-width:0;max-width:84px;text-align:center;word-break:keep-all;overflow-wrap:anywhere">${badge}<div style="font-size:${z.name}pt;font-weight:700;margin-top:3px;line-height:1.25">${esc(name)}</div><div style="font-size:${z.sub}pt;color:#666;line-height:1.3">${esc(when)}</div></div>`
   }
   const leg = (l: StripLeg) => {
-    const note = l.carrier ?? l.duration ?? ''
-    return `<div style="text-align:center;color:#555;padding-top:2px;min-width:30px">${icon(l.mode ?? 'arrow', 18)}<div style="font-size:7pt;line-height:1.2;color:#666">${esc(note)}</div></div>`
+    const note = z.legNote ? (l.carrier ?? l.duration ?? '') : ''
+    return `<div style="flex:0 1 auto;min-width:${z.icon + (z.legNote ? 4 : 0)}px;max-width:${z.legMax}px;text-align:center;color:#555;padding-top:2px">${icon(l.mode ?? 'arrow', z.icon)}<div style="font-size:${z.sub}pt;line-height:1.2;color:#666">${esc(note)}</div></div>`
   }
 
   const cells: string[] = []
@@ -240,7 +256,7 @@ export function renderRouteStrip(strip: RouteStrip, opts: { language?: 'ja' | 'e
     .join('')
 
   return `<div class="route-strip" style="break-inside:avoid">
-  <div style="display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:6px 2px">${cells.join('')}</div>
+  <div style="display:flex;flex-wrap:nowrap;align-items:flex-start;justify-content:space-between;gap:${z.gap}px">${cells.join('')}</div>
   ${key ? `<div style="margin-top:5px;font-size:7pt;color:#555">${key}</div>` : ''}
 </div>`
 }
