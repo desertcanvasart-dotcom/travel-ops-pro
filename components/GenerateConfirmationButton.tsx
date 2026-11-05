@@ -8,6 +8,9 @@
 // dialog collects what no record holds yet:
 //   - the flights, which are SAVED to the trip (itineraries.flights) so they
 //     are typed once, not on every reissue
+//   - with no invoice chosen and none on the trip, the money is read from
+//     the trip (lib/documents/confirmation-from-trip): price, 燃油, route
+//     taxes, tips, and 申込金/残金 by the company's payment rule
 //   - 担当者, 作成日, rooms and room type — printed as typed, never saved,
 //     like every other document dialog here
 // The 備考 and the bank account are the company's standing text (Company

@@ -3300,7 +3300,7 @@ export async function calculateDayBasedPricing(
     }
 
     // ----- TIPPING (context-aware per-role) -----
-    const { determineTipRolesForDay, formatTipServiceName, priceTip } = await import('@/lib/tipping-utils')
+    const { determineTipRolesForDay, formatTipServiceName, priceTip, hasCombinedGuideDriverTip } = await import('@/lib/tipping-utils')
     const hasAirportToday = day.services.airport_arrival || day.services.airport_departure
     const airportCount = (day.services.airport_arrival ? 1 : 0) + (day.services.airport_departure ? 1 : 0)
     const hasHotelNight = day.accommodation_type === 'hotel'
@@ -3315,6 +3315,7 @@ export async function calculateDayBasedPricing(
       isCruiseDay: day.is_cruise_day || false,
       isTransferOnly: isTransferOnlyDay,
       isFreeDay: false,
+      combinedGuideDriver: hasCombinedGuideDriverTip(tippingRates),
     })
     for (const tipRole of dayTipRoles) {
       // Tips vary by place: the city picks the rate, falling back to the

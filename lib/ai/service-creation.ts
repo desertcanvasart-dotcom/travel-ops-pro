@@ -20,6 +20,7 @@ import { getFixedDailyCosts } from '@/lib/fixed-costs'
 import {
   getItemizedTippingRates,
   determineTipRolesForDay,
+  hasCombinedGuideDriverTip,
   formatTipServiceName,
   formatTipNotes,
   type ItemizedTippingRates,
@@ -1238,6 +1239,7 @@ export async function createLandItineraryServices(
         isCruiseDay: false,
         isTransferOnly: true,
         isFreeDay: false,
+        combinedGuideDriver: hasCombinedGuideDriverTip(rates.tippingRates),
       })
       for (const tipRole of departureTipRoles) {
         const tipRate = rates.tippingRates.getRate(tipRole.role, tipRole.context, departureCity)
@@ -1927,6 +1929,7 @@ export async function createLandItineraryServices(
       isCruiseDay,
       isTransferOnly,
       isFreeDay,
+      combinedGuideDriver: hasCombinedGuideDriverTip(rates.tippingRates),
     })
     for (const tipRole of dayTipRoles) {
       const tipRate = rates.tippingRates.getRate(tipRole.role, tipRole.context, dayData.city || effectiveCity)

@@ -34,7 +34,10 @@ const NO_ORG = '00000000-0000-0000-0000-000000000000'
 // suppliers screen, the rate screens and the expense categories now all call
 // this person an assistant, and a tip role that said otherwise was the last
 // place the old word survived. tipping_rates was empty, so no data moved.
-export type TipRoleType = 'guide' | 'driver' | 'boat_crew' | 'porter' | 'hotel_assistant' | 'restaurant' | 'other'
+// 'guide_driver' (2026-11-05): one tip for the guide AND the driver together,
+// as a supplier sets it (US$45 a day, collected in Japan). When the agency
+// has such a rate it replaces the two separate tips on the days either works.
+export type TipRoleType = 'guide' | 'driver' | 'guide_driver' | 'boat_crew' | 'porter' | 'hotel_assistant' | 'restaurant' | 'other'
 export type TipContext = 'day_tour' | 'half_day_tour' | 'cruise' | 'transfer' | 'airport' | 'hotel' | 'restaurant' | 'felucca' | 'motorboat'
 
 export const TIP_RATE_UNITS = ['per_day', 'per_service', 'per_cruise', 'per_night', 'per_person'] as const
@@ -154,6 +157,9 @@ export interface DayTipContext {
   isCruiseDay: boolean
   isTransferOnly: boolean       // departure/transfer with no sightseeing
   isFreeDay: boolean
+  /** The agency prices guide and driver as ONE tip (a guide_driver rate
+   *  exists — hasCombinedGuideDriverTip): charge it once instead of both. */
+  combinedGuideDriver?: boolean
 }
 
 export interface DayTipRole {
@@ -384,6 +390,12 @@ export function buildRatesObject(allRates: ItemizedTipRate[], opts: { pax?: numb
   return { allRates, getTip, getRate, sumRates }
 }
 
+/** True when the agency prices guide and driver as one tip: an active
+ *  guide_driver rate above zero, anywhere. */
+export function hasCombinedGuideDriverTip(rates: { allRates: Array<{ role_type: string; rate_eur: number }> } | null | undefined): boolean {
+  return Boolean(rates?.allRates?.some(r => r.role_type === 'guide_driver' && Number(r.rate_eur) > 0))
+}
+
 // ---- Day context → tip roles (pure function) ----
 
 /**
@@ -396,8 +408,17 @@ export function determineTipRolesForDay(ctx: DayTipContext): DayTipRole[] {
   // Free days: no services, no tips
   if (ctx.isFreeDay) return tips
 
+  // Guide and driver as one tip, once a day either of them works.
+  if (ctx.combinedGuideDriver && (ctx.hasGuide || ctx.hasDriver)) {
+    tips.push({
+      role: 'guide_driver',
+      context: ctx.isCruiseDay && ctx.hasGuide ? 'cruise' : ctx.isTransferOnly && !ctx.hasGuide ? 'transfer' : 'day_tour',
+      quantity: 1,
+    })
+  }
+
   // Guide tip
-  if (ctx.hasGuide) {
+  if (ctx.hasGuide && !ctx.combinedGuideDriver) {
     tips.push({
       role: 'guide',
       context: ctx.isCruiseDay ? 'cruise' : 'day_tour',
@@ -406,7 +427,7 @@ export function determineTipRolesForDay(ctx: DayTipContext): DayTipRole[] {
   }
 
   // Driver tip (whenever there's land transport — not on cruise-only days)
-  if (ctx.hasDriver) {
+  if (ctx.hasDriver && !ctx.combinedGuideDriver) {
     tips.push({
       role: 'driver',
       context: ctx.isTransferOnly ? 'transfer' : 'day_tour',
@@ -449,6 +470,7 @@ export function determineTipRolesForDay(ctx: DayTipContext): DayTipRole[] {
 const ROLE_DISPLAY_NAMES: Record<TipRoleType, string> = {
   guide: 'Guide Tip',
   driver: 'Driver Tip',
+  guide_driver: 'Guide & Driver Tip',
   porter: 'Porter Tip',
   boat_crew: 'Boat Crew Tip',
   hotel_assistant: 'Hotel Assistant Tip',
