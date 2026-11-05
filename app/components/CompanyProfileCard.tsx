@@ -49,6 +49,15 @@ interface Profile {
   contract_governing_law: string
   /** This org's WhatsApp sender, E.164 (migration 20261125). */
   whatsapp_number: string
+  /** Airport taxes per traveller by route (migration 20270115) — what the
+   *  予約確認書 charges for 空港使用税 and 海外空港諸税等. */
+  route_taxes: RouteTaxRow[]
+}
+
+interface RouteTaxRow {
+  route: string
+  airport_tax: string
+  overseas_tax: string
 }
 
 // Company-LEVEL contacts only. The カイロガイド / 南部ガイド header cells are
@@ -88,6 +97,7 @@ export default function CompanyProfileCard() {
     operating_country: '',
     contract_governing_law: '',
     whatsapp_number: '',
+    route_taxes: [],
   })
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -119,6 +129,13 @@ export default function CompanyProfileCard() {
         operating_country: data.data.operating_country ?? '',
         contract_governing_law: data.data.contract_governing_law ?? '',
         whatsapp_number: (loadedWhatsapp.current = data.data.whatsapp_number ?? ''),
+        route_taxes: (Array.isArray(data.data.route_taxes) ? data.data.route_taxes : []).map(
+          (r: { route?: string; airport_tax?: number; overseas_tax?: number }) => ({
+            route: r.route ?? '',
+            airport_tax: r.airport_tax == null ? '' : String(r.airport_tax),
+            overseas_tax: r.overseas_tax == null ? '' : String(r.overseas_tax),
+          })
+        ),
         offices: (Array.isArray(data.data.offices) ? data.data.offices : []).map((o: Partial<Office>) => ({
           ...EMPTY_OFFICE,
           ...o,
@@ -189,6 +206,15 @@ export default function CompanyProfileCard() {
   const addOffice = () => setForm(prev => ({ ...prev, offices: [...prev.offices, { ...EMPTY_OFFICE }] }))
   const removeOffice = (i: number) =>
     setForm(prev => ({ ...prev, offices: prev.offices.filter((_, idx) => idx !== i) }))
+  const setRouteTax = (i: number, field: keyof RouteTaxRow, value: string) =>
+    setForm(prev => ({
+      ...prev,
+      route_taxes: prev.route_taxes.map((r, idx) => (idx === i ? { ...r, [field]: value } : r)),
+    }))
+  const addRouteTax = () =>
+    setForm(prev => ({ ...prev, route_taxes: [...prev.route_taxes, { route: '', airport_tax: '', overseas_tax: '' }] }))
+  const removeRouteTax = (i: number) =>
+    setForm(prev => ({ ...prev, route_taxes: prev.route_taxes.filter((_, idx) => idx !== i) }))
   const setContact = (slot: string, value: string) =>
     setForm(prev => ({
       ...prev,
@@ -433,6 +459,36 @@ export default function CompanyProfileCard() {
             />
           </div>
         ))}
+      </div>
+
+      {/* Airport taxes by route — the 予約確認書's per-traveller taxes */}
+      <p className="text-xs font-medium text-gray-600 mt-5 mb-1">{t('routeTaxes')}</p>
+      <p className="text-xs text-gray-400 mb-3">{t('routeTaxesHint')}</p>
+      <div className="space-y-2">
+        {form.route_taxes.length > 0 && (
+          <div className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 text-xs text-gray-500">
+            <span>{t('routeTaxRoute')}</span>
+            <span>{t('routeTaxAirport')}</span>
+            <span>{t('routeTaxOverseas')}</span>
+            <span />
+          </div>
+        )}
+        {form.route_taxes.map((r, i) => (
+          <div key={i} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-2 items-center">
+            <input className={inputClass} placeholder="KIX-EK" value={r.route}
+              onChange={e => setRouteTax(i, 'route', e.target.value.toUpperCase())} />
+            <input className={inputClass} inputMode="numeric" placeholder="3160" value={r.airport_tax}
+              onChange={e => setRouteTax(i, 'airport_tax', e.target.value.replace(/[^0-9]/g, ''))} />
+            <input className={inputClass} inputMode="numeric" placeholder="10800" value={r.overseas_tax}
+              onChange={e => setRouteTax(i, 'overseas_tax', e.target.value.replace(/[^0-9]/g, ''))} />
+            <button onClick={() => removeRouteTax(i)} className="text-xs text-red-500 hover:text-red-700">
+              {t('removeOffice')}
+            </button>
+          </div>
+        ))}
+        <button onClick={addRouteTax} className="text-sm text-[#647C47] hover:underline">
+          + {t('addRouteTax')}
+        </button>
       </div>
 
       </fieldset>

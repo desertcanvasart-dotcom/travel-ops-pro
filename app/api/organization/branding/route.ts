@@ -21,6 +21,7 @@ import { getCurrentUserRole, requireRole } from '@/lib/auth/current-org'
 import { CURRENCY_REFUSED, LOGO_TYPES, parseProfileCurrency, renameNeedsOwner } from '@/lib/settings/company-profile'
 import { clientMessage } from '@/lib/api-errors'
 import { toWhatsAppE164, PHONE_NEEDS_COUNTRY_CODE } from '@/lib/whatsapp-phone'
+import { normaliseRouteTaxes } from '@/lib/documents/confirmation-from-trip'
 
 const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -60,13 +61,16 @@ const FIELDS = [
   // quote or invoice copies it when VAT is applied to it, so changing it here
   // never re-prices a document already made (lib/vat.ts).
   'vat_rate',
+  // Airport taxes by route (KIX-EK …), migration 20270115: what the
+  // 予約確認書 charges per traveller (lib/documents/confirmation-from-trip).
+  'route_taxes',
 ] as const
 
 /** The columns migration 20261115 adds. Until it is applied, reads and
  *  writes go on without them rather than failing the whole profile. */
 const CONTRACT_FIELDS = ['operating_country', 'contract_governing_law'] as const
 /** Likewise whatsapp_number (20261125) and vat_rate (20261214). */
-const PENDING_FIELDS = [...CONTRACT_FIELDS, 'whatsapp_number', 'vat_rate'] as const
+const PENDING_FIELDS = [...CONTRACT_FIELDS, 'whatsapp_number', 'vat_rate', 'route_taxes'] as const
 function missingContractColumns(error: { code?: string; message?: string } | null): boolean {
   if (!error) return false
   const undefinedColumn = error.code === '42703' || error.code === 'PGRST204'
@@ -147,6 +151,8 @@ export async function PUT(request: NextRequest) {
             ? body.document_contacts && typeof body.document_contacts === 'object'
               ? body.document_contacts
               : {}
+            : field === 'route_taxes'
+            ? normaliseRouteTaxes(body.route_taxes)
             : field === 'default_margin_percent'
             ? normaliseMargin(body.default_margin_percent)
             : field === 'vat_rate'

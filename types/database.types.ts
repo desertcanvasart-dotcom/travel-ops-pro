@@ -8938,6 +8938,7 @@ export interface Database {
           document_templates: string[]
           document_contacts: Json
           offices: Json
+          route_taxes: Json
           default_currency: string | null
           rate_currency: string
           default_margin_percent: number | null
@@ -8971,6 +8972,7 @@ export interface Database {
           document_templates?: string[]
           document_contacts: Json
           offices: Json
+          route_taxes?: Json
           default_currency?: string | null
           rate_currency?: string
           default_margin_percent?: number | null
@@ -9004,6 +9006,7 @@ export interface Database {
           document_templates?: string[]
           document_contacts?: Json
           offices?: Json
+          route_taxes?: Json
           default_currency?: string | null
           rate_currency?: string
           default_margin_percent?: number | null

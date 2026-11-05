@@ -24,7 +24,7 @@ import { tipServiceCode } from '@/lib/tipping-utils'
 // CONSTANTS
 // ============================================
 
-const ROLE_TYPES = ['guide', 'driver', 'boat_crew', 'porter', 'hotel_assistant', 'restaurant', 'other']
+const ROLE_TYPES = ['guide', 'driver', 'guide_driver', 'boat_crew', 'porter', 'hotel_assistant', 'restaurant', 'other']
 const CONTEXTS = ['day_tour', 'half_day_tour', 'cruise', 'transfer', 'airport', 'hotel', 'restaurant', 'felucca', 'motorboat']
 const RATE_UNITS = ['per_day', 'per_service', 'per_cruise', 'per_night', 'per_person']
 const ITEMS_PER_PAGE_OPTIONS = [10, 25, 50, 100]
@@ -534,6 +534,7 @@ export default function TippingPage() {
                       <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                         rate.role_type === 'guide' ? 'bg-blue-100 text-blue-800' :
                         rate.role_type === 'driver' ? 'bg-orange-100 text-orange-800' :
+                        rate.role_type === 'guide_driver' ? 'bg-indigo-100 text-indigo-800' :
                         rate.role_type === 'boat_crew' ? 'bg-cyan-100 text-cyan-800' :
                         rate.role_type === 'porter' ? 'bg-purple-100 text-purple-800' :
                         rate.role_type === 'hotel_assistant' ? 'bg-pink-100 text-pink-800' :

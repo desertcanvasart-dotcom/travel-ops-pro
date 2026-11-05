@@ -20,6 +20,7 @@ import { paidFieldsWith } from '@/lib/paid-currency'
 import {
   getItemizedTippingRates,
   determineTipRolesForDay,
+  hasCombinedGuideDriverTip,
   formatTipServiceName,
   formatTipNotes,
 } from '@/lib/tipping-utils'
@@ -453,6 +454,7 @@ export async function createCruiseItineraryServices(
       isCruiseDay: true,
       isTransferOnly: false,
       isFreeDay: false,
+      combinedGuideDriver: hasCombinedGuideDriverTip(cruiseTippingRates),
     })
     for (const tipRole of tipRoles) {
       const tipRate = cruiseTippingRates.getRate(tipRole.role, tipRole.context, dayCity)

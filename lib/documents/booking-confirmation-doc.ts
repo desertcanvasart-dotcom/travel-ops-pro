@@ -13,6 +13,9 @@
 //     its type decides 申込金/残金 (lib/invoice-pdf-generator tripCostBreakdown)
 //   - the bank and the 備考: the company profile (document_contacts
 //     bank_transfer / confirmation_remarks), the 備考 defaulting to the office's
+//   - NO invoice yet: the money is read from the trip itself — price, the
+//     departure's 燃油, the route's taxes, the tips, and 申込金/残金 by the
+//     company's payment rule (lib/documents/confirmation-from-trip)
 // Anything the office types in the dialog wins over the record.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
@@ -33,6 +36,16 @@ import {
   type BookingConfirmationContext,
 } from './templates/ats-booking-confirmation'
 import type { DocumentPage } from './types'
+import {
+  findRouteTax,
+  normaliseRouteTaxes,
+  tourDays,
+  tripChargeLines,
+  tripPayments,
+  tripRoute,
+  type ProgrammeDay,
+} from './confirmation-from-trip'
+import { paymentRuleFrom } from '@/lib/payment-schedule'
 
 const SLUG = 'ats-booking-confirmation'
 const WEEKDAYS_JA = ['日', '月', '火', '水', '木', '金', '土']
@@ -223,7 +236,7 @@ export async function buildBookingConfirmationHtml(input: {
 
   const { data: trip } = await supabase
     .from('itineraries')
-    .select('id, itinerary_code, client_name, client_email, client_phone, trip_name, start_date, currency, template_id, flights')
+    .select('id, itinerary_code, client_name, client_email, client_phone, trip_name, start_date, currency, template_id, flights, total_cost, num_adults, num_children, num_travelers')
     .eq('id', itineraryId)
     .eq('org_id', orgId)
     .maybeSingle()
@@ -241,10 +254,22 @@ export async function buildBookingConfirmationHtml(input: {
       : Promise.resolve(null),
     supabase
       .from('organizations')
-      .select('name, logo_url, company_phone, contact_email, company_website, company_address, document_contacts, offices')
+      .select('name, logo_url, company_phone, contact_email, company_website, company_address, document_contacts, offices, deposit_percent, deposit_due_days, balance_due_days_before_departure, route_taxes')
       .eq('id', orgId)
       .maybeSingle()
-      .then(r => r.data as (OrgBranding & { document_contacts: Record<string, string> | null }) | null),
+      .then(async r => {
+        // route_taxes arrives with migration 20270115; until it is applied the
+        // profile reads without it rather than failing the document.
+        if (r.error && /route_taxes/.test(r.error.message ?? '')) {
+          const again = await supabase
+            .from('organizations')
+            .select('name, logo_url, company_phone, contact_email, company_website, company_address, document_contacts, offices, deposit_percent, deposit_due_days, balance_due_days_before_departure')
+            .eq('id', orgId)
+            .maybeSingle()
+          return again.data as OrgRow | null
+        }
+        return r.data as OrgRow | null
+      }),
     loadBookingParty(supabase, orgId, itineraryId),
     loadInvoice(supabase, orgId, itineraryId, overrides.invoice_id ?? null),
   ])
@@ -268,12 +293,24 @@ export async function buildBookingConfirmationHtml(input: {
   const currency = String(invoice?.currency || trip.currency || 'JPY')
   const money = (n: number) => formatMoney(n, currency)
 
-  const lines = (Array.isArray(invoice?.line_items) ? (invoice!.line_items as LineItem[]) : []).filter(
-    l => (l.description ?? '').trim() || num(l.amount)
-  )
+  // No invoice yet: the money from the trip itself, in yen.
+  const fromTrip =
+    !invoice && currency.toUpperCase() === 'JPY'
+      ? await tripMoney(supabase, orgId, {
+          trip,
+          programme,
+          org,
+          flights,
+          booking: party,
+        })
+      : null
+
+  const lines = (
+    fromTrip ? (fromTrip.lines as LineItem[]) : Array.isArray(invoice?.line_items) ? (invoice!.line_items as LineItem[]) : []
+  ).filter(l => (l.description ?? '').trim() || num(l.amount))
   // The balance date lives on the booking (its payment schedule), not the
   // invoice — the same join /api/invoices/[id] makes.
-  const pay = confirmationPayments(invoice ? ({ ...invoice, balance_due_date: party.balance_due_date } as never) : null, currency)
+  const pay = fromTrip?.payments ?? confirmationPayments(invoice ? ({ ...invoice, balance_due_date: party.balance_due_date } as never) : null, currency)
   const charges = confirmationCharges(lines, currency)
   const [logo, seal] = await Promise.all([getAtsDocumentImage('ats-logo.jpeg'), getAtsDocumentImage('ats-seal.jpeg')])
 
@@ -313,8 +350,10 @@ export async function buildBookingConfirmationHtml(input: {
       check_in: h.check_in === '/' ? '' : h.check_in,
       check_out: h.check_out === '/' ? '' : h.check_out,
       nights: h.nights ? String(h.nights) : '',
-      rooms: (overrides.rooms ?? '').trim(),
-      room_type: (overrides.room_type ?? '').trim(),
+      // Typed in the dialog, else from the party: two to a room, ツイン
+      // (a lone traveller: one シングル).
+      rooms: (overrides.rooms ?? '').trim() || defaultRooms(travellerCount(trip)).rooms,
+      room_type: (overrides.room_type ?? '').trim() || defaultRooms(travellerCount(trip)).type,
       hotel: h.hotel,
     })),
     // The company's standing 備考 (Company profile), else the office's own.
@@ -323,7 +362,8 @@ export async function buildBookingConfirmationHtml(input: {
       .map(l => l.trimEnd())
       .filter(l => l.trim()),
     charges: charges.rows,
-    // Invoice: the trip price (deposit + balance). None: the rows' ¥0.
+    // Invoice: the trip price (deposit + balance). None: the rows' sum —
+    // read from the trip, or ¥0 when the trip says nothing either.
     total: money(invoice ? pay.total : charges.sum),
     // The company profile's 振込先, else the sheet's own account.
     bank_lines: (() => {
@@ -365,6 +405,154 @@ export async function documentLetterhead(org: OrgBranding | null): Promise<Booki
   }
 }
 
+type OrgRow = OrgBranding & {
+  document_contacts: Record<string, string> | null
+  deposit_percent?: number | null
+  deposit_due_days?: number | null
+  balance_due_days_before_departure?: number | null
+  route_taxes?: unknown
+}
+
+type TripRow = {
+  id: string
+  start_date: string | null
+  template_id: string | null
+  itinerary_code: string | null
+  total_cost: number | string | null
+  num_adults: number | null
+  num_children: number | null
+  num_travelers: number | null
+}
+
+/** Adults and children — the people the per-person charges count. */
+function travellerCount(trip: Pick<TripRow, 'num_adults' | 'num_children' | 'num_travelers'>): number {
+  const ac = (Number(trip.num_adults) || 0) + (Number(trip.num_children) || 0)
+  return ac > 0 ? ac : Math.max(0, Number(trip.num_travelers) || 0)
+}
+
+/** The rooming the sheet prints when the office types none. */
+export function defaultRooms(travellers: number): { rooms: string; type: string } {
+  if (travellers <= 0) return { rooms: '', type: '' }
+  if (travellers === 1) return { rooms: '1', type: 'シングル' }
+  return { rooms: String(Math.ceil(travellers / 2)), type: travellers % 2 ? 'ツイン・シングル' : 'ツイン' }
+}
+
+/** One unit of `from` in `to`, from the newest stored rate (or its inverse). */
+async function latestRate(supabase: SupabaseClient, from: string, to: string): Promise<number | null> {
+  if (from.toUpperCase() === to.toUpperCase()) return 1
+  const read = async (base: string, target: string) => {
+    const { data } = await supabase
+      .from('exchange_rate_snapshots')
+      .select('rate')
+      .eq('base_currency', base)
+      .eq('target_currency', target)
+      .order('captured_at', { ascending: false })
+      .limit(1)
+    const r = Number(data?.[0]?.rate)
+    return Number.isFinite(r) && r > 0 ? r : null
+  }
+  const direct = await read(from.toUpperCase(), to.toUpperCase())
+  if (direct) return direct
+  const inverse = await read(to.toUpperCase(), from.toUpperCase())
+  return inverse ? 1 / inverse : null
+}
+
+/** The confirmation's money when the trip has no invoice: lines in the
+ *  sheet's words, and 申込金/残金 by the company's payment rule. */
+async function tripMoney(
+  supabase: SupabaseClient,
+  orgId: string,
+  input: {
+    trip: TripRow
+    programme: { template_code: string | null; itinerary: unknown } | null
+    org: OrgRow | null
+    flights: Array<{ from: string; flight_no: string }>
+    booking: { created_at: string | null; balance_due_date: string | null }
+  }
+): Promise<{ lines: LineItem[]; payments: ReturnType<typeof confirmationPayments> } | null> {
+  const { trip, programme, org, flights, booking } = input
+  const currency = 'JPY'
+
+  // The departure date's 燃油: the departure the trip holds seats on, else
+  // the programme's departure on the trip's date.
+  let fuel: number | null = null
+  const { data: held } = await supabase
+    .from('departure_bookings')
+    .select('departure_id, status')
+    .eq('itinerary_id', trip.id)
+    .eq('org_id', orgId)
+  const heldId = (held ?? []).find(h => h.status !== 'cancelled')?.departure_id ?? null
+  let depQuery = supabase.from('tour_departures').select('fuel_surcharge_pp, price_currency, currency').eq('org_id', orgId)
+  if (heldId) depQuery = depQuery.eq('id', heldId)
+  else if (trip.template_id && trip.start_date) depQuery = depQuery.eq('template_id', trip.template_id).eq('start_date', trip.start_date)
+  else depQuery = depQuery.eq('id', '00000000-0000-0000-0000-000000000000')
+  const { data: deps } = await depQuery.limit(1)
+  const dep = deps?.[0] as { fuel_surcharge_pp: number | null; price_currency: string | null; currency: string | null } | undefined
+  // The grid types 燃油 in the company's currency (yen at ATS).
+  if (dep?.fuel_surcharge_pp != null && (dep.price_currency ?? dep.currency ?? 'JPY').toUpperCase() === currency) {
+    fuel = Number(dep.fuel_surcharge_pp) || null
+  }
+
+  // The Guide & Driver tip a day (Rates › Tipping) — the country-wide row.
+  const { data: tips } = await supabase
+    .from('tipping_rates')
+    .select('rate_eur, rate_currency, rate_unit, city, is_active')
+    .eq('org_id', orgId)
+    .eq('role_type', 'guide_driver')
+  const tipRow = (tips ?? []).filter(t => t.is_active !== false && Number(t.rate_eur) > 0).sort((a, b) => Number(!!a.city) - Number(!!b.city))[0]
+  const guideDriverTip = tipRow ? { amount: Number(tipRow.rate_eur), currency: String(tipRow.rate_currency || 'USD') } : null
+
+  const usdRate = await latestRate(supabase, 'USD', currency)
+  const tipRates = new Map<string, number | null>([['USD', usdRate]])
+  if (guideDriverTip && !tipRates.has(guideDriverTip.currency.toUpperCase())) {
+    tipRates.set(guideDriverTip.currency.toUpperCase(), await latestRate(supabase, guideDriverTip.currency, currency))
+  }
+
+  const route = tripRoute(flights, programme?.template_code ?? trip.itinerary_code)
+  const days = tourDays(Array.isArray(programme?.itinerary) ? (programme!.itinerary as ProgrammeDay[]) : [])
+  const total = Number(trip.total_cost)
+
+  const lines = tripChargeLines({
+    currency,
+    travellers: travellerCount(trip),
+    tourTotal: Number.isFinite(total) && total > 0 ? total : null,
+    fuelPerPerson: fuel,
+    route,
+    routeTax: findRouteTax(normaliseRouteTaxes(org?.route_taxes), route),
+    guideDriverTip,
+    days,
+    toTripCurrency: (amount, from) => {
+      const r = tipRates.get(from.toUpperCase())
+      return r ? amount * r : null
+    },
+    rule: paymentRuleFrom(org),
+    bookedOn: (booking.created_at ?? new Date().toISOString()).slice(0, 10),
+    departureDate: trip.start_date,
+  })
+  if (lines.length === 0) return null
+
+  const sum = lines.reduce((n, l) => n + l.amount, 0)
+  const schedule = tripPayments(sum, {
+    currency,
+    rule: paymentRuleFrom(org),
+    bookedOn: (booking.created_at ?? new Date().toISOString()).slice(0, 10),
+    departureDate: trip.start_date,
+  })
+  const money = (n: number) => formatMoney(n, currency)
+  const payments = schedule
+    ? {
+        total: sum,
+        deposit: schedule.single_payment
+          ? { amount: '', due: '' }
+          : { amount: money(schedule.deposit_amount), due: slashDate(schedule.deposit_due_date) },
+        balance: schedule.single_payment
+          ? { amount: money(sum), due: slashDate(schedule.deposit_due_date) }
+          : { amount: money(schedule.balance_amount), due: slashDate(booking.balance_due_date ?? schedule.balance_due_date) },
+      }
+    : confirmationPayments(null, currency)
+  return { lines: lines.map(l => ({ ...l })), payments }
+}
+
 /** The trip's live booking: its travellers' romaji names as the passport
  *  reads them — FAMILY GIVEN, upper case, lead traveller first — and its
  *  balance date. No booking = an empty grid the office fills by hand. */
@@ -372,15 +560,15 @@ async function loadBookingParty(
   supabase: SupabaseClient,
   orgId: string,
   itineraryId: string
-): Promise<{ names: string[]; balance_due_date: string | null }> {
+): Promise<{ names: string[]; balance_due_date: string | null; created_at: string | null }> {
   const { data: bookings } = await supabase
     .from('bookings')
-    .select('id, cancelled_at, balance_due_date')
+    .select('id, cancelled_at, balance_due_date, created_at')
     .eq('itinerary_id', itineraryId)
     .eq('org_id', orgId)
     .order('created_at', { ascending: false })
   const booking = (bookings ?? []).find(b => !b.cancelled_at) ?? null
-  if (!booking) return { names: [], balance_due_date: null }
+  if (!booking) return { names: [], balance_due_date: null, created_at: null }
 
   const { data: pax } = await supabase
     .from('booking_passengers')
@@ -392,7 +580,7 @@ async function loadBookingParty(
     .sort((a, b) => Number(!!b.is_lead_passenger) - Number(!!a.is_lead_passenger))
     .map(p => `${(p.last_name ?? '').trim()} ${(p.first_name ?? '').trim()}`.trim().toUpperCase())
     .filter(Boolean)
-  return { names, balance_due_date: (booking.balance_due_date as string | null) ?? null }
+  return { names, balance_due_date: (booking.balance_due_date as string | null) ?? null, created_at: (booking.created_at as string | null) ?? null }
 }
 
 /** The invoice named in the dialog, else the trip's newest that is not
