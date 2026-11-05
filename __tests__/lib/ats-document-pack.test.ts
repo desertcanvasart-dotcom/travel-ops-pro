@@ -87,7 +87,10 @@ describe('route map', () => {
         departure: { start_date: null, cairo_guide: null, south_guide: null, author: null, tips_prepaid: tips },
       })
     const html = atsDailyItinerary.render(ctx())
-    expect(html).toContain('ルートマップ')
+    // The route strip prints at the top; the drawn map under the hotels was
+    // removed (operator, 2026-11-05).
+    expect(html).toContain('class="route-strip"')
+    expect(html).not.toContain('ルートマップ')
     expect(html).toContain('チップは日本払い済です。')
     expect(html).toContain('Tips have already been paid in Japan.')
     expect(atsDailyItinerary.render(ctx(false))).not.toContain('チップについて')

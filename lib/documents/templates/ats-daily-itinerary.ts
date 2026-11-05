@@ -74,11 +74,11 @@ export interface DailyItineraryContext {
       fax: string
     }>
   }
-  /** The tour's route drawn on Egypt (lib/maps/egypt-route-map), or null
-   *  when fewer than two stops can be placed. Inline SVG — nothing fetched. */
-  route_map?: { svg: string; legend: Array<{ n: number; label: string }> } | null
   /** The route as one strip above the day table — stops in order, how each
-   *  leg is travelled, nights (lib/maps/route-strip). Self-contained HTML. */
+   *  leg is travelled, nights (lib/maps/route-strip). Self-contained HTML.
+   *  The only route picture on the 日程表: the drawn map that printed under
+   *  the hotels was removed at the operator's request (2026-11-05); the
+   *  trip and tour pages still show it. */
   route_strip_html?: string | null
   /** Print the チップについて page: the card a traveller shows a guide or
    *  driver who asks for a tip, saying in Japanese, Arabic and English that
@@ -256,12 +256,6 @@ export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
   .tips .card p { margin: 14pt 0; font-size: 22pt; font-weight: 700; }
   .tips .card .ar { font-family: "Geeza Pro", "Noto Naskh Arabic", "Arial", sans-serif; direction: rtl; font-size: 26pt; }
   .strip { border: 0.6pt solid #bbb; border-radius: 4pt; padding: 6pt 8pt 5pt; margin: 2pt 0 6pt; }
-  .route { margin-top: 12pt; break-inside: avoid; }
-  .route .body { display: flex; gap: 14pt; align-items: flex-start; }
-  .route svg { border: 0.6pt solid #999; flex: none; }
-  .route ol { list-style: none; font-size: 9pt; line-height: 1.9; }
-  .route li span { display: inline-block; width: 14pt; height: 14pt; border-radius: 50%; background: #647C47;
-                   color: #fff; font-size: 7.5pt; font-weight: 700; text-align: center; line-height: 14pt; margin-right: 5pt; }
 </style>
 </head>
 <body>
@@ -296,17 +290,6 @@ export const atsDailyItinerary: DocumentTemplate<DailyItineraryContext> = {
     <tr><td class="h" style="width:30%">ホテル</td><td class="h" style="width:12%">イン</td><td class="h" style="width:12%">アウト</td><td class="h" style="width:18%">電話</td><td class="h" style="width:28%">住所</td></tr>
     ${hotelRows}
   </table>
-  ${
-    ctx.route_map
-      ? `<div class="route">
-    <div class="hotels-title">ルートマップ</div>
-    <div class="body">
-      ${ctx.route_map.svg}
-      <ol>${ctx.route_map.legend.map(l => `<li><span>${l.n}</span>${esc(l.label)}</li>`).join('')}</ol>
-    </div>
-  </div>`
-      : ''
-  }
   ${
     ctx.tips_prepaid
       ? `<div class="tips">

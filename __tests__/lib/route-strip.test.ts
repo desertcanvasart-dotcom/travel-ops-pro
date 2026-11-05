@@ -57,6 +57,19 @@ describe('route strip', () => {
     expect(html).not.toMatch(/https?:\/\/(?!www\.w3\.org)/)
   })
 
+  it('stays on ONE line however many stops — smaller as the tour gets longer', () => {
+    const short = renderRouteStrip(strip)
+    expect(short).toContain('flex-wrap:nowrap')
+    expect(short).not.toContain('flex-wrap:wrap')
+    const cities = ['Cairo', 'Aswan', 'Abu Simbel', 'Luxor', 'Hurghada', 'Alexandria', 'Siwa', 'Bahariya', 'Luxor', 'Aswan', 'Cairo', 'Alexandria', 'Cairo']
+    const long = routeStripFromDays(cities.map((c, i) => ({ day: i + 1, description: '', overnight_city: c })))!
+    expect(long.stops.length).toBeGreaterThanOrEqual(12)
+    const html = renderRouteStrip(long)
+    expect(html).toContain('flex-wrap:nowrap')
+    expect(html).toContain('width:16px;height:16px')
+    expect(short).toContain('width:24px;height:24px')
+  })
+
   it('no strip for a tour with fewer than two places', () => {
     expect(routeStripFromDays([{ day: 1, description: 'カイロ観光', overnight_city: 'Cairo' }])).toBeNull()
   })
