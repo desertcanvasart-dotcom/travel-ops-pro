@@ -678,7 +678,8 @@ export default function DeparturesGridPage() {
                       {FLIGHT_CLASS_LABELS[c]}
                     </th>
                   ))}
-                  <th rowSpan={2} className={`${th} border-b border-gray-200`} />
+                  {/* Delete stays pinned right — the table scrolls sideways. */}
+                  <th rowSpan={2} className={`${th} sticky right-0 z-30 border-b border-gray-200`} />
                 </tr>
                 <tr>
                   {visible.map(c => (
@@ -769,7 +770,7 @@ export default function DeparturesGridPage() {
                           />
                         )
                       })}
-                      <td className={`${td} text-right`}>
+                      <td className={`${td} text-right sticky right-0 z-10 bg-white group-hover:bg-gray-50`}>
                         <button
                           onClick={() => deleteDeparture(band)}
                           disabled={deletingRow === band.departureId}

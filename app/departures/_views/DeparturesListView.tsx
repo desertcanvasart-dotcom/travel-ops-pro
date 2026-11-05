@@ -553,7 +553,11 @@ export default function DeparturesPage() {
                             Add dates
                           </Link>
                         </>
-                      ) : (
+                      ) : null}
+                      {/* Every programme lists its dates here, each with its own
+                          delete — a template programme's only other delete is
+                          the last column of the wide pricing grid. */}
+                      {(!group.templateId || group.departures.length > 0) && (
                         <button
                           onClick={() => toggleExpanded(group.key)}
                           className="flex items-center gap-1.5 px-3 py-1.5 text-sm border border-gray-200 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
@@ -565,8 +569,8 @@ export default function DeparturesPage() {
                     </div>
                   </div>
 
-                  {/* A custom tour has no grid — its dates are managed here. */}
-                  {!group.templateId && isOpen && (
+                  {/* The programme's dates: status, clone and delete per date. */}
+                  {isOpen && (
                     <div className="mt-3 ml-4 border-l-2 border-gray-100 pl-4 divide-y divide-gray-100">
                       {group.departures.map(departure => (
                         <div key={departure.id} className="flex items-center justify-between gap-4 py-2 text-sm">
