@@ -4311,6 +4311,8 @@
       "airlineHint": "Pick the carrier from your suppliers. Add a missing airline under Suppliers with the Air Carrier role."
     },
     "transportation": {
+      "preferredSupplier": "Preferred supplier",
+      "preferredSupplierHint": "When several suppliers offer the same route, the starred one is priced first.",
       "title": "Transportation Rates",
       "addRate": "Add Transportation Rate",
       "editRate": "Edit Transportation Rate",

@@ -33,7 +33,8 @@ import { Copy, Search,
   LayoutGrid,
   List,
   Table2,
-  Loader2
+  Loader2,
+  Star
 } from 'lucide-react'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
@@ -74,6 +75,7 @@ interface TransportationRate {
   supplier_name: string | null
   notes: string | null
   is_active: boolean
+  is_preferred?: boolean
   created_at: string
   updated_at: string
   supplier?: { id: string; name: string; city?: string } | null
@@ -105,6 +107,7 @@ interface FormData {
   supplier_name: string
   notes: string
   is_active: boolean
+  is_preferred: boolean
   // The vehicles this rate offers, keyed by the vocabulary vehicle key — one
   // row per vehicle in Settings → Vocabulary → Vehicle types, plus any the
   // rate already carries. ONE price per vehicle: a vehicle costs what it
@@ -129,6 +132,7 @@ const initialFormData: FormData = {
   supplier_name: '',
   notes: '',
   is_active: true,
+  is_preferred: false,
   vehicles: {},
 }
 
@@ -447,6 +451,7 @@ export default function TransportationContent() {
       supplier_name: rate.supplier_name || rate.supplier?.name || '',
       notes: rate.notes || '',
       is_active: rate.is_active,
+      is_preferred: rate.is_preferred === true,
       vehicles: vehicleRowsFor(rate as unknown as Record<string, unknown>, vehicleOptions),
     })
     setIsModalOpen(true)
@@ -514,6 +519,7 @@ export default function TransportationContent() {
         supplier_name: formData.supplier_name || null,
         notes: formData.notes || null,
         is_active: formData.is_active,
+        is_preferred: formData.is_preferred,
       }
 
       // The vehicles this rate offers — one price per vehicle, the vocabulary's
@@ -863,6 +869,7 @@ export default function TransportationContent() {
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
                             <span className="text-xs font-mono text-gray-400">{rate.service_code}</span>
+                            {rate.is_preferred && <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 flex-shrink-0" aria-label={t('preferredSupplier')} />}
                             <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium ${
                               rate.is_active ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
                             }`}>
@@ -1003,6 +1010,7 @@ export default function TransportationContent() {
                       </td>
                       <td className="px-3 py-2">
                         <span className="text-xs font-mono text-gray-600">{rate.service_code}</span>
+                        {rate.is_preferred && <Star className="inline w-3.5 h-3.5 ml-1 align-text-bottom text-amber-500 fill-amber-500 flex-shrink-0" aria-label={t('preferredSupplier')} />}
                       </td>
                       <td className="px-3 py-2">
                         <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded">{serviceLabel}</span>
@@ -1119,6 +1127,7 @@ export default function TransportationContent() {
                     />
                     <span className={`w-2 h-2 rounded-full flex-shrink-0 ${rate.is_active ? 'bg-green-500' : 'bg-gray-300'}`} />
                     <span className="text-xs font-mono text-gray-400 flex-shrink-0">{rate.service_code}</span>
+                    {rate.is_preferred && <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500 flex-shrink-0" aria-label={t('preferredSupplier')} />}
                     <span className="text-xs px-1.5 py-0.5 bg-blue-50 text-blue-700 rounded flex-shrink-0">
                       {serviceLabel}
                     </span>
@@ -1641,6 +1650,21 @@ export default function TransportationContent() {
                 className={`${inputClass} resize-none`}
               />
             </Field>
+
+            <div className="flex flex-col gap-1">
+              <label htmlFor="tr-preferred" className="inline-flex cursor-pointer items-center gap-2 text-sm text-gray-800">
+                <input
+                  id="tr-preferred"
+                  type="checkbox"
+                  checked={formData.is_preferred}
+                  onChange={(e) => setFormData(prev => ({ ...prev, is_preferred: e.target.checked }))}
+                  className="h-4 w-4 rounded border-gray-300 text-amber-500"
+                />
+                <Star className="h-4 w-4 text-amber-500" aria-hidden="true" />
+                {t('preferredSupplier')}
+              </label>
+              <p className="ml-6 text-xs leading-snug text-gray-500">{t('preferredSupplierHint')}</p>
+            </div>
           </FormSection>
         </RateFormModal>
       )}

@@ -384,6 +384,8 @@ interface TransportRate {
   capacity_min: number | null
   capacity_max: number | null
   is_active: boolean
+  /** Starred Preferred: goes first among rows valid on the day. */
+  is_preferred?: boolean
   /** The vehicles list (20261005) — every vehicle the row prices, read
    *  through lib/rates/vehicle-bands.ts. */
   vehicles?: unknown
@@ -2396,9 +2398,11 @@ export async function fetchTransportRows(orgId: string | null | undefined, norma
  *      not a candidate at all (an absent edge does not exclude — see
  *      lib/pricing/ticket-validity). With no day in hand, a row valid today
  *      goes before one that is not.
- *   2. The most recently started window first: next year's contract, once
+ *   2. A starred (Preferred) supplier's row first — the office's choice
+ *      among several companies quoting the same route, as for hotels.
+ *   3. The most recently started window first: next year's contract, once
  *      it applies, wins over the open-ended row it replaces.
- *   3. Then service_code, then id — arbitrary but stable.
+ *   4. Then service_code, then id — arbitrary but stable.
  */
 export function orderTransportRows<T extends Record<string, any>>(rows: readonly T[], onDate?: string | null): T[] {
   const day = onDate ? String(onDate).slice(0, 10) : null
@@ -2411,6 +2415,9 @@ export function orderTransportRows<T extends Record<string, any>>(rows: readonly
       const bv = ticketValidOn(b, today) ? 0 : 1
       if (av !== bv) return av - bv
     }
+    const ap = a.is_preferred === true ? 0 : 1
+    const bp = b.is_preferred === true ? 0 : 1
+    if (ap !== bp) return ap - bp
     if (from(a) !== from(b)) return from(a) < from(b) ? 1 : -1
     const ac = String(a.service_code ?? '').toLowerCase()
     const bc = String(b.service_code ?? '').toLowerCase()

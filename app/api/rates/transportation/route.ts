@@ -201,6 +201,8 @@ export async function POST(request: NextRequest) {
       notes: body.notes || null,
       ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       is_active: body.is_active !== false,
+      // Starred Preferred: priced first among suppliers of the same route.
+      is_preferred: body.is_preferred === true,
       ...vehiclePatch
     }
 
