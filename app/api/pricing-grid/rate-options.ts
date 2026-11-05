@@ -192,21 +192,26 @@ export async function loadGridRateOptions(
       ...extra,
     }))
 
+  // A starred (Preferred) supplier's routes first, as the engine prices them
+  // (lib/auto-pricing-service orderTransportRows).
+  const nTransportSorted = [...(nTransport || [])].sort((a: any, b: any) =>
+    Number(b.is_preferred === true) - Number(a.is_preferred === true))
+
   const rates = {
     route: [
       // Day tour vehicles (merged into route — all transport in one slot)
-      ...(nTransport || [])
+      ...nTransportSorted
         .filter((r: any) => r.service_type === 'day_tour')
         .flatMap((r: any) => {
           const label = r.route_name || r.service_code || `${r.origin_city || r.city || ''} Day Tour`
-          return expandTiers(r, label)
+          return expandTiers(r, r.is_preferred === true ? `★ ${label}` : label)
         }),
       // All other transport types (airport transfers, intercity, city transfers, dinner transfers, etc.)
-      ...(nTransport || [])
+      ...nTransportSorted
         .filter((r: any) => r.service_type !== 'day_tour')
         .flatMap((r: any) => {
           const label = r.route_name || `${r.origin_city || ''} → ${r.destination_city || ''}`.trim() || r.service_code
-          return expandTiers(r, label)
+          return expandTiers(r, r.is_preferred === true ? `★ ${label}` : label)
         }),
       // Cruise transport packages (bundled sightseeing vehicle for cruise
       // days): one option per vehicle, sized like every transport rate — it

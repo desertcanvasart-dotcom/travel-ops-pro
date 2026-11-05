@@ -12445,6 +12445,7 @@ export interface Database {
           supplier_name: string | null
           notes: string | null
           is_active: boolean | null
+          is_preferred: boolean
           created_at: string | null
           updated_at: string | null
           origin_city: string | null
@@ -12475,6 +12476,7 @@ export interface Database {
           supplier_name?: string | null
           notes?: string | null
           is_active?: boolean | null
+          is_preferred?: boolean
           created_at?: string | null
           updated_at?: string | null
           origin_city?: string | null
@@ -12505,6 +12507,7 @@ export interface Database {
           supplier_name?: string | null
           notes?: string | null
           is_active?: boolean | null
+          is_preferred?: boolean
           created_at?: string | null
           updated_at?: string | null
           origin_city?: string | null

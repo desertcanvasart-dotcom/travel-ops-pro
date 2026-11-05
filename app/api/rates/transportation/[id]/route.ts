@@ -120,6 +120,7 @@ export async function PUT(
       updates.supplier_name = resolvedSupplierName ?? null
     }
 
+    if ('is_preferred' in updates) updates.is_preferred = updates.is_preferred === true
     updates.updated_at = new Date().toISOString()
 
     const { data, error } = await supabaseAdmin

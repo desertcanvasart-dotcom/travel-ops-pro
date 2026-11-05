@@ -202,6 +202,26 @@ describe('T1: two rows for one service are picked in a FIXED order, validity hon
     expect(orderTransportRows([open, newer], '2026-02-01').map(r => r.id)).toEqual(['open'])
   })
 
+  it('two suppliers on one route: the starred (Preferred) one prices, whatever its code or start date', () => {
+    const cheap = row('a-cheap', 30, { supplier_id: 'sup-1', rate_valid_from: '2026-06-01' })
+    const starred = row('z-starred', 45, { supplier_id: 'sup-2', is_preferred: true, rate_valid_from: '2026-01-01' })
+    expect(find([cheap, starred])?.id).toBe('z-starred')
+    expect(find([starred, cheap], '2026-07-01')?.id).toBe('z-starred')
+    expect(orderTransportRows([cheap, starred], '2026-07-01').map(r => r.id)).toEqual(['z-starred', 'a-cheap'])
+  })
+
+  it('a starred row whose window has ended does not price; the other supplier does', () => {
+    const cheap = row('a-cheap', 30, { supplier_id: 'sup-1' })
+    const starred = row('z-starred', 45, { supplier_id: 'sup-2', is_preferred: true, rate_valid_to: '2026-06-30' })
+    expect(find([cheap, starred], '2026-07-01')?.id).toBe('a-cheap')
+  })
+
+  it('among starred rows, next year’s contract still takes over', () => {
+    const open = row('open', 30, { is_preferred: true, rate_valid_from: '2026-01-01' })
+    const newer = row('newer', 40, { is_preferred: true, rate_valid_from: '2027-01-01' })
+    expect(find([open, newer], '2027-02-01')?.id).toBe('newer')
+  })
+
   it('the engine prices each day among the rows valid THAT day', async () => {
     const t = tripWith([day(1, 'Cairo', { services: { airport_arrival: true } }), day(2, 'Cairo')])
     t.transportation_rates = (t.transportation_rates ?? []).filter((r: any) => !(r.service_type === 'airport_transfer' && /cairo/i.test(r.city ?? '')))
