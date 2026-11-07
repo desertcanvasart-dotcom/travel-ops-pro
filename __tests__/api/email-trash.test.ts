@@ -117,9 +117,11 @@ describe('Communicate: Trash', () => {
     expect(sync).toContain("...(revive ? { is_hidden: false, status: 'active' } : {}),")
     // Only conversations deleted in Communicate — never mail hidden as private.
     expect(sync).toContain("if (r.is_hidden && r.status === 'trashed') deletedConversations.add(r.id)")
-    expect(sync).toContain("revive = msgDirection === 'outbound' || !looksAutomated({")
+    // …unless it is one of Autoura's own notifications (ATS 2026-11-07).
+    expect(sync).toContain("revive = !ownMail && (msgDirection === 'outbound' || !looksAutomated({")
     const poll = src('app/api/gmail/poll/route.ts')
     expect(poll).toContain('if (!msgInsertError && existingConv?.id) {')
+    expect(poll).toContain("const human = !ownNotification && (direction !== 'inbound' || !looksAutomated({")
     expect(poll).toContain(".update({ is_hidden: false, status: 'active' })")
     expect(poll).toContain(".eq('status', 'trashed')")
   })

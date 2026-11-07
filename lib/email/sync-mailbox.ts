@@ -42,6 +42,7 @@ import { getAuthenticatedGmail, getUserEmail } from '@/lib/gmail'
 import type { EmailSyncOptions, EmailSyncResult } from '@/types/unified'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
 import { loadKnownContactEmails, looksAutomated } from '@/lib/email-scoping'
+import { isOwnNotificationMail } from '@/lib/email/own-notification-mail'
 import { mailboxConversationFilter, type MailboxRef } from '@/lib/email/conversation-access'
 import { escapeLike } from '@/lib/db/escape-like'
 
@@ -469,11 +470,27 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
               snippet: m.snippet ?? '',
             })
           })
+          // Autoura's own notifications to staff (the rate-change digest,
+          // invitations, alerts — lib/email/own-notification-mail) go out
+          // from this mailbox, so they read as "the office wrote here". A
+          // thread of nothing else is never a conversation: it filled the
+          // inbox five rows per digest.
+          const ownNotificationsOnly = messages.every(m => {
+            const hdrs: Record<string, string> = {}
+            for (const h of m.payload?.headers || []) {
+              if (h.name && typeof h.value === 'string') hdrs[h.name] = h.value
+            }
+            return isOwnNotificationMail({
+              outbound: getDirection(hdrs['From'] ?? hdrs['from'] ?? '', rule) === 'outbound',
+              headers: hdrs,
+              subject: hdrs['Subject'] ?? hdrs['subject'] ?? '',
+            })
+          })
           // Known contact and operator-participation each override the
           // machine signals — booking systems legitimately write from
           // no-reply@, and a thread you replied in is correspondence.
-          const store =
-            knownContacts.has(clientEmail) || operatorWroteHere || !everyInboundAutomated
+          const store = !ownNotificationsOnly &&
+            (knownContacts.has(clientEmail) || operatorWroteHere || !everyInboundAutomated)
           if (!store) {
             threadsSkipped++
             continue
@@ -617,13 +634,15 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
           if (!revive && deletedConversations.has(conversationId)) {
             const hdrs: Record<string, string> = {}
             for (const h of msgHeaders) if (h.name && typeof h.value === 'string') hdrs[h.name] = h.value
-            revive = msgDirection === 'outbound' || !looksAutomated({
+            // …nor does one of Autoura's own notifications (lib/email/own-notification-mail).
+            const ownMail = isOwnNotificationMail({ outbound: msgDirection === 'outbound', headers: hdrs, subject: msgSubject })
+            revive = !ownMail && (msgDirection === 'outbound' || !looksAutomated({
               counterpartyEmail: extractEmailAddress(msgFrom),
               headers: hdrs,
               labelIds: message.labelIds || [],
               subject: msgSubject,
               snippet: message.snippet ?? '',
-            })
+            }))
           }
 
           // Create copilot inbox entry for inbound emails

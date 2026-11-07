@@ -289,6 +289,8 @@ export async function sendNotificationEmail(
     subject: `[Autoura] ${subject}`,
     html: htmlContent,
     orgId,
+    // Staff mail: kept out of the shared inbox (lib/email/own-notification-mail).
+    ownNotification: true,
   })
 
   if (!result.success) {

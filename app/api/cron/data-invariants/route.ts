@@ -226,6 +226,7 @@ async function getHandler(request: NextRequest) {
           to: process.env.BUSINESS_EMAIL,
           subject: `⚠️ Data invariants: ${violations.length} violation(s) found`,
           html: `<p>The nightly data-integrity sweep found ${violations.length} violation(s):</p>${sections}<p>Warnings: ${warnings.length}. Full report in the cron response/log.</p>`,
+          ownNotification: true,
         })
       } catch (e) {
         console.error('data-invariants: alert email failed:', e)

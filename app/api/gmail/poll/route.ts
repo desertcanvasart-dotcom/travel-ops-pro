@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { isOfficeAddress, officeRule } from '@/lib/email/office-addresses'
+import { isOwnNotificationMail } from '@/lib/email/own-notification-mail'
 import { loadOfficeRule } from '@/lib/email/office-addresses-server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
@@ -216,6 +217,17 @@ export async function GET(request: NextRequest) {
               // correspondence — a known contact, or a sender that does not
               // look like machinery. An existing thread keeps syncing; hiding
               // it is the operator's decision, not the classifier's.
+              // Autoura's own notifications to staff go out from this mailbox;
+              // a thread of them is never a conversation, and one never
+              // brings a deleted conversation back
+              // (lib/email/own-notification-mail).
+              const msgHdrs: Record<string, string> = {}
+              for (const h of headers) {
+                if (h.name && typeof h.value === 'string') msgHdrs[h.name] = h.value
+              }
+              const ownNotification = isOwnNotificationMail({ outbound: direction === 'outbound', headers: msgHdrs, subject })
+              if (!conversationId && ownNotification) continue
+
               if (!conversationId && direction === 'inbound') {
                 const hdrs: Record<string, string> = {}
                 for (const h of headers) {
@@ -307,13 +319,13 @@ export async function GET(request: NextRequest) {
                   for (const h of headers) {
                     if (h.name && typeof h.value === 'string') hdrs[h.name] = h.value
                   }
-                  const human = direction !== 'inbound' || !looksAutomated({
+                  const human = !ownNotification && (direction !== 'inbound' || !looksAutomated({
                     counterpartyEmail: clientEmail,
                     headers: hdrs,
                     labelIds: (message.data.labelIds || []) as string[],
                     subject: hdrs['Subject'] ?? hdrs['subject'] ?? '',
                     snippet: message.data.snippet ?? '',
-                  })
+                  }))
                   if (human) {
                     await supabase
                       .from('email_conversations')
