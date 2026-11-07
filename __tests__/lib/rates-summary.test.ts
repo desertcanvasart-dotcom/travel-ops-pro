@@ -35,9 +35,11 @@ describe('rate sheet tables', () => {
     expect(route).toContain('error ? null : count ?? 0')
   })
 
-  it('the Rates layout shows its menu on the sheets, Overview and Rates check only', () => {
-    const layout = readFileSync('app/rates/layout.tsx', 'utf8')
-    expect(layout).toContain('RATES_MENU_HREFS.includes(pathname)')
-    expect(readFileSync('app/rates/page.tsx', 'utf8')).toContain('<RatesOverview counts={sheetCounts} />')
+  it('no second menu column beside the sheets; the overview keeps its counts (operator 2026-11-07)', () => {
+    // The column cost every sheet its width; the sheets fold in the sidebar.
+    expect(existsSync('app/rates/layout.tsx')).toBe(false)
+    const page = readFileSync('app/rates/page.tsx', 'utf8')
+    expect(page).toContain('const sheetCounts = useRateCounts()')
+    expect(page).toContain('<RatesOverview counts={sheetCounts} />')
   })
 })

@@ -12,8 +12,7 @@ import { vehicleBands, vehicleKeyLabel, PRESET_VEHICLE_KEYS } from '@/lib/rates/
 import { useVocabOptions } from '@/hooks/useVocabOptions'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
 import { hubViewCsv, tabForHash, HUB_ANCHOR_TABS } from '@/lib/rates/hub-view'
-import { RatesOverview } from '@/components/rates/RatesCategoryMenu'
-import { useRateCountsContext } from '@/components/rates/rate-counts-context'
+import { RatesOverview, useRateCounts } from '@/components/rates/RatesCategoryMenu'
 
 // ============================================
 // INTERFACES
@@ -220,7 +219,7 @@ const TAB_LABEL_KEY: Record<TabType, string> = {
 export default function RatesPage() {
   const t = useTranslations('rates.overview')
   // Rows per sheet, read once by app/rates/layout.tsx for its menu.
-  const sheetCounts = useRateCountsContext()
+  const sheetCounts = useRateCounts()
   const { formatWithConversion, rateCurrency } = useCurrency()
   const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
   // The transport table's vehicle columns: the agency's vehicle types
