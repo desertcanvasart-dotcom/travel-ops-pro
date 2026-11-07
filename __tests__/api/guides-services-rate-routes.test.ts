@@ -122,6 +122,30 @@ describe('guides: the natural key (#4, #5)', () => {
   })
 })
 
+describe('guides: one rate, several cities (operator 2026-11-07)', () => {
+  it('a create stores the list, city = its first; an edit replaces both; city-only writes a one-city list', async () => {
+    const { city: _c, ...noCity } = GUIDE
+    expect((await postGuide(req('/api/rates/guides', { ...noCity, cities: ['Cairo', 'Alexandria', 'cairo', ' '] }))).status).toBe(200)
+    let [row] = await rows('guide_rates')
+    expect(row.cities).toEqual(['Cairo', 'Alexandria'])
+    expect(row.city).toBe('Cairo')
+
+    expect((await putGuide(req(`/api/rates/guides/${row.id}`, { cities: [] }, 'PUT'), ctx(row.id))).status).toBe(200)
+    ;[row] = await rows('guide_rates')
+    expect(row.cities).toEqual([])
+    expect(row.city).toBeNull()
+
+    expect((await putGuide(req(`/api/rates/guides/${row.id}`, { city: 'Luxor' }, 'PUT'), ctx(row.id))).status).toBe(200)
+    ;[row] = await rows('guide_rates')
+    expect(row.cities).toEqual(['Luxor'])
+
+    // An edit that sends neither leaves the cities alone.
+    expect((await putGuide(req(`/api/rates/guides/${row.id}`, { base_rate_eur: 120 }, 'PUT'), ctx(row.id))).status).toBe(200)
+    ;[row] = await rows('guide_rates')
+    expect(row.cities).toEqual(['Luxor'])
+  })
+})
+
 describe('an edit runs the money checks (#14)', () => {
   it('a negative rate is refused on every PUT', async () => {
     setMockTables({

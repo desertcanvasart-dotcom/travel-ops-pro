@@ -4,6 +4,7 @@ import { ENGINE_GUIDE_MODES, rateGuideMode } from '@/lib/guides/guide-mode'
 import { todayLocal } from '@/lib/today'
 import { useEffect, useState, useMemo } from 'react'
 import CityOptions from '@/app/components/CityOptions'
+import { guideCitiesText, guideCityRank, guideRateCities } from '@/lib/guides/guide-cities'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
@@ -79,6 +80,8 @@ interface GuideRate {
   guide_language: string
   guide_type: string
   city?: string
+  /** Every city the rate covers; [] = all cities (lib/guides/guide-cities). */
+  cities?: string[] | null
   tour_duration: string
   /** spot / throughout (lib/guides/guide-mode); absent on rows before 20261018. */
   guide_mode?: string | null
@@ -191,6 +194,7 @@ export default function GuideRatesContent() {
     guide_language: '',
     guide_type: 'egyptologist',
     city: '',
+    cities: [] as string[],
     tour_duration: 'full_day',
     guide_mode: 'spot',
     base_rate_eur: 0,
@@ -254,15 +258,17 @@ export default function GuideRatesContent() {
     setCurrentPage(1)
   }, [searchTerm, selectedCity, selectedLanguage, selectedGuide, selectedGuideType, showInactive, itemsPerPage])
 
-  // Filter the supplier-guides by the form's city.
+  // Filter the supplier-guides by the form's cities: a guide based in any of
+  // them (or with no city on file). All cities = every guide.
   const filteredGuidesForDropdown = useMemo(() => {
+    const wanted = formData.cities.map(c => c.toLowerCase())
     return guides.filter(guide => {
-      if (formData.city && guide.city && guide.city !== formData.city) {
+      if (wanted.length && guide.city && !wanted.includes(guide.city.toLowerCase())) {
         return false
       }
       return true
     })
-  }, [guides, formData.city])
+  }, [guides, formData.cities])
 
   // Handlers
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -278,7 +284,9 @@ export default function GuideRatesContent() {
     setFormData(prev => ({
       ...prev,
       supplier_id: guideId,
-      city: guide?.city || prev.city
+      // A guide's home city starts the list; cities the operator already
+      // chose are kept.
+      cities: prev.cities.length || !guide?.city ? prev.cities : [guide.city]
     }))
   }
 
@@ -297,6 +305,7 @@ export default function GuideRatesContent() {
       guide_language: defaultLanguage,
       guide_type: 'egyptologist',
       city: '',
+      cities: [],
       tour_duration: 'full_day',
       guide_mode: 'spot',
       base_rate_eur: 0,
@@ -330,6 +339,7 @@ export default function GuideRatesContent() {
       guide_language: guideLanguageKey(rate.guide_language) || defaultLanguage,
       guide_type: rate.guide_type || 'egyptologist',
       city: rate.city || '',
+      cities: guideRateCities(rate),
       tour_duration: rate.tour_duration || 'full_day',
       guide_mode: rateGuideMode(rate),
       base_rate_eur: rate.base_rate_eur || 0,
@@ -373,6 +383,8 @@ export default function GuideRatesContent() {
         // lib/tourCalculator.ts, which does not fall back on its own.
         body: JSON.stringify({
           ...restFormData,
+          // The API stores city = the first of the list (lib/guides/guide-cities).
+          city: restFormData.cities[0] ?? '',
           base_rate_non_eur: restFormData.base_rate_eur,
           ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency),
         })
@@ -435,9 +447,11 @@ export default function GuideRatesContent() {
     const matchesSearch = searchTerm === '' ||
       rate.guide_language.toLowerCase().includes(searchTerm.toLowerCase()) ||
       rate.service_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      rate.city?.toLowerCase().includes(searchTerm.toLowerCase())
+      guideRateCities(rate).some(c => c.toLowerCase().includes(searchTerm.toLowerCase()))
 
-    const matchesCity = selectedCity === '' || rate.city === selectedCity
+    // "Who can guide in Luxor": rates naming Luxor among their cities, and
+    // all-cities rates.
+    const matchesCity = selectedCity === '' || guideCityRank(rate, selectedCity) <= 1
     const matchesLanguage = selectedLanguage === '' || guideLanguageKey(rate.guide_language) === selectedLanguage
     const matchesGuide = selectedGuide === '' || rate.supplier_id === selectedGuide
     const matchesGuideType = selectedGuideType === '' || rate.guide_type === selectedGuideType
@@ -455,7 +469,7 @@ export default function GuideRatesContent() {
   const activeRates = rates.filter(r => r.is_active).length
   const linkedRates = rates.filter(r => r.supplier_id).length
   const avgRate = averageRatesByCurrency(rates, r => r.base_rate_eur, r => r.rate_currency)
-  const uniqueCities = [...new Set(rates.map(r => r.city).filter(Boolean))].length
+  const uniqueCities = new Set(rates.flatMap(r => guideRateCities(r).map(c => c.toLowerCase()))).size
 
   // Get guide name by ID
   const getGuideName = (supplierId: string | undefined) => {
@@ -849,7 +863,7 @@ export default function GuideRatesContent() {
                       </span>
                     </td>
                     <td className="px-4 py-3">
-                      <span className="text-sm text-gray-600">{rate.city || '—'}</span>
+                      <span className="text-sm text-gray-600">{guideCitiesText(rate) || t('allCities')}</span>
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-sm text-gray-600">
@@ -918,7 +932,7 @@ export default function GuideRatesContent() {
 
                 <div className="space-y-1 text-sm text-gray-600 mb-3">
                   <p><span className="text-gray-400">{t('table.type')}:</span> {guideGradeLabel(rate.guide_type, t(`guideTypes.${rate.guide_type}`))}</p>
-                  <p><span className="text-gray-400">{t('table.city')}:</span> {rate.city || '—'}</p>
+                  <p><span className="text-gray-400">{t('table.city')}:</span> {guideCitiesText(rate) || t('allCities')}</p>
                   <p><span className="text-gray-400">{t('table.duration')}:</span> {guideDurationLabel(rate.tour_duration, t(`tourDurations.${rate.tour_duration}`))}</p>
                   <p><span className="text-gray-400">{t('form.guideMode')}:</span> {guideModeLabel(rateGuideMode(rate), t(`guideModes.${rateGuideMode(rate)}`))}</p>
                 </div>
@@ -956,7 +970,7 @@ export default function GuideRatesContent() {
                 <div className="flex items-center gap-4">
                   <Globe className="w-4 h-4 text-purple-500" />
                   <span className="font-medium text-gray-900">{guideLanguageLabel(rate.guide_language, guideLanguageWord(rate.guide_language))}</span>
-                  <span className="text-sm text-gray-500">{rate.city || '—'}</span>
+                  <span className="text-sm text-gray-500">{guideCitiesText(rate) || t('allCities')}</span>
                   {rate.supplier_id && (
                     <span className="text-sm text-purple-600">{getGuideName(rate.supplier_id)}</span>
                   )}

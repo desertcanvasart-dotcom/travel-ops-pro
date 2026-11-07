@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { guideCitiesWrite } from '@/lib/guides/guide-cities'
 import { guideModeKey } from '@/lib/guides/guide-mode'
 import { guideLanguageKey, sameGuideLanguage } from '@/lib/guides/guide-language'
 import { clientMessage } from '@/lib/api-errors'
@@ -86,7 +87,8 @@ export async function POST(request: NextRequest) {
       // The vocabulary KEY (lib/guides/guide-language), whatever the caller sent.
       guide_language: guideLanguageKey(body.guide_language),
       guide_type: body.guide_type || 'licensed',
-      city: body.city || null,
+      // The cities the rate covers (lib/guides/guide-cities); city = the first.
+      ...(guideCitiesWrite(body) ?? { city: null, cities: [] }),
       tour_duration: body.tour_duration || 'full_day',
       // spot / throughout — which quotes this rate prices (lib/guides/guide-mode).
       guide_mode: guideModeKey(body.guide_mode),

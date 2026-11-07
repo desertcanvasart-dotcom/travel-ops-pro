@@ -22,6 +22,8 @@ export interface GuideRateFormValues {
   guide_language: string
   guide_type: string
   city: string
+  /** Every city this rate covers (lib/guides/guide-cities); [] = all cities. */
+  cities: string[]
   tour_duration: string
   guide_mode: string
   base_rate_eur: number
@@ -53,7 +55,7 @@ export interface GuideRateFormProps {
   totalGuides: number
   /** The organisation's rate currency — what a blank currency means. */
   orgRateCurrency: string
-  /** <option>s for the city picker (CityOptions). */
+  /** <option>s for the "Add a city" picker (CityOptions). */
   cityOptions: ReactNode
   /** Labels for a stored value the vocabulary no longer lists. */
   legacyLanguageLabel?: string
@@ -101,7 +103,7 @@ export default function GuideRateForm(props: GuideRateFormProps) {
     amount > 0
       ? `${new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 2 }).format(amount)}${unit ? ` ${unit}` : ''}`
       : f('noRateYet'),
-    values.city || null,
+    values.cities.length ? values.cities.join(', ') : f('allCities'),
     values.rate_valid_from && values.rate_valid_to ? `${shortDate(values.rate_valid_from)} – ${shortDate(values.rate_valid_to)}` : null,
   ].filter(Boolean).join(' · ')
 
@@ -119,7 +121,7 @@ export default function GuideRateForm(props: GuideRateFormProps) {
       cancelLabel={f('cancel')}
     >
       <FormSection title={f('sectionGuide')}>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Field label={f('language')} required htmlFor="gr-language">
             <select id="gr-language" name="guide_language" value={values.guide_language} onChange={onField} required className={inputClass}>
               {languageOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -134,13 +136,50 @@ export default function GuideRateForm(props: GuideRateFormProps) {
               {gradeOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </Field>
-          <Field label={f('cityOptional')} htmlFor="gr-city">
-            <select id="gr-city" name="city" value={values.city} onChange={onField} className={inputClass}>
-              <option value="">{f('anyCity')}</option>
+        </div>
+        {/* A guide can cover several cities — Cairo + Alexandria, Luxor +
+            Aswan, or all of them (operator 2026-11-07). Empty = all cities. */}
+        <Field label={f('citiesCovered')} htmlFor="gr-city-add" hint={f('citiesHint')}>
+          <div className="flex flex-wrap items-center gap-1.5" data-testid="guide-cities">
+            {values.cities.length === 0 && (
+              <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
+                {f('allCities')}
+              </span>
+            )}
+            {values.cities.map(c => (
+              <span key={c} className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-800 ring-1 ring-primary-200">
+                {c}
+                <button
+                  type="button"
+                  aria-label={f('removeCity', { city: c })}
+                  onClick={() => onPatch({ cities: values.cities.filter(x => x !== c) })}
+                  className="ml-0.5 rounded-full px-1 leading-none text-primary-700 hover:bg-primary-100"
+                >
+                  ×
+                </button>
+              </span>
+            ))}
+            <select
+              id="gr-city-add"
+              value=""
+              onChange={e => {
+                const city = e.target.value
+                if (!city) return
+                if (values.cities.some(x => x.toLowerCase() === city.toLowerCase())) return
+                onPatch({ cities: [...values.cities, city] })
+              }}
+              className={`${inputClass} w-auto min-w-[10rem]`}
+            >
+              <option value="">{f('addCity')}</option>
               {cityOptions}
             </select>
-          </Field>
-        </div>
+            {values.cities.length > 0 && (
+              <button type="button" onClick={() => onPatch({ cities: [] })} className="text-xs text-gray-500 underline hover:text-gray-700">
+                {f('setAllCities')}
+              </button>
+            )}
+          </div>
+        </Field>
         <Field
           label={f('guideSupplier')}
           required
