@@ -127,6 +127,8 @@ export async function PUT(
       // currency was silently dropped here. Only-when-present, so old
       // clients and unmigrated databases are untouched.
       ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
+      // Starred Preferred (#684) — it was dropped by this route. Only-when-present.
+      ...('is_preferred' in body ? { is_preferred: body.is_preferred === true } : {}),
       updated_at: new Date().toISOString(),
       ...vehiclePatch
     }

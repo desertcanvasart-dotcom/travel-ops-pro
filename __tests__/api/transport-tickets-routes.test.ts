@@ -2,7 +2,8 @@
 // use (audit 2026-10, suppliers-audit-transport):
 //   #2  a supplier_id on any write must be the company's own; a list never
 //       shows another company's supplier
-//   T1  the Transportation form's create refuses a duplicate (409)
+//   T1  the Transportation form's create refuses a duplicate (409); a second
+//       supplier on the same route under a taken code saves as CODE-2
 //   T2  "No supplier / Direct booking" saves as no supplier
 //   T5  the tiles' counts come from the server, over every rate
 //   F2  the flight edit route sanitizes periods and refreshes the base columns
@@ -135,11 +136,29 @@ describe('Transportation Rates form (/api/resources/transportation)', () => {
     const again = await call(postResource(req(transportBody({ service_code: 'CAIRO-APT-2', vehicles: [{ ...vehicles[0], rate_eur: 40 }] }))))
     expect(again.status).toBe(409)
     expect(again.json.existing.id).toBe(first.json.id)
-    // A clashing code is a clear 409 too, not the database's unique error.
-    const clash = await call(postResource(req(transportBody({ supplier_id: '__none__', service_code: first.json.service_code }))))
-    expect(clash.status).toBe(409)
-    expect(clash.json.error).toMatch(/already used/)
     expect(await rows('transportation_rates')).toHaveLength(1)
+  })
+
+  it('T1: a second supplier on the same route and car under the same code saves, as CODE-2 (operator 2026-11-07)', async () => {
+    const first = await call(postResource(req(transportBody())))
+    expect(first.status).toBe(201)
+    // The form fills the code from the route, so the second company sends the same one.
+    const second = await call(postResource(req(transportBody({ supplier_id: '__none__', service_code: first.json.service_code, vehicles: [{ ...vehicles[0], rate_eur: 35 }] }))))
+    expect(second.status).toBe(201)
+    expect(second.json.service_code).toBe(`${first.json.service_code}-2`)
+    const third = await call(postResource(req(transportBody({ supplier_id: '__none__', route_name: 'Other', service_code: first.json.service_code }))))
+    expect(third.status).toBe(201)
+    expect(third.json.service_code).toBe(`${first.json.service_code}-3`)
+    expect(await rows('transportation_rates')).toHaveLength(3)
+  })
+
+  it('#684: the form’s Preferred tick is saved on create and on edit', async () => {
+    const ok = await call(postResource(req(transportBody({ is_preferred: true }))))
+    expect(ok.status).toBe(201)
+    expect((await rows('transportation_rates'))[0].is_preferred).toBe(true)
+    const edit = await call(putResource(req(transportBody({ is_preferred: false, service_code: ok.json.service_code })), ctx(ok.json.id)))
+    expect(edit.status).toBe(200)
+    expect((await rows('transportation_rates'))[0].is_preferred).toBe(false)
   })
 
   it('T1: another supplier, another route name, or another validity window is a different rate', async () => {
