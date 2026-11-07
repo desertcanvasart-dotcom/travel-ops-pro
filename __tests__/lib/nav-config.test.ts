@@ -222,3 +222,19 @@ describe('only the config lists links', () => {
     expect(offenders).toEqual([])
   })
 })
+
+// Operator 2026-11-07: the sidebar AND the Rates pages' own menu both listed
+// all sixteen rate sheets, side by side. The Rates menu is now the one list.
+describe('rate sheets: one menu', () => {
+  it('the sidebar links to Rates and Rates check only — no sheet folds', () => {
+    const rates = MAIN_NAV.find(s => s.key === 'rates')!
+    expect(rates.items.some(i => i.children?.length)).toBe(false)
+    expect(rates.items.map(i => i.href)).toEqual(['/suppliers', '/rates', '/rates/check'])
+  })
+  it('⌘K still finds every sheet, with the roles of the section that leads there', () => {
+    const entries = navEntries().filter(e => e.source === 'rates')
+    expect(entries.map(e => e.item.href).sort()).toEqual(RATE_GROUPS.flatMap(g => g.items.map(i => i.href)).sort())
+    const sectionRoles = MAIN_NAV.find(s => s.key === 'rates')!.roles
+    for (const e of entries) expect(e.roles).toEqual(e.item.roles ?? sectionRoles)
+  })
+})

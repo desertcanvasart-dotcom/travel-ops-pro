@@ -3,7 +3,7 @@
 // ============================================
 // The Rates pages' own menu, and the overview cards
 // ============================================
-// Both from lib/nav/config.ts RATE_GROUPS (the sidebar's rate groups too),
+// Both from lib/nav/config.ts RATE_GROUPS (the only list of rate sheets),
 // with each sheet's row count from /api/rates/summary. A count that could
 // not be read is left blank, never shown as 0.
 
@@ -73,7 +73,7 @@ export default function RatesCategoryMenu({ counts }: { counts: Counts }) {
       <aside className="hidden md:block w-56 shrink-0 bg-white border-r border-gray-200 sticky top-0 h-[calc(100vh_-_var(--app-chrome))] overflow-y-auto print:hidden">
         <nav className="px-2 py-3 space-y-4" aria-label={t('rateCategories')}>
           <div className="space-y-0.5">
-            {RATES_LINKS.map(i => item(i.href, i.href === '/rates' ? 'ratesOverview' : i.labelKey, i.icon))}
+            {RATES_LINKS.map(i => item(i.href, i.labelKey, i.icon))}
           </div>
           {RATE_GROUPS.map(g => (
             <div key={g.key}>
@@ -95,7 +95,7 @@ export default function RatesCategoryMenu({ counts }: { counts: Counts }) {
             onChange={e => router.push(e.target.value)}
             className="w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg"
           >
-            {RATES_LINKS.map(i => <option key={i.href} value={i.href}>{t(i.href === '/rates' ? 'ratesOverview' : i.labelKey)}</option>)}
+            {RATES_LINKS.map(i => <option key={i.href} value={i.href}>{t(i.labelKey)}</option>)}
             {RATE_GROUPS.map(g => (
               <optgroup key={g.key} label={t(g.labelKey)}>
                 {g.items.map(i => (

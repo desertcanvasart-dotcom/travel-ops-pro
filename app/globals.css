@@ -278,6 +278,15 @@ select {
   padding: 0.625rem 0.875rem;
 }
 
+/* A filter bar's dropdowns size to their content and sit side by side.
+ * The rule above makes every select 100% wide (right for forms), so in a
+ * wrapping filter row each dropdown took a whole line of its own: four
+ * stacked filters before the table on Guide Rates (operator, 2026-11-07). */
+.filter-row select {
+  width: auto;
+  max-width: 100%;
+}
+
 input:focus,
 textarea:focus,
 select:focus {

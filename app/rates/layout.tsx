@@ -3,9 +3,9 @@
 // ============================================
 // The Rates pages: an in-page category menu beside each sheet
 // ============================================
-// Overview, Rates check and every rate sheet, grouped as the sidebar groups
-// them (lib/nav/config.ts RATE_GROUPS), with row counts. Both menus stay:
-// the sidebar's folds for getting here, this one for moving between sheets.
+// Rates, Rates check and every rate sheet (lib/nav/config.ts RATE_GROUPS),
+// with row counts. This is the ONE list of rate sheets: the sidebar links to
+// Rates and stops there (operator, 2026-11-07 — both listed all sixteen).
 // Extras lives under /rates/extras but is a Products page, so it is shown
 // without this menu.
 

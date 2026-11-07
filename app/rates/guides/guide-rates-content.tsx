@@ -36,7 +36,7 @@ import { Copy, Users,
   AlertTriangle,
   CheckCircle,
   XCircle,
-  Info
+  Info, Coins
 } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
@@ -125,7 +125,7 @@ export default function GuideRatesContent() {
   const initialSupplierId = searchParams.get('supplier_id') || ''
 
   // Currency conversion
-  const { currency, formatWithConversion, convertCurrency, rateCurrency } = useCurrency()
+  const { formatWithConversion, convertCurrency, rateCurrency } = useCurrency()
 
   // Helper to format rate from EUR to user's preferred currency
   const formatRate = (eurAmount: number) => {
@@ -660,7 +660,7 @@ export default function GuideRatesContent() {
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-gray-400 font-bold">{currency}</span>
+            <Coins className="w-4 h-4 text-gray-400" aria-hidden />
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{formatRateAverages(avgRate, formatRate)}</p>
@@ -677,7 +677,7 @@ export default function GuideRatesContent() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+      <div className="filter-row bg-white rounded-lg shadow-sm border border-gray-200 p-3">
         <div className="flex flex-wrap gap-3">
           {/* Search */}
           <div className="flex-1 min-w-[200px]">
@@ -865,11 +865,13 @@ export default function GuideRatesContent() {
                     <td className="px-4 py-3">
                       <span className="text-sm text-gray-600">{guideCitiesText(rate) || t('allCities')}</span>
                     </td>
+                    {/* Duration on one line, the mode as a small tag under it —
+                        the two ran together and wrapped over three lines. */}
                     <td className="px-4 py-3">
-                      <span className="text-sm text-gray-600">
+                      <span className="block text-sm text-gray-600 whitespace-nowrap">
                         {guideDurationLabel(rate.tour_duration, t(`tourDurations.${rate.tour_duration}`))}
                       </span>
-                      <span className="ml-1 px-1.5 py-0.5 rounded text-[11px] bg-[#647C47]/10 text-[#4a5c35]" data-testid="guide-mode-badge">
+                      <span className="inline-block mt-0.5 px-1.5 py-0.5 rounded text-[11px] whitespace-nowrap bg-[#647C47]/10 text-[#4a5c35]" data-testid="guide-mode-badge">
                         {guideModeLabel(rateGuideMode(rate), t(`guideModes.${rateGuideMode(rate)}`))}
                       </span>
                     </td>
