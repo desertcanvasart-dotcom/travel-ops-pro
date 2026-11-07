@@ -335,6 +335,13 @@ export function parseHotels(tables) {
 // Programme
 // ---------------------------------------------------------------------------
 
+// A programme code: [airport N|K][carrier EK|MS], either order, optional BZ
+// cabin, then days+seq and an optional type suffix (see program-code.mjs).
+// The airport letter is optional because old codes omit it (MSBZ805-CR) — but
+// it must be READ when present: a list of whole prefixes without K turned
+// KEK802-ABS (Kansai) into EK802-ABS.
+const CODE = String.raw`[NK]?(?:EK|MS)[NK]?(?:BZ)?\s*[-－ー–]?\s*\d{3,4}(?:\s*[-－ー–]\s*[A-Z]+)?`
+
 /** The code as the operator writes it, taken from the filename — the most
  *  reliable source, since a document's own code is sometimes a stale copy. */
 export function codeFromFilename(filename) {
@@ -342,9 +349,14 @@ export function codeFromFilename(filename) {
   // The suffix separator is sometimes a FULL-WIDTH dash (－ U+FF0D) — one file
   // uses it, and an ASCII-only pattern silently drops the suffix, turning
   // MSN1002-ABCR into a different programme.
-  const match = base.match(/((?:NEK|MSN|MSBZ|MS|EK)\s*[-－ー–]?\s*\d{3,4}(?:\s*[-－ー–]\s*[A-Z]+)?)/i)
+  const match = base.match(new RegExp(`(${CODE})`, 'i'))
   if (!match) return null
   return match[1].replace(/\s/g, '').replace(/[－ー–]/g, '-').toUpperCase()
+}
+
+/** The carrier the code names, for a file outside an airline folder. */
+function carrierInCode(code) {
+  return code?.match(/^[NK]?(EK|MS)/)?.[1] ?? null
 }
 
 /** Any programme code written INSIDE the document, for cross-checking. */
@@ -353,7 +365,7 @@ function codeInDocument(tables) {
     for (const cells of rows) {
       for (const cell of cells) {
         for (const line of cell) {
-          const match = line.match(/^((?:NEK|MSN|MSBZ)\s*[-－ー–]?\s*\d{3,4}(?:\s*[-－ー–]\s*[A-Z]+)?)$/i)
+          const match = line.match(new RegExp(`^(${CODE})$`, 'i'))
           if (match) return match[1].replace(/\s/g, '').replace(/[－ー–]/g, '-').toUpperCase()
         }
       }
@@ -422,7 +434,7 @@ export function parseProgram({ html, filename, folder }) {
   return {
     code,
     filename,
-    airline: /MS/i.test(folder) ? 'MS' : /EK/i.test(folder) ? 'EK' : null,
+    airline: /MS/i.test(folder) ? 'MS' : /EK/i.test(folder) ? 'EK' : carrierInCode(code),
     departure_airport: /NRT/i.test(folder) ? 'NRT' : null,
     duration_days: durationDays,
     // Nights on the ground: the last day is a departure, not an overnight.
