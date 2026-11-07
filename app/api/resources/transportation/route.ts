@@ -6,7 +6,7 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
 import { OWN_SUPPLIER_EMBED, ownSupplierOnRow, ownSupplierOnRows } from '@/lib/rates/own-supplier-embed'
-import { findSameTransportRate, findServiceCodeClash } from '@/lib/rates/transport-natural-key'
+import { findSameTransportRate, freeServiceCode } from '@/lib/rates/transport-natural-key'
 import { validateRatePayload } from '@/lib/rate-validation'
 
 // Actor-attributed service-role client (lib/supabase-actor): rate-table
@@ -138,6 +138,9 @@ export async function POST(request: NextRequest) {
       // currency was silently dropped here. Only-when-present, so old
       // clients and unmigrated databases are untouched.
       ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
+      // Starred Preferred (#684) — wired into /api/rates/transportation only,
+      // so the form's tick was dropped here. Only-when-present.
+      ...('is_preferred' in body ? { is_preferred: body.is_preferred === true } : {}),
       ...vehiclePatch
     }
 
@@ -150,13 +153,10 @@ export async function POST(request: NextRequest) {
       .from('transportation_rates')
       .select('*')
       .eq('org_id', orgId)
-    const clash = findServiceCodeClash(newRate.service_code, orgRates ?? [])
-    if (clash) {
-      return NextResponse.json({
-        error: `Service code ${newRate.service_code} is already used by another rate. Change the code, or edit that rate.`,
-        existing: clash,
-      }, { status: 409 })
-    }
+    // The same rate twice is refused (supplier, route, vehicles' scope and
+    // validity — lib/rates/transport-natural-key). Anything else is a new
+    // rate, even on a route another supplier already quotes: when its code is
+    // taken it saves as CODE-2, CODE-3, … instead of being refused.
     const existing = findSameTransportRate(newRate, (orgRates ?? []).filter((r: any) => r.service_type === newRate.service_type))
     if (existing) {
       return NextResponse.json({
@@ -164,6 +164,7 @@ export async function POST(request: NextRequest) {
         existing,
       }, { status: 409 })
     }
+    newRate.service_code = freeServiceCode(newRate.service_code, orgRates ?? [])
 
     const { data, error } = await supabaseAdmin
       .from('transportation_rates')

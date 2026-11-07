@@ -58,3 +58,23 @@ export function findServiceCodeClash<T extends Row>(code: unknown, existing: rea
   if (!want) return null
   return existing.find(r => text(r.service_code) === want && String(r.id ?? '') !== String(exceptId ?? '')) ?? null
 }
+
+/**
+ * The code a NEW rate saves under: `code` itself when it is free, else the
+ * first free `code-2`, `code-3`, …
+ *
+ * The form fills the code from the route (CAIRO-TO-ALEXANDRIA-INTERCITY), so
+ * a second transport company quoting the same route and cars was refused with
+ * "Service code … is already used" — although it is a different rate (the
+ * supplier is part of findSameTransportRate's key, which still refuses a real
+ * duplicate first). The code is a label; operator 2026-11-07: several
+ * suppliers share one route and car type at different prices.
+ */
+export function freeServiceCode(code: string, existing: readonly Row[]): string {
+  const taken = new Set(existing.map(r => text(r.service_code)).filter(Boolean))
+  if (!taken.has(text(code))) return code
+  for (let n = 2; ; n++) {
+    const next = `${code}-${n}`
+    if (!taken.has(text(next))) return next
+  }
+}
