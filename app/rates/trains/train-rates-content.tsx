@@ -34,7 +34,7 @@ import { Copy, Train,
   AlertTriangle,
   CheckCircle,
   XCircle,
-  Info
+  Info, Coins
 } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { averageRatesByCurrency, formatRateAverages } from '@/lib/currency-totals'
@@ -95,7 +95,7 @@ export default function TrainRatesContent() {
   const searchParams = useSearchParams()
 
   // Currency conversion
-  const { currency, formatWithConversion, rateCurrency } = useCurrency()
+  const { formatWithConversion, rateCurrency } = useCurrency()
   const formatRate = (amount: number) => formatWithConversion(amount, rateCurrency)
 
   const [rates, setRates] = useState<TrainRate[]>([])
@@ -570,7 +570,7 @@ export default function TrainRatesContent() {
         </div>
         <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
           <div className="flex items-center gap-2 mb-1">
-            <span className="text-gray-400 font-bold">{currency}</span>
+            <Coins className="w-4 h-4 text-gray-400" aria-hidden />
             <span className="w-1.5 h-1.5 rounded-full bg-green-600"></span>
           </div>
           <p className="text-2xl font-bold text-gray-900">{formatRateAverages(avgRate, formatRate)}</p>
@@ -587,7 +587,7 @@ export default function TrainRatesContent() {
       </div>
 
       {/* Filters */}
-      <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-3">
+      <div className="filter-row bg-white rounded-lg shadow-sm border border-gray-200 p-3">
         <div className="flex flex-wrap gap-3">
           {/* Search */}
           <div className="flex-1 min-w-[200px]">

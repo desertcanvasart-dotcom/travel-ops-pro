@@ -7,7 +7,7 @@
 // file. No other component writes out a list of links.
 //
 //   MAIN_NAV         the sidebar: the daily work, in pipeline order
-//   RATE_GROUPS      the rate sheets, foldable under Suppliers & Rates
+//   RATE_GROUPS      the rate sheets: the Rates pages' own menu, and ⌘K
 //   SETTINGS_NAV     the Settings area: setup, configured once
 //   JUMP_ONLY_PAGES  pages only ⌘K lists (reached as a button elsewhere)
 //   TABBED_PAGES     pages whose sibling screens are tabs (?tab=, ?view=…),
@@ -300,14 +300,17 @@ export const MAIN_NAV: NavSection[] = [
       { labelKey: 'extras', href: '/rates/extras', icon: Sparkles, roles: AM, keywords: ['add-ons', 'upgrades', 'options'] },
     ],
   },
-  // What you buy and what it costs; the rate sheets fold underneath.
+  // What you buy and what it costs. The rate sheets are NOT listed here:
+  // the Rates pages have their own menu of every sheet, with counts
+  // (components/rates/RatesCategoryMenu). Listing them in both put the same
+  // sixteen links side by side (operator, 2026-11-07). "Rates" stays lit on
+  // every sheet (/rates/…); ⌘K still finds each one (navEntries).
   {
     key: 'rates', titleKey: 'suppliersRates', roles: AM,
     items: [
       { labelKey: 'suppliers', href: '/suppliers', icon: Building, match: ['/airport-staff'], keywords: ['airport staff'] },
-      { labelKey: 'ratesHub', href: '/rates', icon: Coins, keywords: ['rates overview'] },
+      { labelKey: 'ratesHub', href: '/rates', icon: Coins, keywords: ['rates overview', 'rates hub'] },
       { labelKey: 'ratesCheck', href: '/rates/check', icon: ClipboardCheck },
-      ...RATE_GROUPS.map(g => ({ labelKey: g.labelKey, href: g.href, icon: g.icon, children: g.items })),
     ],
   },
   {
@@ -458,6 +461,12 @@ export function navEntries(): NavEntry[] {
         out.push({ source: 'main', item, roles, groupKey: section.titleKey })
       }
     }
+  }
+  // The rate sheets: in the Rates pages' own menu, not the sidebar — with
+  // the roles of the sidebar section that leads there.
+  const ratesRoles = MAIN_NAV.find(sec => sec.key === 'rates')?.roles ?? null
+  for (const group of RATE_GROUPS) {
+    for (const item of group.items) out.push({ source: 'rates', item, roles: item.roles ?? ratesRoles, groupKey: group.labelKey })
   }
   for (const group of SETTINGS_NAV) {
     for (const item of group.items) out.push({ source: 'settings', item, roles: item.roles ?? null, groupKey: group.titleKey })
