@@ -5896,6 +5896,7 @@ export interface Database {
           service_code: string
           guide_language: string
           guide_type: string
+          cities: string[]
           city: string | null
           tour_duration: string | null
           base_rate_eur: number
@@ -5917,6 +5918,7 @@ export interface Database {
           service_code: string
           guide_language: string
           guide_type: string
+          cities?: string[]
           city?: string | null
           tour_duration?: string | null
           base_rate_eur: number
@@ -5938,6 +5940,7 @@ export interface Database {
           service_code?: string
           guide_language?: string
           guide_type?: string
+          cities?: string[]
           city?: string | null
           tour_duration?: string | null
           base_rate_eur?: number

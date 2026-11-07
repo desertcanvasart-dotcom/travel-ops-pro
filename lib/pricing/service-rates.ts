@@ -23,6 +23,7 @@
 
 import { sameGuideLanguage } from '@/lib/guides/guide-language'
 import { rateGuideMode } from '@/lib/guides/guide-mode'
+import { guideCityRank } from '@/lib/guides/guide-cities'
 
 type Dated = { rate_valid_from?: string | null; rate_valid_to?: string | null }
 
@@ -96,8 +97,11 @@ export function pickGuideRate<T extends Record<string, any>>(rows: T[], ask: Gui
     rateGuideMode(r) === ask.mode &&
     rateValidOn(r, ask.date)
   )
+  // A guide rate covers a LIST of cities (lib/guides/guide-cities): a Cairo
+  // guide who also works Alexandria matches an Alexandria day like a rate
+  // written for Alexandria.
   const order = (list: T[]) => [...list].sort((a, b) =>
-    cityRank(a, ask.city) - cityRank(b, ask.city) ||
+    guideCityRank(a, ask.city) - guideCityRank(b, ask.city) ||
     (ask.supplierId ? Number(b.supplier_id === ask.supplierId) - Number(a.supplier_id === ask.supplierId) : 0) ||
     stableCompare(a, b)
   )

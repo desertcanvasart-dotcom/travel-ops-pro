@@ -6,6 +6,7 @@
 // 4. Returns grid days with slots pre-filled and matched to real rates
 
 import { NextRequest, NextResponse } from 'next/server'
+import { guideCitiesText } from '@/lib/guides/guide-cities'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { vehicleBands, vehicleKeyLabel, vehicleRateForPax } from '@/lib/rates/vehicle-bands'
 import { packageForDuration } from '@/lib/pricing/cruise-package'
@@ -121,7 +122,7 @@ async function buildRateCatalog(supabase: any, orgId: string, tier: string, sym:
     .join('\n')
 
   catalog.guide = (guideRates || [])
-    .map((r: any) => `ID:${r.id} | ${r.guide_language} | ${r.guide_type || 'Egyptologist'} | ${r.city || 'any'} | ${sym}${r.base_rate_eur || r.rate_eur}`)
+    .map((r: any) => `ID:${r.id} | ${r.guide_language} | ${r.guide_type || 'Egyptologist'} | ${guideCitiesText(r) || 'any'} | ${sym}${r.base_rate_eur || r.rate_eur}`)
     .join('\n')
 
   catalog.airport_services = (airportRates || [])

@@ -31,6 +31,20 @@ describe('pickGuideRate (#5, #6)', () => {
     expect(pickGuideRate([g('lxr', { city: 'Luxor' })], { ...ask, city: 'Aswan' })?.id).toBe('lxr')
   })
 
+  it('a rate covering several cities matches each of them like its own city (operator 2026-11-07)', () => {
+    const rows = [
+      g('all', { city: null, cities: [] }),
+      g('cai-alx', { city: 'Cairo', cities: ['Cairo', 'Alexandria'] }),
+      g('lxr-asw', { city: 'Luxor', cities: ['Luxor', 'Aswan'] }),
+    ]
+    expect(pickGuideRate(rows, { ...ask, city: 'Alexandria' })?.id).toBe('cai-alx')
+    expect(pickGuideRate(rows, { ...ask, city: 'aswan' })?.id).toBe('lxr-asw')
+    // A city no list names: the all-cities guide.
+    expect(pickGuideRate(rows, { ...ask, city: 'Hurghada' })?.id).toBe('all')
+    // A row from before the list (city only) still covers its city.
+    expect(pickGuideRate([g('all', { cities: [] }), g('old', { city: 'Aswan' })], { ...ask, city: 'Aswan' })?.id).toBe('old')
+  })
+
   it('skips a rate outside its validity, and puts the chosen guide first', () => {
     const rows = [
       g('old', { rate_valid_from: '2026-01-01', rate_valid_to: '2026-12-31' }),
