@@ -3,6 +3,7 @@ import { businessIdentity, orgIdentity } from '@/lib/org-identity'
 import { headerSafe, safeEmailAddress, encodeEmailHeader } from '@/lib/http/safe-header'
 import { getAuthenticatedGmail, GmailAuthError } from '@/lib/gmail'
 import { orgGmailSenderId } from '@/lib/email/org-gmail-sender'
+import { OWN_NOTIFICATION_HEADER_LINES } from '@/lib/email/own-notification-mail'
 
 /**
  * In-process transactional email sender (Gmail API): an organization's mail
@@ -49,6 +50,12 @@ export interface SendEmailInternalInput {
   orgId?: string | null
   /** Prefer this member's mailbox within `orgId` (the user who clicked Send). */
   senderUserId?: string | null
+  /**
+   * Autoura's own mail to staff (notifications, invitations, alerts): marked
+   * so the mailbox sync never files it as an inbox conversation
+   * (lib/email/own-notification-mail). Never set for mail to customers.
+   */
+  ownNotification?: boolean
 }
 
 export interface SendEmailInternalResult {
@@ -64,7 +71,7 @@ export interface SendEmailInternalResult {
 export async function sendEmailInternal(
   input: SendEmailInternalInput
 ): Promise<SendEmailInternalResult> {
-  const { to, subject, html, attachment, orgId, senderUserId } = input
+  const { to, subject, html, attachment, orgId, senderUserId, ownNotification } = input
 
   if (!to) {
     return { success: false, error: 'Recipient email is required' }
@@ -104,9 +111,10 @@ export async function sendEmailInternal(
     // The From name: the organization's own (Settings), else the platform's.
     const fromName = orgId ? (await orgIdentity(orgId)).name : businessIdentity().name
     const from = fromHeader(fromName, fromAddress)
+    const extraHeaders = ownNotification ? OWN_NOTIFICATION_HEADER_LINES : []
     const rawEmail = attachment
-      ? buildEmailWithAttachment(from, to, subject, html, attachment.filename, attachment.contentBase64)
-      : buildSimpleEmail(from, to, subject, html)
+      ? buildEmailWithAttachment(from, to, subject, html, attachment.filename, attachment.contentBase64, extraHeaders)
+      : buildSimpleEmail(from, to, subject, html, extraHeaders)
 
     const response = await gmail.users.messages.send({
       userId: 'me',
@@ -161,7 +169,7 @@ function fromHeader(fromName: string, fromAddress: string): string {
   return name ? `From: ${encodeEmailHeader(name)} <${address}>` : `From: ${address}`
 }
 
-function buildSimpleEmail(from: string, to: string, subject: string, body: string): string {
+export function buildSimpleEmail(from: string, to: string, subject: string, body: string, extraHeaders: readonly string[] = []): string {
   // The HTML body is base64-encoded (Content-Transfer-Encoding: base64) so
   // multi-byte UTF-8 (Japanese) survives intact rather than being emitted as
   // raw 8-bit text under a default 7-bit assumption.
@@ -169,6 +177,7 @@ function buildSimpleEmail(from: string, to: string, subject: string, body: strin
     from,
     `To: ${safeEmailAddress(to)}`,
     `Subject: ${encodeEmailHeader(headerSafe(subject))}`,
+    ...extraHeaders,
     'MIME-Version: 1.0',
     'Content-Type: text/html; charset=utf-8',
     'Content-Transfer-Encoding: base64',
@@ -189,7 +198,8 @@ function buildEmailWithAttachment(
   subject: string,
   body: string,
   filename: string,
-  attachmentBase64: string
+  attachmentBase64: string,
+  extraHeaders: readonly string[] = []
 ): string {
   const boundary = `boundary_${Date.now()}`
   // Headers are 7-bit: a Japanese client's name in the file name arrived as
@@ -203,6 +213,7 @@ function buildEmailWithAttachment(
     from,
     `To: ${safeEmailAddress(to)}`,
     `Subject: ${encodeEmailHeader(headerSafe(subject))}`,
+    ...extraHeaders,
     'MIME-Version: 1.0',
     `Content-Type: multipart/mixed; boundary="${boundary}"`,
     '',

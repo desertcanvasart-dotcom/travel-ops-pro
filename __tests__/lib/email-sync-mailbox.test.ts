@@ -445,3 +445,48 @@ describe('the office-address repair runs when there can be something to repair',
     expect(await applyOfficeRuleWhenDue(db, 'org-a', rule, t0 + 60_000)).not.toBeNull()
   })
 })
+
+// ATS 2026-11-07: 62 of 71 open inbox conversations were Autoura's own
+// rate-change notifications to staff — sent from the connected mailbox, so
+// stored as "the office wrote here", five per digest (lib/email/own-notification-mail).
+describe("Autoura's own notification mail is never a conversation", () => {
+  const STAFF = 'fatma@ats-hj.com'
+  function notification(id: string, threadId: string, opts: { marked?: boolean; subject?: string } = {}) {
+    const m = msg(id, threadId, OFFICE, STAFF, 20, ['SENT'])
+    m.payload.headers = [
+      { name: 'From', value: OFFICE }, { name: 'To', value: STAFF },
+      { name: 'Subject', value: opts.subject ?? '[Autoura] 料金変更: ガイド料金 5件 — Rate change: 5 guide rates' },
+      ...(opts.marked ? [{ name: 'X-Autoura-Notification', value: '1' }, { name: 'Auto-Submitted', value: 'auto-generated' }] : []),
+    ]
+    return m
+  }
+
+  it('a new thread of only our notifications is skipped — marked, or by the [Autoura] subject sent before the marker', async () => {
+    seedStore()
+    h.gmail.mailbox.set('n1', notification('n1', 'tn1', { marked: true }))
+    h.gmail.mailbox.set('n2', notification('n2', 'tn2'))
+    h.gmail.listed = ['n2', 'n1', 'm2', 'm1']
+    const r = await syncMailbox('u1', { max_results: 50, days_back: 3 })
+    expect(writesTo('email_conversations', 'insert')).toEqual([])
+    expect(writesTo('email_messages', 'insert')).toEqual([])
+    expect(r.threads_skipped).toBe(2)
+  })
+
+  it('a marked message with another subject is skipped too; the office writing to a customer is still stored', async () => {
+    seedStore()
+    h.gmail.mailbox.set('n3', notification('n3', 'tn3', { marked: true, subject: "You're invited to join Autoura" }))
+    h.gmail.mailbox.set('o1', msg('o1', 'to1', OFFICE, CUSTOMER, 30, ['SENT']))
+    h.gmail.listed = ['o1', 'n3', 'm2', 'm1']
+    await syncMailbox('u1', { max_results: 50, days_back: 3 })
+    expect(writesTo('email_conversations', 'insert').map(w => w.payload.thread_id)).toEqual(['to1'])
+  })
+
+  it('a notification arriving in a deleted conversation does not bring it back', async () => {
+    seedStore()
+    Object.assign(h.state.tables.email_conversations[0], { is_hidden: true, status: 'trashed' })
+    h.gmail.mailbox.set('n4', notification('n4', 't1', { marked: true }))
+    h.gmail.listed = ['n4', 'm2', 'm1']
+    await syncMailbox('u1', { max_results: 50, days_back: 3 })
+    expect(h.state.tables.email_conversations[0]).toMatchObject({ is_hidden: true, status: 'trashed' })
+  })
+})
