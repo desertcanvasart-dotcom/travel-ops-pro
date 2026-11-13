@@ -17,6 +17,8 @@ import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-curr
 import { DEFAULT_RATE_CURRENCY, normaliseRateCurrency } from '@/lib/org-rate-currency'
 import { paidFieldsWith } from '@/lib/paid-currency'
 import { getFixedDailyCosts } from '@/lib/fixed-costs'
+import { attachGuideCities } from '@/lib/guides/guide-coverage'
+import { guideCityRank } from '@/lib/guides/guide-cities'
 import {
   getItemizedTippingRates,
   determineTipRolesForDay,
@@ -315,8 +317,7 @@ export async function fetchAllPricingRates(
       .select('*')
       .eq('org_id', orgScope)
       .eq('is_active', true)
-      .eq('guide_language', language)
-      .limit(1),
+      .eq('guide_language', language),
     // Entrance fees + activity rates (sea trips, boat rides, etc.)
     supabase.from('entrance_fees').select('*').eq('org_id', orgScope).eq('is_active', true),
     supabase.from('activity_rates').select('*').eq('org_id', orgScope).eq('is_active', true),
@@ -341,7 +342,12 @@ export async function fetchAllPricingRates(
   const [transportRates, transferRates, guideRates, allEntranceFees, allActivityRates, allMealRates, airportServicesData, hotelServicesData]: any[] = await Promise.all([
     rateNormalizer.normalize('transportation_rates', rawTransportRates),
     rateNormalizer.normalize('transportation_rates', rawTransferRates),
-    rateNormalizer.normalize('guide_rates', rawGuideRates),
+    // The guide who works in this city first (supplier_cities,
+    // lib/guides/guide-cities), then an every-city guide; it took the first
+    // row of the language whatever the city.
+    attachGuideCities(supabase, orgScope, rawGuideRates ?? [])
+      .then(rows => [...rows].sort((a, b) => guideCityRank(a, effectiveCity) - guideCityRank(b, effectiveCity)))
+      .then(rows => rateNormalizer.normalize('guide_rates', rows)),
     rateNormalizer.normalize('entrance_fees', rawEntranceFees),
     rateNormalizer.normalize('activity_rates', rawActivityRates),
     rateNormalizer.normalize('meal_rates', rawMealRates),

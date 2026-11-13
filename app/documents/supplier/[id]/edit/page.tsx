@@ -19,6 +19,7 @@ import { toVoucherAmount, voucherPickFx } from '@/lib/documents/voucher-pick-pri
 import { mealVoucherQuantity } from '@/lib/pricing/service-rates'
 import { voucherHasMoney } from '@/lib/documents/voucher-currency'
 import { useConfirmDialog } from '@/components/ConfirmDialog'
+import { guideCitiesText } from '@/lib/guides/guide-cities'
 
 interface TransportRate {
   id: string
@@ -343,7 +344,8 @@ export default function EditSupplierDocumentPage() {
           service_code: r.service_code || '',
           guide_language: r.guide_language,
           guide_type: r.guide_type,
-          city: r.city,
+          // The guide's cities (a guide rate has no city of its own).
+          city: guideCitiesText(r) ?? '',
           tour_duration: r.tour_duration,
           base_rate_eur: r.base_rate_eur || 0,
           base_rate_non_eur: r.base_rate_non_eur || 0,

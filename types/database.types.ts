@@ -10769,6 +10769,45 @@ export interface Database {
           },
         ]
       }
+      supplier_cities: {
+        Row: {
+          id: string
+          org_id: string
+          supplier_id: string
+          city: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          supplier_id: string
+          city: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          supplier_id?: string
+          city?: string
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "supplier_cities_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "supplier_cities_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       supplier_properties: {
         Row: {
           org_id: string

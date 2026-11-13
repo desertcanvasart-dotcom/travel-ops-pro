@@ -4853,16 +4853,9 @@
         "sectionDates": "Valid dates",
         "cityOptional": "City (optional)",
         "anyCity": "Any city",
-        "citiesCovered": "Cities this guide covers",
-        "citiesHint": "Add every city this guide works — e.g. Cairo and Alexandria, or Luxor and Aswan. Leave it as All cities for a guide who works everywhere.",
         "allCities": "All cities",
-        "addCity": "+ Add a city",
-        "removeCity": "Remove {city}",
-        "setAllCities": "Set to all cities",
         "guideSupplier": "Guide (supplier)",
-        "guideSupplierHint": "The guide this contract is with, or “Direct” if there is none. Choosing cities narrows the list to guides based in them.",
-        "noGuidesMatch": "No guides are based in these cities. Add another city, or set All cities.",
-        "matching": "{count} matching",
+        "guideSupplierHint": "The guide this contract is with, or “Direct” if there is none.",
         "durationHintShort": "Automatic pricing uses Full day, Half day and Meet & Assist.",
         "howPricingUses": "How pricing uses this",
         "perDay": "per day",
@@ -4876,7 +4869,10 @@
         "datesBackwards": "The end date is before the start date.",
         "summary": "Summary",
         "noRateYet": "no rate yet",
-        "activeLabel": "Available for bookings"
+        "activeLabel": "Available for bookings",
+        "guideWorksIn": "Works in {cities} — this rate applies in each.",
+        "guideWorksEverywhere": "Works in every city — this rate applies everywhere.",
+        "guideCitiesWhere": "A guide’s cities are set on this page: filter by the guide, then Edit cities."
       },
       "table": {
         "language": "Language",
@@ -4938,7 +4934,16 @@
       "guideModes": {
         "spot": "Spot guide",
         "throughout": "Throughout guide"
-      }
+      },
+      "guideCities": "Cities this guide works in",
+      "editCities": "Edit cities",
+      "saveCities": "Save cities",
+      "everyCity": "Every city",
+      "addCity": "+ Add a city",
+      "removeCity": "Remove {city}",
+      "citiesSaved": "Cities saved for {name}",
+      "citiesFailed": "Failed to save cities",
+      "citiesHint": "The guide charges the same rate in each city. No cities = the guide works in every city."
     },
     "attractions": {
       "title": "Attractions & Entrance Fees",

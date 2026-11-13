@@ -11,6 +11,7 @@ import { hotelPpDouble } from '@/lib/rates/hotel-display-rate'
 import { vehicleBands, vehicleKeyLabel, PRESET_VEHICLE_KEYS } from '@/lib/rates/vehicle-bands'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
 import { useVocabLabel } from '@/hooks/useVocabLabel'
+import { guideCitiesText, guideRateNamesCity } from '@/lib/guides/guide-cities'
 import { hubViewCsv, tabForHash, HUB_ANCHOR_TABS } from '@/lib/rates/hub-view'
 import { RatesOverview, useRateCounts } from '@/components/rates/RatesCategoryMenu'
 
@@ -42,6 +43,8 @@ interface TransportationRate extends BaseRate {
 }
 
 interface GuideRate extends BaseRate {
+  /** The guide's cities ([] = every city) — a guide rate has no city of its own. */
+  guide_cities?: string[]
   guide_language?: string
   guide_type?: string
   tour_duration?: string
@@ -397,7 +400,7 @@ export default function RatesPage() {
 
   const allCities = Array.from(new Set([
     ...rates.transportation.map(r => r.city),
-    ...rates.guides.map(r => r.city),
+    ...rates.guides.flatMap(r => r.guide_cities ?? []),
     ...rates.entrances.map(r => r.city),
     ...rates.accommodation.map(r => r.city),
     ...rates.meals.map(r => r.city),
@@ -416,7 +419,11 @@ export default function RatesPage() {
           value && value.toString().toLowerCase().includes(searchTerm.toLowerCase())
         )
       
-      const matchesCity = selectedCity === 'all' || rate.city === selectedCity
+      // A guide rate: its guide works in the city, or in every city.
+      const guideCities = (rate as GuideRate).guide_cities
+      const matchesCity = selectedCity === 'all' || (Array.isArray(guideCities)
+        ? !guideCities.length || guideRateNamesCity(rate as GuideRate, selectedCity)
+        : rate.city === selectedCity)
       
       const matchesCategory = activeTab !== 'entrances' || 
         selectedCategory === 'all' || 
@@ -974,7 +981,7 @@ export default function RatesPage() {
                       <td className="px-4 py-3 text-sm text-gray-700">{rate.guide_type}</td>
                       <td className="px-4 py-3">
                         <span className="inline-block px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">
-                          {rate.city}
+                          {guideCitiesText(rate) || t('allCities')}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-xs">

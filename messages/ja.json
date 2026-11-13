@@ -5327,16 +5327,9 @@
         "sectionDates": "有効期間",
         "cityOptional": "都市（任意）",
         "anyCity": "すべての都市",
-        "citiesCovered": "このガイドの担当都市",
-        "citiesHint": "このガイドが担当する都市をすべて追加します（例：カイロとアレキサンドリア、ルクソールとアスワン）。全都市を担当するガイドは「すべての都市」のままにしてください。",
         "allCities": "すべての都市",
-        "addCity": "＋ 都市を追加",
-        "removeCity": "{city}を外す",
-        "setAllCities": "すべての都市に戻す",
         "guideSupplier": "ガイド（仕入先）",
-        "guideSupplierHint": "契約先のガイドを選びます。仕入先がない場合は「直接」を選択してください。都市を選ぶと、その都市を拠点とするガイドに候補が絞られます。",
-        "noGuidesMatch": "これらの都市を拠点とするガイドはいません。都市を追加するか「すべての都市」にしてください。",
-        "matching": "{count}件が該当",
+        "guideSupplierHint": "契約先のガイドを選びます。仕入先がない場合は「直接」を選択してください。",
         "durationHintShort": "自動見積では全日・半日・ミート＆アシストを使います。",
         "howPricingUses": "見積での使われ方",
         "perDay": "1日あたり",
@@ -5350,7 +5343,10 @@
         "datesBackwards": "終了日が開始日より前になっています。",
         "summary": "内容の確認",
         "noRateYet": "料金未入力",
-        "activeLabel": "予約に使用可能"
+        "activeLabel": "予約に使用可能",
+        "guideWorksIn": "担当都市：{cities}（各都市でこの料金が適用されます）",
+        "guideWorksEverywhere": "すべての都市を担当（どの都市でもこの料金が適用されます）",
+        "guideCitiesWhere": "ガイドの担当都市はこのページで設定します。ガイドで絞り込み、「都市を編集」を押してください。"
       },
       "table": {
         "language": "言語",
@@ -5423,7 +5419,16 @@
       "guideModes": {
         "spot": "スポットガイド",
         "throughout": "全行程ガイド"
-      }
+      },
+      "guideCities": "このガイドの担当都市",
+      "editCities": "都市を編集",
+      "saveCities": "都市を保存",
+      "everyCity": "すべての都市",
+      "addCity": "＋ 都市を追加",
+      "removeCity": "{city}を外す",
+      "citiesSaved": "{name}の担当都市を保存しました",
+      "citiesFailed": "担当都市の保存に失敗しました",
+      "citiesHint": "ガイド料金はどの都市でも同じです。都市が未登録の場合は、すべての都市を担当します。"
     },
     "attractions": {
       "title": "観光スポット・入場料金",

@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { guideCitiesWrite } from '@/lib/guides/guide-cities'
 import { guideModeKey } from '@/lib/guides/guide-mode'
 import { guideLanguageKey } from '@/lib/guides/guide-language'
 import { clientMessage } from '@/lib/api-errors'
@@ -64,10 +63,8 @@ export async function PUT(
     if (body.service_code !== undefined) updateData.service_code = body.service_code
     if (body.guide_language !== undefined) updateData.guide_language = guideLanguageKey(body.guide_language)
     if (body.guide_type !== undefined) updateData.guide_type = body.guide_type
-    // city + cities move together (lib/guides/guide-cities): a body sending
-    // only `city` (older clients) writes a one-city list.
-    const citiesWrite = guideCitiesWrite(body)
-    if (citiesWrite) Object.assign(updateData, citiesWrite)
+    // No city: the cities are the guide's (supplier_cities, lib/guides/guide-cities).
+    // A body still sending city / cities is ignored.
     if (body.tour_duration !== undefined) updateData.tour_duration = body.tour_duration
     if (body.guide_mode !== undefined) updateData.guide_mode = guideModeKey(body.guide_mode)
     if (body.base_rate_eur !== undefined) updateData.base_rate_eur = parseFloat(body.base_rate_eur) || 0
@@ -96,12 +93,12 @@ export async function PUT(
 
     if (error) {
       // The database's natural key (uq_guide_rates_natural_key): switching a
-      // rate's mode, city or period onto another rate's — "Internal server
+      // rate's mode or period onto another rate's — "Internal server
       // error" until now.
       if (error.code === '23505') {
         return NextResponse.json({
           success: false,
-          error: 'Another rate already has these details (same language, guide type, duration, guide mode, city, guide and validity period). Edit that rate instead, or change one of those.',
+          error: 'Another rate already has these details (same language, guide type, duration, guide mode, guide and validity period). Edit that rate instead, or change one of those.',
         }, { status: 409 })
       }
       console.error('PUT guide_rate error:', error)

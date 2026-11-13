@@ -122,27 +122,42 @@ describe('guides: the natural key (#4, #5)', () => {
   })
 })
 
-describe('guides: one rate, several cities (operator 2026-11-07)', () => {
-  it('a create stores the list, city = its first; an edit replaces both; city-only writes a one-city list', async () => {
-    const { city: _c, ...noCity } = GUIDE
-    expect((await postGuide(req('/api/rates/guides', { ...noCity, cities: ['Cairo', 'Alexandria', 'cairo', ' '] }))).status).toBe(200)
-    let [row] = await rows('guide_rates')
-    expect(row.cities).toEqual(['Cairo', 'Alexandria'])
-    expect(row.city).toBe('Cairo')
+describe('guides: the cities are the guide\'s, not the rate\'s (operator 2026-11-13)', () => {
+  it('a rate stores no city; two rates differing only by city are one rate (409)', async () => {
+    expect((await postGuide(req('/api/rates/guides', { ...GUIDE, cities: ['Cairo', 'Alexandria'] }))).status).toBe(200)
+    const [row] = await rows('guide_rates')
+    expect(row.city ?? null).toBeNull()
+    expect(row.cities ?? null).toBeNull()
+    expect((await postGuide(req('/api/rates/guides', { ...GUIDE, city: 'Aswan' }))).status).toBe(409)
+    expect(await rows('guide_rates')).toHaveLength(1)
+    // An edit sending a city does not write one.
+    expect((await putGuide(req(`/api/rates/guides/${row.id}`, { city: 'Luxor', cities: ['Luxor'] }, 'PUT'), ctx(row.id))).status).toBe(200)
+    const [after] = await rows('guide_rates')
+    expect(after.city ?? null).toBeNull()
+  })
 
-    expect((await putGuide(req(`/api/rates/guides/${row.id}`, { cities: [] }, 'PUT'), ctx(row.id))).status).toBe(200)
-    ;[row] = await rows('guide_rates')
-    expect(row.cities).toEqual([])
-    expect(row.city).toBeNull()
-
-    expect((await putGuide(req(`/api/rates/guides/${row.id}`, { city: 'Luxor' }, 'PUT'), ctx(row.id))).status).toBe(200)
-    ;[row] = await rows('guide_rates')
-    expect(row.cities).toEqual(['Luxor'])
-
-    // An edit that sends neither leaves the cities alone.
-    expect((await putGuide(req(`/api/rates/guides/${row.id}`, { base_rate_eur: 120 }, 'PUT'), ctx(row.id))).status).toBe(200)
-    ;[row] = await rows('guide_rates')
-    expect(row.cities).toEqual(['Luxor'])
+  it("the list carries each rate's guide cities, and ?city= finds the guides who work there", async () => {
+    setMockTables({
+      guide_rates: [
+        { id: 'r-cai', org_id: 'org-1', supplier_id: 'g-cai', guide_language: 'japanese', is_active: true },
+        { id: 'r-lxr', org_id: 'org-1', supplier_id: 'g-lxr', guide_language: 'japanese', is_active: true },
+        { id: 'r-any', org_id: 'org-1', supplier_id: 'g-any', guide_language: 'japanese', is_active: true },
+      ],
+      supplier_cities: [
+        { id: 'c1', org_id: 'org-1', supplier_id: 'g-cai', city: 'Cairo' },
+        { id: 'c2', org_id: 'org-1', supplier_id: 'g-cai', city: 'Alexandria' },
+        { id: 'c3', org_id: 'org-1', supplier_id: 'g-lxr', city: 'Luxor' },
+        { id: 'c4', org_id: 'org-2', supplier_id: 'g-any', city: 'Aswan' },
+      ],
+    } as any)
+    const all = (await (await getGuides(req('/api/rates/guides'))).json()).data
+    const byId = Object.fromEntries(all.map((r: any) => [r.id, r.guide_cities]))
+    expect(byId['r-cai']).toEqual(['Alexandria', 'Cairo'])
+    expect(byId['r-lxr']).toEqual(['Luxor'])
+    // Another company's row never leaks onto this company's guide.
+    expect(byId['r-any']).toEqual([])
+    const alex = (await (await getGuides(req('/api/rates/guides?city=alexandria'))).json()).data
+    expect(alex.map((r: any) => r.id).sort()).toEqual(['r-any', 'r-cai'])
   })
 })
 
