@@ -12,6 +12,8 @@
 
 import { guideLanguageWord } from '@/lib/guides/guide-language'
 import { rateGuideMode } from '@/lib/guides/guide-mode'
+import { guideCitiesText, guideRateCities } from '@/lib/guides/guide-cities'
+import { attachGuideCities } from '@/lib/guides/guide-coverage'
 import { seasonsForRow, plainPeriodName, type RateSeasonEntity } from '@/lib/rates/rate-seasons'
 import { periodLabel, type OptionPeriod } from '@/lib/rates/date-window'
 import { cruiseSailingLabel, sanitizeSailingDays } from '@/lib/rates/cruise-sailing'
@@ -130,7 +132,8 @@ export async function loadGridRateOptions(
     nAccommodation, nEntrance, nMeals, nCruises, nCruisePkgs, nFlights,
   ] = await Promise.all([
     normalizer.normalize('transportation_rates', transportRates),
-    normalizer.normalize('guide_rates', guideRates),
+    // With the guide's cities (supplier_cities, lib/guides/guide-cities).
+    attachGuideCities(supabase, orgId, guideRates ?? []).then(rows => normalizer.normalize('guide_rates', rows)),
     normalizer.normalize('airport_staff_rates', airportRates),
     normalizer.normalize('hotel_staff_rates', hotelServiceRates),
     normalizer.normalize('tipping_rates', tippingRates),
@@ -228,16 +231,16 @@ export async function loadGridRateOptions(
     guide: (nGuides || []).map((r: any) => ({
       id: r.id,
       // Spot and throughout rates are different prices — the name says which,
-      // and so do the duration and the city: a half-day and a full-day rate
-      // (or a Cairo and a Luxor one) read identically at different prices.
+      // and so does the duration: a half-day and a full-day rate read
+      // identically at different prices. The cities are the guide's.
       name: `${r.guide_language ? guideLanguageWord(r.guide_language) : 'Guide'} (${[
         r.guide_type || 'Egyptologist',
         GUIDE_DURATION_LABEL[r.tour_duration] ?? r.tour_duration,
         rateGuideMode(r) !== 'spot' ? rateGuideMode(r) : '',
-      ].filter(Boolean).join(', ')})${r.city ? ` — ${r.city}` : ''}`,
+      ].filter(Boolean).join(', ')})${guideCitiesText(r) ? ` — ${guideCitiesText(r)}` : ''}`,
       rateEur: toNum(r.base_rate_eur || r.rate_eur),
       rateNonEur: toNum(r.base_rate_non_eur || r.rate_non_eur || r.base_rate_eur || r.rate_eur),
-      city: r.city,
+      cities: guideRateCities(r),
       details: withValidity(r.guide_language ? guideLanguageWord(r.guide_language) : r.guide_language, r),
       // The dropdown filters by language and by kind of guide.
       language: r.guide_language ? guideLanguageWord(r.guide_language) : undefined,

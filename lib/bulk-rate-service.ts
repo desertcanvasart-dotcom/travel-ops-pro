@@ -317,7 +317,8 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       // language, and a sheet must not be able to create the second spelling.
       colKey('guide_language', 'Language', true),
       col('guide_type', 'Guide Type', 'text', true),
-      col('city', 'City', 'text', false),
+      // No City: the cities are the guide's (supplier_cities, edited on Rates ›
+      // Guides) — one price in every city the guide works (20270118).
       col('tour_duration', 'Tour Duration', 'text', true),
       // spot | throughout (Settings → Vocabulary → Guide modes); blank = spot.
       // A KEY like the language: "Throughout" in a sheet failed the column's

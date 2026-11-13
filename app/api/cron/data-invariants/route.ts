@@ -45,7 +45,8 @@ function money(v: unknown): number {
 // duplicate detection.
 function guideRateKey(r: any): string {
   // Language by vocabulary key: "Japanese" and "japanese" are one rate.
-  return [r.org_id, r.supplier_id ?? 'null', guideLanguageKey(r.guide_language), r.guide_type, r.tour_duration, r.city ?? ''].join('|')
+  // No city: a guide's price is the same in every city (20270118).
+  return [r.org_id, r.supplier_id ?? 'null', guideLanguageKey(r.guide_language), r.guide_type, r.tour_duration, r.guide_mode ?? 'spot', r.rate_valid_from ?? '', r.rate_valid_to ?? ''].join('|')
 }
 function activityRateKey(r: any): string {
   return [r.org_id, r.supplier_id ?? 'null', String(r.activity_name ?? '').toLowerCase(), r.city ?? ''].join('|')
@@ -92,7 +93,7 @@ async function getHandler(request: NextRequest) {
       supabase.from('itinerary_services').select('id, itinerary_day_id'),
       supabase.from('invoices').select('id, org_id, invoice_number, status, total_amount, amount_paid, balance_due'),
       supabase.from('invoice_payments').select('id, invoice_id, amount'),
-      supabase.from('guide_rates').select('id, org_id, supplier_id, guide_language, guide_type, tour_duration, city'),
+      supabase.from('guide_rates').select('id, org_id, supplier_id, guide_language, guide_type, tour_duration, guide_mode, rate_valid_from, rate_valid_to'),
       supabase.from('activity_rates').select('id, org_id, supplier_id, activity_name, city'),
       supabase.from('transportation_rates').select('id, org_id, supplier_id, service_type, service_code, city, origin_city, destination_city, duration, area'),
     ])

@@ -8,6 +8,8 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { getOrgRateCurrency, normaliseRateCurrency } from '@/lib/org-rate-currency'
 import { createRateNormalizer, type RateCurrencyTable } from '@/lib/rates/rate-currency'
 import { selectAllRows } from '@/lib/db/select-all-rows'
+import { attachGuideCities } from '@/lib/guides/guide-coverage'
+import { guideRateNamesCity } from '@/lib/guides/guide-cities'
 
 // Which rate table each ?type= reads, for the in_org_currency conversion below.
 // Types missing here (guide = a VIEW over suppliers, service_fee) carry no
@@ -123,8 +125,8 @@ export async function GET(request: NextRequest) {
         // the real language and rate. Same class as the accommodation fix
         // above: two screens, two answers.
         build = () => {
-          const q = supabase.from('guide_rates').select('*').eq('org_id', orgId).eq('is_active', true)
-          return city ? q.ilike('city', city) : q
+          // The city is the GUIDE's (supplier_cities), matched after the read.
+          return supabase.from('guide_rates').select('*').eq('org_id', orgId).eq('is_active', true)
         }
         break
 
@@ -188,6 +190,14 @@ export async function GET(request: NextRequest) {
       )
     }
     let data: any[] = (result.data ?? []).map(row => (transform ? transform(row) : row))
+
+    // A guide rate has no city of its own: it carries its guide's cities
+    // (supplier_cities, lib/guides/guide-cities), and "guides in Luxor" are
+    // the guides who work in Luxor plus every-city guides.
+    if (type === 'guide') {
+      data = await attachGuideCities(supabase, orgId, data)
+      if (city) data = data.filter(r => !r.guide_cities.length || guideRateNamesCity(r, city))
+    }
 
     // A PRICING screen may ask for the rows in the org's rate currency
     // (in_org_currency=true). The tour-builder's selectors sum what they get

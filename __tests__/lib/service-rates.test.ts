@@ -24,25 +24,26 @@ describe('pickGuideRate (#5, #6)', () => {
   })
   const ask = { language: 'Japanese', grade: 'egyptologist', duration: 'full_day' as const, mode: 'spot' }
 
-  it("prefers the day's city, then a city-less rate, then another city — never database order", () => {
-    const rows = [g('lxr', { city: 'Luxor' }), g('any'), g('cai', { city: 'Cairo' })]
+  it("prefers a guide who works in the day's city, then an every-city guide, then another city's — never database order", () => {
+    const rows = [g('lxr', { guide_cities: ['Luxor'] }), g('any', { guide_cities: [] }), g('cai', { guide_cities: ['Cairo'] })]
     expect(pickGuideRate(rows, { ...ask, city: 'cairo' })?.id).toBe('cai')
     expect(pickGuideRate(rows, { ...ask, city: 'Aswan' })?.id).toBe('any')
-    expect(pickGuideRate([g('lxr', { city: 'Luxor' })], { ...ask, city: 'Aswan' })?.id).toBe('lxr')
+    expect(pickGuideRate([g('lxr', { guide_cities: ['Luxor'] })], { ...ask, city: 'Aswan' })?.id).toBe('lxr')
   })
 
-  it('a rate covering several cities matches each of them like its own city (operator 2026-11-07)', () => {
+  it("a guide who works several cities matches each of them (operator 2026-11-13: the cities are the guide's)", () => {
     const rows = [
-      g('all', { city: null, cities: [] }),
-      g('cai-alx', { city: 'Cairo', cities: ['Cairo', 'Alexandria'] }),
-      g('lxr-asw', { city: 'Luxor', cities: ['Luxor', 'Aswan'] }),
+      g('all', { guide_cities: [] }),
+      g('cai-alx', { guide_cities: ['Cairo', 'Alexandria'] }),
+      g('lxr-asw', { guide_cities: ['Luxor', 'Aswan'] }),
     ]
     expect(pickGuideRate(rows, { ...ask, city: 'Alexandria' })?.id).toBe('cai-alx')
     expect(pickGuideRate(rows, { ...ask, city: 'aswan' })?.id).toBe('lxr-asw')
-    // A city no list names: the all-cities guide.
+    // A city no guide names: the every-city guide.
     expect(pickGuideRate(rows, { ...ask, city: 'Hurghada' })?.id).toBe('all')
-    // A row from before the list (city only) still covers its city.
-    expect(pickGuideRate([g('all', { cities: [] }), g('old', { city: 'Aswan' })], { ...ask, city: 'Aswan' })?.id).toBe('old')
+    // The retired rate columns are not read: a rate saying Aswan is an every-city guide's.
+    expect(pickGuideRate([g('cai', { guide_cities: ['Cairo'] }), g('old', { city: 'Aswan', cities: ['Aswan'] })], { ...ask, city: 'Aswan' })?.id).toBe('old')
+    expect(pickGuideRate([g('old', { city: 'Aswan' }), g('lxr', { guide_cities: ['Luxor'] })], { ...ask, city: 'Luxor' })?.id).toBe('lxr')
   })
 
   it('skips a rate outside its validity, and puts the chosen guide first', () => {

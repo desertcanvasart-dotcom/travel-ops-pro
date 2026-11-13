@@ -2,10 +2,11 @@
 
 import { ENGINE_GUIDE_MODES, rateGuideMode } from '@/lib/guides/guide-mode'
 import { todayLocal } from '@/lib/today'
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState } from 'react'
 import CityOptions from '@/app/components/CityOptions'
 import { guideCitiesText, guideCityRank, guideRateCities } from '@/lib/guides/guide-cities'
 import { firstInvalidMessage } from '@/lib/form-guard'
+import { NO_SUPPLIER_SENTINEL } from '@/lib/suppliers/supplier-field-constants'
 import { rateCurrencyPatch } from '@/app/components/RateCurrencyField'
 import { formatRateInRowCurrency } from '@/app/components/RateCurrencyField'
 import { useTranslations } from 'next-intl'
@@ -18,6 +19,7 @@ import GuideRateForm from '@/components/rates/GuideRateForm'
 import { useBulkSelect, BulkDeleteBar, bulkDeleteByIds } from '@/components/rates/BulkDelete'
 import BulkRateImportExport from '@/app/components/BulkRateImportExport'
 import GuideLanguagesEditor from '@/components/rates/GuideLanguagesEditor'
+import GuideCitiesEditor from '@/components/rates/GuideCitiesEditor'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { Copy, Users,
@@ -79,9 +81,9 @@ interface GuideRate {
   service_code: string
   guide_language: string
   guide_type: string
-  city?: string
-  /** Every city the rate covers; [] = all cities (lib/guides/guide-cities). */
-  cities?: string[] | null
+  /** The GUIDE's cities, attached by the API ([] = every city). A rate has
+   *  no city of its own (lib/guides/guide-cities). */
+  guide_cities?: string[] | null
   tour_duration: string
   /** spot / throughout (lib/guides/guide-mode); absent on rows before 20261018. */
   guide_mode?: string | null
@@ -193,8 +195,6 @@ export default function GuideRatesContent() {
     // defaultLanguage below.
     guide_language: '',
     guide_type: 'egyptologist',
-    city: '',
-    cities: [] as string[],
     tour_duration: 'full_day',
     guide_mode: 'spot',
     base_rate_eur: 0,
@@ -258,17 +258,26 @@ export default function GuideRatesContent() {
     setCurrentPage(1)
   }, [searchTerm, selectedCity, selectedLanguage, selectedGuide, selectedGuideType, showInactive, itemsPerPage])
 
-  // Filter the supplier-guides by the form's cities: a guide based in any of
-  // them (or with no city on file). All cities = every guide.
-  const filteredGuidesForDropdown = useMemo(() => {
-    const wanted = formData.cities.map(c => c.toLowerCase())
-    return guides.filter(guide => {
-      if (wanted.length && guide.city && !wanted.includes(guide.city.toLowerCase())) {
-        return false
-      }
-      return true
-    })
-  }, [guides, formData.cities])
+  // The cities each guide works in (supplier_cities), by supplier id — known
+  // from the rates the API returned, from GuideCitiesEditor, or fetched when
+  // the form picks a guide with no rate yet. A rate has no city of its own.
+  const [guideCityMap, setGuideCityMap] = useState<Record<string, string[]>>({})
+  const citiesOfGuide = (supplierId: string): string[] | undefined =>
+    guideCityMap[supplierId] ?? rates.find(r => r.supplier_id === supplierId)?.guide_cities ?? undefined
+  const rememberGuideCities = (supplierId: string, cities: string[]) => {
+    setGuideCityMap(prev => ({ ...prev, [supplierId]: cities }))
+    setRates(prev => prev.map(r => (r.supplier_id === supplierId ? { ...r, guide_cities: cities } : r)))
+  }
+  const formGuideId = showModal && formData.supplier_id && formData.supplier_id !== NO_SUPPLIER_SENTINEL ? formData.supplier_id : ''
+  useEffect(() => {
+    if (!formGuideId || guideCityMap[formGuideId] || rates.some(r => r.supplier_id === formGuideId)) return
+    let live = true
+    fetch(`/api/suppliers/${formGuideId}/cities`)
+      .then(r => r.json())
+      .then(j => { if (live && j?.success && Array.isArray(j.data)) setGuideCityMap(prev => ({ ...prev, [formGuideId]: j.data })) })
+      .catch(() => {})
+    return () => { live = false }
+  }, [formGuideId, guideCityMap, rates])
 
   // Handlers
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -280,14 +289,7 @@ export default function GuideRatesContent() {
   }
 
   const handleGuideChange = (guideId: string) => {
-    const guide = guides.find(g => g.id === guideId)
-    setFormData(prev => ({
-      ...prev,
-      supplier_id: guideId,
-      // A guide's home city starts the list; cities the operator already
-      // chose are kept.
-      cities: prev.cities.length || !guide?.city ? prev.cities : [guide.city]
-    }))
+    setFormData(prev => ({ ...prev, supplier_id: guideId }))
   }
 
   // The vocabulary loads after the first render, so the blank form adopts the
@@ -304,8 +306,6 @@ export default function GuideRatesContent() {
       service_code: generateServiceCode(),
       guide_language: defaultLanguage,
       guide_type: 'egyptologist',
-      city: '',
-      cities: [],
       tour_duration: 'full_day',
       guide_mode: 'spot',
       base_rate_eur: 0,
@@ -338,8 +338,6 @@ export default function GuideRatesContent() {
       // A row written before the vocabulary holds the word; the picker speaks keys.
       guide_language: guideLanguageKey(rate.guide_language) || defaultLanguage,
       guide_type: rate.guide_type || 'egyptologist',
-      city: rate.city || '',
-      cities: guideRateCities(rate),
       tour_duration: rate.tour_duration || 'full_day',
       guide_mode: rateGuideMode(rate),
       base_rate_eur: rate.base_rate_eur || 0,
@@ -383,8 +381,6 @@ export default function GuideRatesContent() {
         // lib/tourCalculator.ts, which does not fall back on its own.
         body: JSON.stringify({
           ...restFormData,
-          // The API stores city = the first of the list (lib/guides/guide-cities).
-          city: restFormData.cities[0] ?? '',
           base_rate_non_eur: restFormData.base_rate_eur,
           ...rateCurrencyPatch(pickedCurrency, editingRate?.rate_currency),
         })
@@ -449,8 +445,7 @@ export default function GuideRatesContent() {
       rate.service_code.toLowerCase().includes(searchTerm.toLowerCase()) ||
       guideRateCities(rate).some(c => c.toLowerCase().includes(searchTerm.toLowerCase()))
 
-    // "Who can guide in Luxor": rates naming Luxor among their cities, and
-    // all-cities rates.
+    // "Who can guide in Luxor": guides who work in Luxor, and every-city guides.
     const matchesCity = selectedCity === '' || guideCityRank(rate, selectedCity) <= 1
     const matchesLanguage = selectedLanguage === '' || guideLanguageKey(rate.guide_language) === selectedLanguage
     const matchesGuide = selectedGuide === '' || rate.supplier_id === selectedGuide
@@ -801,6 +796,14 @@ export default function GuideRatesContent() {
         ) : null
       })()}
 
+      {/* Cities of the selected guide — the guide's, not each rate's */}
+      {selectedGuide && (() => {
+        const guide = guides.find(g => g.id === selectedGuide)
+        return guide ? (
+          <GuideCitiesEditor guide={guide} onChange={cities => rememberGuideCities(guide.id, cities)} />
+        ) : null
+      })()}
+
       {/* Rates Table */}
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         {paginatedRates.length === 0 ? (
@@ -1091,10 +1094,9 @@ export default function GuideRatesContent() {
           gradeOptions={gradeOptions}
           modeOptions={modeOptions}
           durationOptions={durationOptions}
-          guides={filteredGuidesForDropdown}
-          totalGuides={guides.length}
+          guides={guides}
+          guideCities={formGuideId ? (citiesOfGuide(formGuideId) ?? []) : null}
           orgRateCurrency={rateCurrency}
-          cityOptions={<CityOptions />}
           legacyLanguageLabel={formData.guide_language ? guideLanguageLabel(formData.guide_language, guideLanguageWord(formData.guide_language)) : undefined}
           legacyModeLabel={formData.guide_mode ? guideModeLabel(formData.guide_mode, formData.guide_mode) : undefined}
           footerExtra={editingRate ? <RateAuditLog tableName="guide_rates" recordId={editingRate.id} /> : undefined}

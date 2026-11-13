@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { guideCitiesText } from '@/lib/guides/guide-cities'
+import { attachGuideCities } from '@/lib/guides/guide-coverage'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import { vehicleBands, vehicleKeyLabel, vehicleRateForPax } from '@/lib/rates/vehicle-bands'
 import { packageForDuration } from '@/lib/pricing/cruise-package'
@@ -81,7 +82,8 @@ async function buildRateCatalog(supabase: any, orgId: string, tier: string, sym:
     mealRates, cruiseRates, cruiseTransportPkgs, flightRates,
   ] = await Promise.all([
     normalizer.normalize('transportation_rates', rawTransportRates),
-    normalizer.normalize('guide_rates', rawGuideRates),
+    // With the guide's cities (supplier_cities) for the catalogue line.
+    attachGuideCities(supabase, orgId, rawGuideRates ?? []).then(rows => normalizer.normalize('guide_rates', rows)),
     normalizer.normalize('airport_staff_rates', rawAirportRates),
     normalizer.normalize('hotel_staff_rates', rawHotelServiceRates),
     normalizer.normalize('tipping_rates', rawTippingRates),

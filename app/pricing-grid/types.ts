@@ -255,6 +255,8 @@ export interface RateOption {
   rateEur: number
   rateNonEur: number
   city?: string
+  /** Guides: the cities the guide works in ([] = every city). */
+  cities?: string[]
   category?: string
   details?: string  // e.g., "4★", "Standard cabin", "Aswan → Luxor"
   /** Guides: the language, in the agency's word (a dropdown filter). */

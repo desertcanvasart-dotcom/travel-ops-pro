@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { guideCitiesWrite } from '@/lib/guides/guide-cities'
+import { attachGuideCities } from '@/lib/guides/guide-coverage'
+import { guideRateNamesCity } from '@/lib/guides/guide-cities'
 import { guideModeKey } from '@/lib/guides/guide-mode'
 import { guideLanguageKey, sameGuideLanguage } from '@/lib/guides/guide-language'
 import { clientMessage } from '@/lib/api-errors'
@@ -19,7 +20,7 @@ const supabaseAdmin = createActorAdminClient()
  *  from the database's unique index (23505), which used to surface as
  *  "Internal server error". */
 const DUPLICATE_GUIDE_RATE =
-  'A rate with these details already exists (same language, guide type, duration, guide mode, city, guide and validity period). Edit that rate, or change one of those before saving.'
+  'A rate with these details already exists (same language, guide type, duration, guide mode, guide and validity period). Edit that rate, or change one of those before saving.'
 
 export async function GET(request: NextRequest) {
   try {
@@ -41,7 +42,7 @@ export async function GET(request: NextRequest) {
         .eq('org_id', orgId)
       if (supplierId) query = query.eq('supplier_id', supplierId)
       // Language is compared by vocabulary key below — rows hold the word or the key.
-      if (city) query = query.eq('city', city)
+      // City is the GUIDE's (supplier_cities), matched below.
       if (guideType) query = query.eq('guide_type', guideType)
       if (activeOnly) query = query.eq('is_active', true)
       return query
@@ -52,7 +53,12 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
-    let data = language ? (rows ?? []).filter(r => sameGuideLanguage(r.guide_language, language)) : (rows ?? [])
+    // Each rate carries its guide's cities (lib/guides/guide-cities): a rate
+    // has no city of its own — the guide charges the same wherever they work.
+    let data: Record<string, any>[] = await attachGuideCities(supabaseAdmin, orgId, rows ?? [])
+    if (language) data = data.filter(r => sameGuideLanguage(r.guide_language, language))
+    // "Who can guide in Luxor": guides who work in Luxor, and every-city guides.
+    if (city) data = data.filter(r => !r.guide_cities.length || guideRateNamesCity(r, city))
     // A picker that copies the rate onto a voucher or a trip asks for every
     // row in the company's rate currency (lib/rates/rows-in-rate-currency).
     if (searchParams.get('in_rate_currency') === 'true') {
@@ -87,8 +93,8 @@ export async function POST(request: NextRequest) {
       // The vocabulary KEY (lib/guides/guide-language), whatever the caller sent.
       guide_language: guideLanguageKey(body.guide_language),
       guide_type: body.guide_type || 'licensed',
-      // The cities the rate covers (lib/guides/guide-cities); city = the first.
-      ...(guideCitiesWrite(body) ?? { city: null, cities: [] }),
+      // No city: the cities are the guide's (supplier_cities, edited beside
+      // the guide's languages) — a guide charges the same in every city.
       tour_duration: body.tour_duration || 'full_day',
       // spot / throughout — which quotes this rate prices (lib/guides/guide-mode).
       guide_mode: guideModeKey(body.guide_mode),
@@ -104,8 +110,9 @@ export async function POST(request: NextRequest) {
     }
 
     // The full identity of a guide rate (lib/rates/natural-key) — the same
-    // columns as the database's uq_guide_rates_natural_key (migration
-    // 20261220): the validity period is part of it, so this year's and next
+    // columns as the database's uq_guide_rates_natural_key (migrations
+    // 20261220, 20270118 — no city, the cities are the guide's): the
+    // validity period is part of it, so this year's and next
     // year's price for one guide are two rates, and the engine prices the
     // one whose period covers the trip.
     let existingQuery = supabaseAdmin
@@ -115,7 +122,6 @@ export async function POST(request: NextRequest) {
       .eq('guide_type', newRate.guide_type)
       .eq('tour_duration', newRate.tour_duration)
       .eq('guide_mode', newRate.guide_mode)
-    existingQuery = whereNullable(existingQuery, 'city', newRate.city)
     existingQuery = whereNullable(existingQuery, 'supplier_id', newRate.supplier_id)
     existingQuery = whereNullable(existingQuery, 'rate_valid_from', newRate.rate_valid_from)
     existingQuery = whereNullable(existingQuery, 'rate_valid_to', newRate.rate_valid_to)

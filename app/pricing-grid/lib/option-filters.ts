@@ -57,7 +57,7 @@ export function onePerRoute(options: RateOption[], pax: number): RateOption[] {
 /** Every city an option is in or runs between. */
 export function optionCities(o: RateOption): string[] {
   const l = o as Located
-  return [l.city, l.origin_city, l.destination_city].map(c => String(c ?? '').trim()).filter(Boolean)
+  return [l.city, l.origin_city, l.destination_city, ...(l.cities ?? [])].map(c => String(c ?? '').trim()).filter(Boolean)
 }
 
 /** The cities a list of options covers, A→Z, each once (case-insensitive). */

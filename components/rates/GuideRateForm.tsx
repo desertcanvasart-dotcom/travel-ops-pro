@@ -21,9 +21,6 @@ export interface GuideRateFormValues {
   service_code: string
   guide_language: string
   guide_type: string
-  city: string
-  /** Every city this rate covers (lib/guides/guide-cities); [] = all cities. */
-  cities: string[]
   tour_duration: string
   guide_mode: string
   base_rate_eur: number
@@ -50,13 +47,13 @@ export interface GuideRateFormProps {
   gradeOptions: Option[]
   modeOptions: Option[]
   durationOptions: Option[]
-  /** Guides matching the form's city, and how many there are in all. */
   guides: Array<{ id: string; name: string }>
-  totalGuides: number
+  /** The chosen guide's cities ([] = every city); null when no guide is
+   *  chosen. Shown, not edited: the cities are the guide's, not the rate's
+   *  (lib/guides/guide-cities) — edited beside the guide's languages. */
+  guideCities: string[] | null
   /** The organisation's rate currency — what a blank currency means. */
   orgRateCurrency: string
-  /** <option>s for the "Add a city" picker (CityOptions). */
-  cityOptions: ReactNode
   /** Labels for a stored value the vocabulary no longer lists. */
   legacyLanguageLabel?: string
   legacyModeLabel?: string
@@ -80,7 +77,7 @@ export default function GuideRateForm(props: GuideRateFormProps) {
   const {
     editing, values, onField, onPatch, onGuideChange, onSubmit, onClose,
     languageOptions, gradeOptions, modeOptions, durationOptions,
-    guides, totalGuides, orgRateCurrency, cityOptions, legacyLanguageLabel, legacyModeLabel, footerExtra,
+    guides, guideCities, orgRateCurrency, legacyLanguageLabel, legacyModeLabel, footerExtra,
   } = props
   const t = useTranslations('rates.guides')
   const f = useTranslations('rates.guides.form')
@@ -103,7 +100,6 @@ export default function GuideRateForm(props: GuideRateFormProps) {
     amount > 0
       ? `${new Intl.NumberFormat(undefined, { style: 'currency', currency, maximumFractionDigits: 2 }).format(amount)}${unit ? ` ${unit}` : ''}`
       : f('noRateYet'),
-    values.cities.length ? values.cities.join(', ') : f('allCities'),
     values.rate_valid_from && values.rate_valid_to ? `${shortDate(values.rate_valid_from)} – ${shortDate(values.rate_valid_to)}` : null,
   ].filter(Boolean).join(' · ')
 
@@ -137,65 +133,26 @@ export default function GuideRateForm(props: GuideRateFormProps) {
             </select>
           </Field>
         </div>
-        {/* A guide can cover several cities — Cairo + Alexandria, Luxor +
-            Aswan, or all of them (operator 2026-11-07). Empty = all cities. */}
-        <Field label={f('citiesCovered')} htmlFor="gr-city-add" hint={f('citiesHint')}>
-          <div className="flex flex-wrap items-center gap-1.5" data-testid="guide-cities">
-            {values.cities.length === 0 && (
-              <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-1 text-xs font-medium text-gray-700">
-                {f('allCities')}
-              </span>
-            )}
-            {values.cities.map(c => (
-              <span key={c} className="inline-flex items-center gap-1 rounded-full bg-primary-50 px-2.5 py-1 text-xs font-medium text-primary-800 ring-1 ring-primary-200">
-                {c}
-                <button
-                  type="button"
-                  aria-label={f('removeCity', { city: c })}
-                  onClick={() => onPatch({ cities: values.cities.filter(x => x !== c) })}
-                  className="ml-0.5 rounded-full px-1 leading-none text-primary-700 hover:bg-primary-100"
-                >
-                  ×
-                </button>
-              </span>
-            ))}
-            <select
-              id="gr-city-add"
-              value=""
-              onChange={e => {
-                const city = e.target.value
-                if (!city) return
-                if (values.cities.some(x => x.toLowerCase() === city.toLowerCase())) return
-                onPatch({ cities: [...values.cities, city] })
-              }}
-              className={`${inputClass} w-auto min-w-[10rem]`}
-            >
-              <option value="">{f('addCity')}</option>
-              {cityOptions}
-            </select>
-            {values.cities.length > 0 && (
-              <button type="button" onClick={() => onPatch({ cities: [] })} className="text-xs text-gray-500 underline hover:text-gray-700">
-                {f('setAllCities')}
-              </button>
-            )}
-          </div>
-        </Field>
         <Field
           label={f('guideSupplier')}
           required
           htmlFor="gr-supplier"
-          hint={guides.length === 0 && totalGuides > 0
-            ? <span className="text-amber-700">{f('noGuidesMatch')}</span>
-            : f('guideSupplierHint')}
+          hint={f('guideSupplierHint')}
         >
           <select id="gr-supplier" required name="supplier_id" value={values.supplier_id} onChange={e => onGuideChange(e.target.value)} className={inputClass}>
-            <option value="" disabled>
-              {f('selectGuide')}{guides.length < totalGuides ? ` (${f('matching', { count: guides.length })})` : ''}
-            </option>
+            <option value="" disabled>{f('selectGuide')}</option>
             <option value={NO_SUPPLIER_SENTINEL}>{tCommon('noSupplierDirect')}</option>
             {guides.map(g => <option key={g.id} value={g.id}>{g.name}</option>)}
           </select>
         </Field>
+        {/* The guide's cities (operator 2026-11-13): one price in every city
+            the guide works, so the rate itself names no city. */}
+        {guideCities && (
+          <p className="text-xs leading-snug text-gray-600" data-testid="guide-cities">
+            {guideCities.length ? f('guideWorksIn', { cities: guideCities.join(', ') }) : f('guideWorksEverywhere')}{' '}
+            <span className="text-gray-500">{f('guideCitiesWhere')}</span>
+          </p>
+        )}
       </FormSection>
 
       <FormSection title={f('sectionService')}>
