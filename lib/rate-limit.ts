@@ -88,6 +88,13 @@ export const RATE_LIMITS = {
     limit: 5,          // submits
     windowMs: 600000,  // per 10 minutes
   },
+  // The order form's look-up of the website page it was opened from
+  // (/api/public/website-page). One per page load and per cart line; each
+  // miss in its cache costs the website one fetch, so a script gets cut off.
+  websitePage: {
+    limit: 30,         // look-ups
+    windowMs: 60000,   // per minute
+  },
   // The traveller's trip chat on the share page. Several short lines in a
   // minute is a conversation, and a hotel's shared IP can carry several
   // travellers; the per-trip hourly cap in the route is the real flood control.

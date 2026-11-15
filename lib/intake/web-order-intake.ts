@@ -123,114 +123,14 @@ export async function processNewWebOrders(
           .is('lead_checked_at', null)
       }
 
-      // Claim the message first: a crash after the quote must not make a
-      // second one next run — the unique email_message_id refuses it.
-      const { data: claim, error: claimErr } = await db.from('web_order_intakes').insert({
-        org_id: orgId,
-        email_message_id: msg.id,
-        conversation_id: msg.conversation_id,
-        received_at: msg.sent_at,
-        subject: msg.subject,
-        outcome: 'needs_attention',
-        reason: 'Processing',
-        tour_code: order?.tourCode ?? null,
-        travel_date: order?.departureDate1 ?? null,
-        customer_email: order?.email || null,
-        customer_name: order ? customerName(order) : null,
-        order_text: text,
-        order_data: order,
-      }).select('id').single()
-      if (claimErr || !claim) {
-        // Already taken (a re-run after a partial failure): just mark it.
-        await checked()
-        results.push({ messageId: msg.id, outcome: 'already_taken' })
-        continue
-      }
-      const intakeId = claim.id as string
-      const settle = (patch: Record<string, unknown>) => db.from('web_order_intakes').update(patch).eq('id', intakeId)
-
-      const summary = order
-        ? `${order.tourCode} / ${order.departureDate1} / 大人${order.adults}人${order.children ? ` 子供${order.children}人` : ''}${order.infants ? ` 幼児${order.infants}人` : ''} / ${customerName(order) ?? ''} <${order.email}>`
-        : (msg.subject ?? '')
-
-      if (!order) {
-        const reason = 'The form could not be read (tour code or date missing).'
-        await settle({ reason })
-        await notifyOrgManagers(db as never, orgId, {
-          type: 'order_received',
-          title: '要対応のウェブ注文（読み取り不可）',
-          message: `ウェブサイトの注文メールを読み取れませんでした。リンク先で確認してください。${summary}`,
-          link: intakeLink(intakeId),
-        })
-        await checked()
-        results.push({ messageId: msg.id, outcome: 'needs_attention', intakeId, reason })
-        continue
-      }
-
-      // The same order sent twice is one order.
-      const since = new Date(Date.parse(msg.sent_at) - DUPLICATE_WINDOW_DAYS * 86_400_000).toISOString()
-      const { data: earlier } = order.email
-        ? await db.from('web_order_intakes')
-          .select('id, quote_id, client_id')
-          .eq('org_id', orgId)
-          .eq('outcome', 'quote_created')
-          .eq('tour_code', order.tourCode)
-          .eq('travel_date', order.departureDate1)
-          .ilike('customer_email', order.email)
-          .gte('received_at', since)
-          .limit(1)
-        : { data: [] }
-      const first = (earlier ?? [])[0] as { id: string; quote_id: string | null; client_id: string | null } | undefined
-      if (first) {
-        await settle({ outcome: 'duplicate', reason: `Same order as intake ${first.id}`, quote_id: first.quote_id, client_id: first.client_id, resolved_at: new Date().toISOString() })
-        await checked()
-        results.push({ messageId: msg.id, outcome: 'duplicate', intakeId, quoteId: first.quote_id ?? undefined })
-        continue
-      }
-
-      let result: Awaited<ReturnType<typeof processTourUpOrder>> | null = null
-      let thrown: string | null = null
-      try {
-        result = await runPipeline(db as unknown as SupabaseClient, { orgId, userId: null, order, dryRun: false })
-      } catch (e) {
-        thrown = e instanceof Error ? e.message : String(e)
-        console.error('[web-order] pipeline threw:', e)
-      }
-
-      const quote = result?.body.quote
-      if (result?.body.success && quote) {
-        const client = result.body.client as { id: string } | null | undefined
-        const itinerary = result.body.itinerary as { id: string; code: string } | null | undefined
-        await settle({
-          outcome: 'quote_created',
-          reason: null,
-          client_id: client?.id ?? null,
-          quote_id: quote.id,
-          departure_booking_id: result.body.departureBooking?.id ?? null,
-          resolved_at: new Date().toISOString(),
-        })
-        await notifyOrgManagers(db as never, orgId, {
-          type: 'order_received',
-          title: itinerary ? `ウェブ注文 ${itinerary.code}: ${order.tourCode}` : `ウェブ注文 ${quote.quote_number}: ${order.tourCode}`,
-          // A party larger than the seats left got no seat hold: say so.
-          message: `ウェブサイトの注文メールより自動作成。${result.body.departureFull ? `座席は未確保（出発の空き ${result.body.departureFull.free} 席に対し ${result.body.departureFull.requested} 名）。` : ''}${summary}`,
-          link: itinerary ? `/itineraries/${itinerary.id}` : `/b2b/quotes/${quote.id}`,
-        })
-        await checked()
-        results.push({ messageId: msg.id, outcome: 'quote_created', intakeId, quoteId: quote.id, itineraryId: itinerary?.id })
-        continue
-      }
-
-      const reason = (result?.body.error as string | undefined) ?? thrown ?? 'Internal error'
-      await settle({ reason, client_id: (result?.body.client as { id?: string } | null | undefined)?.id ?? null })
-      await notifyOrgManagers(db as never, orgId, {
-        type: 'order_received',
-        title: `要対応のウェブ注文: ${order.tourCode}`,
-        message: `自動処理できませんでした（${reason}）。リンク先で内容を確認し、取り込んでください。${summary}`,
-        link: intakeLink(intakeId),
+      // The shared steps (claim, duplicate, pipeline, notice) — the same
+      // ones the hosted form's orders take (takeInWebOrder, below).
+      const taken = await takeInWebOrder(db, {
+        orgId, order, text, receivedAt: msg.sent_at, subject: msg.subject,
+        emailMessageId: msg.id, conversationId: msg.conversation_id, via: 'email', process: runPipeline,
       })
       await checked()
-      results.push({ messageId: msg.id, outcome: 'needs_attention', intakeId, reason })
+      results.push({ messageId: msg.id, ...taken })
     } catch (e) {
       // Left unchecked: retried next run (the claim keeps it from doubling).
       console.error('[web-order] message', msg.id, e)
@@ -238,4 +138,148 @@ export async function processNewWebOrders(
     }
   }
   return results
+}
+
+/** Where an order came in: the website's notification email, or our own
+ *  hosted form (/order) that the website's buttons point at. */
+export type WebOrderVia = 'email' | 'form'
+
+const VIA_LABEL: Record<WebOrderVia, string> = {
+  email: 'ウェブサイトの注文メールより',
+  form: 'ウェブ注文フォームより',
+}
+
+export interface TakeInResult {
+  outcome: Exclude<WebOrderOutcome, 'not_an_order' | 'question'>
+  intakeId?: string
+  quoteId?: string
+  quoteNumber?: string
+  itineraryId?: string
+  reason?: string
+}
+
+/**
+ * ONE website order, from either door, through the same steps: claimed in
+ * web_order_intakes (unique per email message; a form order has none), the
+ * same customer, code and date in the last fortnight = a duplicate, else the
+ * shared pipeline (lib/intake/process-order.ts) — and the managers told what
+ * came of it. `order` null = the email could not be read.
+ */
+export async function takeInWebOrder(
+  db: Db,
+  opts: {
+    orgId: string
+    order: TourUpOrder | null
+    text: string
+    receivedAt: string
+    subject: string | null
+    emailMessageId?: string | null
+    conversationId?: string | null
+    via: WebOrderVia
+    process?: typeof processTourUpOrder
+  },
+): Promise<TakeInResult> {
+  const { orgId, order, text, via } = opts
+  const runPipeline = opts.process ?? processTourUpOrder
+  const viaLabel = VIA_LABEL[via]
+
+  // Claim first: a crash after the quote must not make a second one next
+  // run — the unique email_message_id refuses it.
+  const { data: claim, error: claimErr } = await db.from('web_order_intakes').insert({
+    org_id: orgId,
+    email_message_id: opts.emailMessageId ?? null,
+    conversation_id: opts.conversationId ?? null,
+    received_at: opts.receivedAt,
+    subject: opts.subject,
+    outcome: 'needs_attention',
+    reason: 'Processing',
+    tour_code: order?.tourCode ?? null,
+    travel_date: order?.departureDate1 ?? null,
+    customer_email: order?.email || null,
+    customer_name: order ? customerName(order) : null,
+    order_text: text,
+    order_data: order,
+  }).select('id').single()
+  if (claimErr || !claim) {
+    if (via === 'form') console.error('[web-order] form order could not be recorded:', claimErr)
+    return { outcome: via === 'email' ? 'already_taken' : 'error', reason: claimErr?.message }
+  }
+  const intakeId = claim.id as string
+  const settle = (patch: Record<string, unknown>) => db.from('web_order_intakes').update(patch).eq('id', intakeId)
+
+  const summary = order
+    ? `${order.productKind === 'optional' ? '[オプショナル] ' : ''}${order.tourCode} / ${order.departureDate1} / 大人${order.adults}人${order.children ? ` 子供${order.children}人` : ''}${order.infants ? ` 幼児${order.infants}人` : ''} / ${customerName(order) ?? ''} <${order.email}>`
+    : (opts.subject ?? '')
+
+  if (!order) {
+    const reason = 'The form could not be read (tour code or date missing).'
+    await settle({ reason })
+    await notifyOrgManagers(db as never, orgId, {
+      type: 'order_received',
+      title: '要対応のウェブ注文（読み取り不可）',
+      message: `${viaLabel}。内容を読み取れませんでした。リンク先で確認してください。${summary}`,
+      link: intakeLink(intakeId),
+    })
+    return { outcome: 'needs_attention', intakeId, reason }
+  }
+
+  // The same order sent twice is one order.
+  const since = new Date(Date.parse(opts.receivedAt) - DUPLICATE_WINDOW_DAYS * 86_400_000).toISOString()
+  const { data: earlier } = order.email
+    ? await db.from('web_order_intakes')
+      .select('id, quote_id, client_id')
+      .eq('org_id', orgId)
+      .eq('outcome', 'quote_created')
+      .eq('tour_code', order.tourCode)
+      .eq('travel_date', order.departureDate1)
+      .ilike('customer_email', order.email)
+      .gte('received_at', since)
+      .limit(1)
+    : { data: [] }
+  const first = (earlier ?? [])[0] as { id: string; quote_id: string | null; client_id: string | null } | undefined
+  if (first) {
+    await settle({ outcome: 'duplicate', reason: `Same order as intake ${first.id}`, quote_id: first.quote_id, client_id: first.client_id, resolved_at: new Date().toISOString() })
+    return { outcome: 'duplicate', intakeId, quoteId: first.quote_id ?? undefined }
+  }
+
+  let result: Awaited<ReturnType<typeof processTourUpOrder>> | null = null
+  let thrown: string | null = null
+  try {
+    result = await runPipeline(db as unknown as SupabaseClient, { orgId, userId: null, order, dryRun: false })
+  } catch (e) {
+    thrown = e instanceof Error ? e.message : String(e)
+    console.error('[web-order] pipeline threw:', e)
+  }
+
+  const quote = result?.body.quote
+  if (result?.body.success && quote) {
+    const client = result.body.client as { id: string } | null | undefined
+    const itinerary = result.body.itinerary as { id: string; code: string } | null | undefined
+    await settle({
+      outcome: 'quote_created',
+      reason: null,
+      client_id: client?.id ?? null,
+      quote_id: quote.id,
+      departure_booking_id: result.body.departureBooking?.id ?? null,
+      resolved_at: new Date().toISOString(),
+    })
+    await notifyOrgManagers(db as never, orgId, {
+      type: 'order_received',
+      title: itinerary ? `ウェブ注文 ${itinerary.code}: ${order.tourCode}` : `ウェブ注文 ${quote.quote_number}: ${order.tourCode}`,
+      // A party larger than the seats left got no seat hold: say so.
+      message: `${viaLabel}自動作成。${result.body.departureFull ? `座席は未確保（出発の空き ${result.body.departureFull.free} 席に対し ${result.body.departureFull.requested} 名）。` : ''}${summary}`,
+      link: itinerary ? `/itineraries/${itinerary.id}` : `/b2b/quotes/${quote.id}`,
+    })
+    return { outcome: 'quote_created', intakeId, quoteId: quote.id, quoteNumber: quote.quote_number, itineraryId: itinerary?.id }
+  }
+
+  const reason = (result?.body.error as string | undefined) ?? thrown ?? 'Internal error'
+  await settle({ reason, client_id: (result?.body.client as { id?: string } | null | undefined)?.id ?? null })
+  await notifyOrgManagers(db as never, orgId, {
+    type: 'order_received',
+    title: `要対応のウェブ注文: ${order.tourCode}`,
+    message: `${viaLabel}。自動処理できませんでした（${reason}）。リンク先で内容を確認し、取り込んでください。${summary}`,
+    link: intakeLink(intakeId),
+  })
+  return { outcome: 'needs_attention', intakeId, reason }
 }
