@@ -35,6 +35,8 @@ export async function GET(request: NextRequest) {
     fares: page.kind === 'tour' ? page.fares : undefined,
     adultJpy: page.adultJpy,
     childJpy: page.childJpy,
+    childPercent: page.childPercent,
+    infantJpy: page.infantJpy,
     listUrl: optionalListUrl(origin),
   })
 }

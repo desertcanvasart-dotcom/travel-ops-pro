@@ -174,13 +174,24 @@ describe('POST /api/public/order-form', () => {
     expect(intake.order_data).toMatchObject({
       tourCode: 'NEK502', tourTitle: '★国内線で楽々★エジプト5日間 ギザ＆ルクソール', productKind: 'tour',
       websiteUrl: `${ORIGIN}/detail.php?id=2297504`,
-      websiteBaseFare1: { adultJpy: 364000 }, websiteBaseFare2: { adultJpy: 364000 },
+      websiteBaseFare1: { adultJpy: 364000, childJpy: 254800, infantJpy: 32000 },
+      websiteBaseFare2: { adultJpy: 364000, childJpy: 254800, infantJpy: 32000 },
     })
     expect(intake.order_data.websiteSubtotalJpy).toBeUndefined()
     // Matched by its website page, priced at the website's fare (2 × 364,000).
     const [quote] = await rows('tour_quotes')
     expect(quote).toMatchObject({ currency: 'JPY', selling_price: 728000, travel_date: '2026-11-22' })
     expect(quote.trip_name).toBe('Giza & Luxor 5 days')
+  })
+
+  it('a family: a child (2–11) at 70% of the adult fare, an infant (under 2) at the flight-only fare', async () => {
+    const { tourCode: _c, tourTitle: _t, ...rest } = PAYLOAD
+    await post({ ...rest, pageId: '2297504', departureDate1: '2026-11-22', adults: 2, children: 1, infants: 1 })
+    const [quote] = await rows('tour_quotes')
+    expect(quote).toMatchObject({ currency: 'JPY', selling_price: 2 * 364000 + 254800 + 32000 })
+    const [intake] = await rows('web_order_intakes')
+    expect(intake.order_data).toMatchObject({ adults: 2, children: 1, infants: 1 })
+    expect(intake.order_text).toContain('●第1希望日基本旅行代金：大人 364,000円、子供 254,800円、幼児 32,000円')
   })
 
   it('the same order submitted twice is one order', async () => {

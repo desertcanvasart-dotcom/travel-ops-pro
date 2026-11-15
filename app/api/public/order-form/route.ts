@@ -40,7 +40,7 @@ import { checkRateLimit, getClientIdentifier, rateLimitResponse } from '@/lib/ra
 import { formatTourUpOrder, parseJaDate, type OrderPerson, type TourUpOrder } from '@/lib/intake/tour-up-order'
 import { formatAsTupMail } from '@/lib/intake/tup-mail'
 import { takeInWebOrder } from '@/lib/intake/web-order-intake'
-import { cleanPageId, fetchWebsitePage, websiteOrigin, websitePageUrl, type WebsitePage } from '@/lib/intake/website-page'
+import { cleanPageId, fetchWebsitePage, tourFareOn, websiteOrigin, websitePageUrl, type WebsitePage } from '@/lib/intake/website-page'
 import { notifyOrgManagers } from '@/lib/notify-managers'
 
 const supabase = createActorAdminClient()
@@ -189,15 +189,18 @@ function readOptionalLines(body: Record<string, unknown>): { lines: Line[] } | {
 }
 
 /** The fare the website publishes for the party, in the shape the pipeline
- *  reads (lib/pricing/website-price). Children on a programme have no
- *  published per-date fare, so a party with children carries none — the
- *  quote is then priced the old way and the office sets the price. */
+ *  reads (lib/pricing/website-price). A programme: the date's adult fare,
+ *  a child (2–11) at the page's percent of it, an infant (under 2) at the
+ *  page's flight-only fare. An optional tour: its flat fares; an infant
+ *  joins free (a day on the ground, no flight). Whatever the page does not
+ *  state is not priced — the quote then falls back and the office prices it. */
 function websiteFare(page: WebsitePage | null, line: Line): Pick<TourUpOrder, 'websiteBaseFare1' | 'websiteBaseFare2' | 'websiteSubtotalJpy'> {
   if (!page || page.withdrawn) return {}
   if (page.kind === 'tour') {
-    const f1 = page.fares[line.departureDate1]
-    const f2 = line.departureDate2 ? page.fares[line.departureDate2] : undefined
-    return { websiteBaseFare1: f1 ? { adultJpy: f1 } : undefined, websiteBaseFare2: f2 ? { adultJpy: f2 } : undefined }
+    return {
+      websiteBaseFare1: tourFareOn(page, line.departureDate1),
+      websiteBaseFare2: line.departureDate2 ? tourFareOn(page, line.departureDate2) : undefined,
+    }
   }
   if (!page.adultJpy && line.adults > 0) return {}
   if (line.children > 0 && !page.childJpy) return {}

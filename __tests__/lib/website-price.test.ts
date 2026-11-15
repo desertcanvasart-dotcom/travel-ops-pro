@@ -21,6 +21,15 @@ describe('website-priced orders', () => {
     expect(websiteOrderPriceJpy({ adults: 2, children: 0 })).toBeNull()
   })
 
+  it('an infant pays its own (flight-only) fare, which must be known — never free by default', () => {
+    const fare = { adultJpy: 364000, childJpy: 254800, infantJpy: 32000 }
+    expect(websiteOrderPriceJpy({ adults: 2, children: 1, infants: 1, websiteBaseFare1: fare })).toBe(1014800)
+    expect(websiteOrderPriceJpy({ adults: 2, children: 0, infants: 1, websiteBaseFare1: { adultJpy: 364000 } })).toBeNull()
+    expect(websiteOrderPriceJpy({ adults: 2, children: 0, infants: 1, websiteBaseFare1: { adultJpy: 364000, infantJpy: 0 } })).toBe(728000)
+    // The 小計 the website showed already includes everyone.
+    expect(websiteOrderPriceJpy({ adults: 2, children: 0, infants: 1, websiteSubtotalJpy: 760000 })).toBe(760000)
+  })
+
   it('lines go to yen and keep their rate-currency cost', () => {
     const [line] = linesInWebsiteCurrency([{ unit_cost: 12.66, line_total: 25.32, unpriced: undefined }], 'USD', 150)
     expect(line).toMatchObject({ unit_cost: 1899, line_total: 3798, cost_currency: 'USD', cost_unit_original: 12.66, cost_total_original: 25.32, cost_exchange_rate: 150 })

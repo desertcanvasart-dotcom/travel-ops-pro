@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { OPTIONAL_PAGE, TOUR_PAGE, WITHDRAWN_PAGE } from '../fixtures/website-pages'
 import {
-  cleanPageId, clearWebsitePageCache, fetchWebsitePage, jstDateFromUnix, parseOptionalPage, parseTourPage, websiteOrigin, websitePageUrl,
+  cleanPageId, clearWebsitePageCache, fetchWebsitePage, jstDateFromUnix, parseOptionalPage, parseTourPage, tourFareOn, websiteOrigin, websitePageUrl,
 } from '@/lib/intake/website-page'
 
 // The website's buttons open our /order carrying a page id (and a date);
@@ -17,6 +17,18 @@ describe('website page reader', () => {
     expect(p.title).toBe('★国内線で楽々★エジプト5日間 ギザ＆ルクソール')
     expect(p.withdrawn).toBe(false)
     expect(p.fares).toEqual({ '2026-11-22': 364000, '2026-11-23': 364000, '2027-08-30': 366000 })
+    // The page's own rule — not the airport-tax lines beside it.
+    expect(p.childPercent).toBe(70)
+    expect(p.infantJpy).toBe(32000)
+  })
+
+  it('a date\'s fares: child at the page\'s percent of the adult, infant at the flight-only fare', () => {
+    const p = parseTourPage(TOUR_PAGE, '2297504', 'u')
+    expect(tourFareOn(p, '2026-11-22')).toEqual({ adultJpy: 364000, childJpy: 254800, infantJpy: 32000 })
+    expect(tourFareOn(p, '2026-11-24')).toBeUndefined()
+    // A page that states no child rule prices no child.
+    const bare = parseTourPage(TOUR_PAGE.replace(/●子供（2歳以上～12歳未満）[^<]*<br \/>/, '').replace(/●幼児（2歳未満）[^<]*<br \/>/, ''), '1', 'u')
+    expect(tourFareOn(bare, '2026-11-22')).toEqual({ adultJpy: 364000, childJpy: undefined, infantJpy: undefined })
   })
 
   it('reads an optional tour: flat adult and child fares', () => {

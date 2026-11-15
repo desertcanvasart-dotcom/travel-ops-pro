@@ -75,6 +75,8 @@ export interface TourUpOrder {
 export interface WebsiteBaseFare {
   adultJpy?: number
   childJpy?: number
+  /** 幼児 (under 2): the flight only. */
+  infantJpy?: number
 }
 
 const Z2H: Record<string, string> = {}

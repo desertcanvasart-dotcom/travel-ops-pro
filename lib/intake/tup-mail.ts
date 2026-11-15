@@ -168,7 +168,9 @@ function baseFare(v: string | undefined): WebsiteBaseFare | undefined {
     const n = m ? Number(m[1].replace(/,/g, '')) : NaN
     return Number.isFinite(n) && n > 0 ? n : undefined
   }
-  const fare = { adultJpy: yen('大人'), childJpy: yen('子供') }
+  const fare: WebsiteBaseFare = { adultJpy: yen('大人'), childJpy: yen('子供') }
+  const infant = v.match(/幼児\s*:?\s*([\d,]+)\s*円/)
+  if (infant) fare.infantJpy = Number(infant[1].replace(/,/g, ''))
   return fare.adultJpy || fare.childJpy ? fare : undefined
 }
 
@@ -303,7 +305,11 @@ export function emailOrderText(bodyText: string | null | undefined, bodyHtml: st
 
 const slash = (iso: string) => iso.replace(/-/g, '/')
 const fareLine = (f: WebsiteBaseFare | undefined) =>
-  f ? [f.adultJpy ? `大人 ${f.adultJpy.toLocaleString('en-US')}円` : null, f.childJpy ? `子供 ${f.childJpy.toLocaleString('en-US')}円` : null].filter(Boolean).join('、') : ''
+  f ? [
+    f.adultJpy ? `大人 ${f.adultJpy.toLocaleString('en-US')}円` : null,
+    f.childJpy ? `子供 ${f.childJpy.toLocaleString('en-US')}円` : null,
+    typeof f.infantJpy === 'number' ? `幼児 ${f.infantJpy.toLocaleString('en-US')}円` : null,
+  ].filter(Boolean).join('、') : ''
 
 /**
  * An order written as the website's own notification — the shape

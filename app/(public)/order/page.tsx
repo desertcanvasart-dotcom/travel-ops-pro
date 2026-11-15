@@ -51,6 +51,8 @@ interface PageInfo {
   fares?: Record<string, number>
   adultJpy?: number
   childJpy?: number
+  childPercent?: number
+  infantJpy?: number
   listUrl?: string | null
 }
 
@@ -133,7 +135,7 @@ function OrderForm() {
     inquiryType: '申込み', tourCode: params.get('code')?.slice(0, 40) ?? '', tourTitle: '',
     departureDate1: jstDate(params.get('dt')) || (/^\d{4}-\d{2}-\d{2}$/.test(params.get('date') ?? '') ? params.get('date')! : ''),
     departureDate2: '', departureAirport: '',
-    adults: '2', children7to11: '0', children0to6: '0',
+    adults: '2', children: '0', infants: '0',
     contactMethod: 'email', email: '', emailConfirm: '', phone: '',
     lastNameKanji: '', firstNameKanji: '', lastNameKana: '', firstNameKana: '',
     gender: '', birthDate: '',
@@ -232,7 +234,8 @@ function OrderForm() {
           departureDate2: f.departureDate2 || undefined,
           departureAirport: f.departureAirport || undefined,
           adults: Number(f.adults),
-          children: Number(f.children7to11) + Number(f.children0to6),
+          children: Number(f.children),
+          infants: Number(f.infants),
         }
       const res = await fetch('/api/public/order-form', {
         method: 'POST',
@@ -422,12 +425,12 @@ function OrderForm() {
             <div>
               <label className={labelCls}>出発日（第1希望）<Req /></label>
               <input type="date" required value={f.departureDate1} onChange={set('departureDate1')} className={field} />
-              <FareHint fare={fareOn(f.departureDate1)} date={f.departureDate1} hasFares={Boolean(page?.fares && Object.keys(page.fares).length)} />
+              <FareHint fare={fareOn(f.departureDate1)} date={f.departureDate1} hasFares={Boolean(page?.fares && Object.keys(page.fares).length)} childPercent={page?.childPercent} infantJpy={page?.infantJpy} />
             </div>
             <div>
               <label className={labelCls}>出発日（第2希望）</label>
               <input type="date" value={f.departureDate2} onChange={set('departureDate2')} className={field} />
-              {f.departureDate2 && <FareHint fare={fareOn(f.departureDate2)} date={f.departureDate2} hasFares={Boolean(page?.fares && Object.keys(page.fares).length)} />}
+              {f.departureDate2 && <FareHint fare={fareOn(f.departureDate2)} date={f.departureDate2} hasFares={Boolean(page?.fares && Object.keys(page.fares).length)} childPercent={page?.childPercent} infantJpy={page?.infantJpy} />}
             </div>
             <div>
               <label className={labelCls}>出発地</label>
@@ -442,8 +445,8 @@ function OrderForm() {
             <div className="grid grid-cols-3 gap-4">
               {([
                 ['adults', '大人（12歳以上）', 1],
-                ['children7to11', '子供（7〜11歳）', 0],
-                ['children0to6', '子供（0〜6歳）', 0],
+                ['children', '子供（2〜11歳）', 0],
+                ['infants', '幼児（2歳未満）', 0],
               ] as const).map(([key, label, min]) => (
                 <div key={key}>
                   <label className="block text-xs text-gray-500 mb-1">{label}</label>
@@ -598,8 +601,16 @@ function OrderForm() {
 }
 
 /** The website's fare for the chosen date, or a note that it has none. */
-function FareHint({ fare, date, hasFares }: { fare?: number; date: string; hasFares: boolean }) {
+function FareHint({ fare, date, hasFares, childPercent, infantJpy }: { fare?: number; date: string; hasFares: boolean; childPercent?: number; infantJpy?: number }) {
   if (!date || !hasFares) return null
-  if (fare) return <p className="text-xs text-gray-600 mt-1">旅行代金：{yen(fare)}（2名1室利用時の大人お一人様）</p>
+  if (fare) {
+    return (
+      <p className="text-xs text-gray-600 mt-1">
+        旅行代金：大人 {yen(fare)}（2名1室利用時お一人様）
+        {childPercent ? `、子供 ${yen(Math.round((fare * childPercent) / 100))}` : ''}
+        {typeof infantJpy === 'number' ? `、幼児 ${yen(infantJpy)}` : ''}
+      </p>
+    )
+  }
   return <p className="text-xs text-amber-700 mt-1">この日は出発設定がありません。ご希望の場合はご要望欄にご記入ください。</p>
 }

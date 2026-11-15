@@ -11,7 +11,11 @@
 // fare — and the order goes down the same pipeline as the email did.
 //
 //   programme  {origin}/detail.php?id=N&d=ALL&hf=1   every date's adult fare
-//              (2名1室, per person) in the calendar, code in p.code
+//              (2名1室, per person) in the calendar, code in p.code; the
+//              料金備考 states the child and infant rule on every page —
+//              子供（2歳以上～12歳未満）料金：大人料金の70％ and
+//              幼児（2歳未満）料金：32,000円 (the flight only; owner,
+//              2026-11-15) — read as written, never assumed
 //   optional   {origin}/opt_detail.php?id=N          flat 旅行代金 + 子ども代金
 //
 // The origin is configuration (ORDER_WEBSITE_ORIGIN), never source: the
@@ -35,6 +39,22 @@ export interface WebsitePage {
   /** Optional: flat adult and child fare per person. */
   adultJpy?: number
   childJpy?: number
+  /** Programme: a child's (2–11) fare as a percent of the adult one. */
+  childPercent?: number
+  /** Programme: an infant's (under 2) fare — the flight only. */
+  infantJpy?: number
+}
+
+/** A programme's fares for one date: adult from the calendar, child and
+ *  infant by the page's own rule. Undefined when the date has no fare. */
+export function tourFareOn(page: WebsitePage, date: string): { adultJpy: number; childJpy?: number; infantJpy?: number } | undefined {
+  const adultJpy = page.fares[date]
+  if (!adultJpy) return undefined
+  return {
+    adultJpy,
+    childJpy: page.childPercent ? Math.round((adultJpy * page.childPercent) / 100) : undefined,
+    infantJpy: page.infantJpy,
+  }
 }
 
 /** The website's origin, e.g. https://tour.example.jp — null when unset or not https. */
@@ -105,7 +125,15 @@ export function parseTourPage(html: string, pageId: string, url: string): Websit
     const fare = yen(m[2])
     if (date && fare && !(date in fares)) fares[date] = fare
   }
-  return { kind: 'tour', pageId, url, code: pageCode(html), title: pageTitle(html), withdrawn: WITHDRAWN.test(html), fares }
+  const t = text(html)
+  const pct = t.match(/子供\s*[（(][^）)]{0,30}[）)]\s*料金\s*[：:]\s*大人料金の\s*(\d{1,3})\s*[％%]/)
+  const childPercent = pct && Number(pct[1]) > 0 && Number(pct[1]) <= 100 ? Number(pct[1]) : undefined
+  const inf = t.match(/幼児\s*[（(][^）)]{0,30}[）)]\s*料金\s*[：:]\s*([\d,]+)\s*円/)
+  const infantJpy = inf ? Number(inf[1].replace(/,/g, '')) : undefined
+  return {
+    kind: 'tour', pageId, url, code: pageCode(html), title: pageTitle(html), withdrawn: WITHDRAWN.test(html), fares,
+    childPercent, infantJpy: Number.isFinite(infantJpy) ? infantJpy : undefined,
+  }
 }
 
 /** An optional-tour page (opt_detail.php): code, title, flat fares. */

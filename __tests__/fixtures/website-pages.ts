@@ -20,6 +20,9 @@ export const TOUR_PAGE = `<!DOCTYPE html><html><head><title>★国内線で楽�
 <table class="calendar"><caption>8月</caption><tbody>
 <tr><td style="background:#ccccff;"><a href="https://ssl.tour-up.jp/ats/inq.php?id=2297504&dt=1819551600&hf=1"><span class="date">30</span><span class="yen">￥366,000<br /></span></a></td></tr>
 </tbody></table>
+<h3 class="detail-title sp-none">料金備考</h3>
+<p class="TextBody">●カメラ持ち込み料　（観光地により持ち込み料がかかるところがあります）<br />●子供（2歳以上～12歳未満）料金：大人料金の70％です。<br />●幼児（2歳未満）料金：32&#44;000円（国際航空券、宿泊など）注)全食付・国際/国内線席無・ホテルベッド無<br /></p>
+<p class="TextBody">●旅客保安サービス料　　　：大人/700円、子供/700円<br />●海外空港諸税等　　　　　　：大人/10&#44;800円、子供/7&#44;200円、幼児/0円</p>
 <p class="code">ツアーコード：NEK502</p>
 </body></html>`
 
