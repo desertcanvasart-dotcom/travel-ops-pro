@@ -39,8 +39,13 @@ const securityHeaders = [
     value: 'strict-origin-when-cross-origin',
   },
   {
+    // The microphone is this site's own (self) and nobody else's, for voice
+    // notes in the inbox (planned, owner 2026-11-18). An empty microphone
+    // list blocks recording on every page without the browser even asking:
+    // autoura-saas #840 shipped a recorder that could never record because of
+    // it. Camera and location stay off: nothing here uses them.
     key: 'Permissions-Policy',
-    value: 'camera=(), microphone=(), geolocation=()',
+    value: 'camera=(), microphone=(self), geolocation=()',
   },
 ]
 
