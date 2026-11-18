@@ -25,6 +25,7 @@
 // - New: calculateDayBasedPricing() returns full pricing table
 // ============================================
 
+import { chooseTransportRate, cheapestOfWarning, severalCompaniesMessage, type TransportChoice } from '@/lib/pricing/transport-choice'
 import { GUIDE_ONLY, GUIDE_ONLY_VEHICLE, isGuideOnlyDay } from '@/lib/itineraries/guide-only-day'
 import { priceByBasis, toPricingBasis, unitsFor, type PricingBasis } from '@/lib/pricing/pricing-basis'
 import { createClient } from '@supabase/supabase-js'
@@ -392,6 +393,9 @@ interface TransportRate {
   is_active: boolean
   /** Starred Preferred: goes first among rows valid on the day. */
   is_preferred?: boolean
+  /** The company quoting it (lib/pricing/transport-choice tells companies apart). */
+  supplier_id?: string | null
+  supplier_name?: string | null
   /** The vehicles list (20261005) — every vehicle the row prices, read
    *  through lib/rates/vehicle-bands.ts. */
   vehicles?: unknown
@@ -2455,11 +2459,34 @@ export function orderTransportRows<T extends Record<string, any>>(rows: readonly
   })
 }
 
+/** The question a rate answers: its road route and shape, or its service
+ *  type, city, duration and area. Rates with one identity compete for a
+ *  lookup (lib/pricing/transport-choice). */
+function transportIdentity(rate: TransportRate): string {
+  if (isRoadTransferType(rate.service_type) && rateDeparture(rate) && rate.destination_city) {
+    return roadRouteKey(rate.service_type, rateDeparture(rate), rate.destination_city, rateTripShape(rate))
+  }
+  return [rate.service_type || '', (rate.city || rate.origin_city || '').toLowerCase(), rate.duration || '', rate.area || ''].join('|')
+}
+
+/** Every rate of one identity, per cache (in the cache's order). */
+const transportGroups = new WeakMap<Map<string, TransportRate>, Map<string, TransportRate[]>>()
+
 /** The lookup cache over rows already fetched — see buildTransportCache.
- *  Every key keeps the FIRST row in orderTransportRows' order. */
+ *  Every key keeps the FIRST row in orderTransportRows' order; the rates
+ *  that answer the same question beside it are chosen between at lookup
+ *  (findTransportRateExplained). */
 export function transportCacheFromRows(rows: readonly TransportRate[], onDate?: string | null): Map<string, TransportRate> {
   const cache = new Map<string, TransportRate>()
   const allRates = orderTransportRows(rows as Array<TransportRate & Record<string, any>>, onDate)
+  const groups = new Map<string, TransportRate[]>()
+  for (const rate of allRates) {
+    const id = transportIdentity(rate)
+    const g = groups.get(id)
+    if (g) g.push(rate)
+    else groups.set(id, [rate])
+  }
+  transportGroups.set(cache, groups)
 
   for (const rate of allRates) {
     // Use origin_city as fallback for city (some records use origin_city instead)
@@ -2533,12 +2560,26 @@ export function transportCacheFromRows(rows: readonly TransportRate[], onDate?: 
   return cache
 }
 
+/** The rate for a lookup, with why: see findTransportRateExplained. */
+export function findTransportRate(
+  cache: Map<string, TransportRate>,
+  params: Parameters<typeof findTransportRateExplained>[1]
+): TransportRate | null {
+  return findTransportRateExplained(cache, params).rate
+}
+
 /**
  * Smart transport rate lookup with fallbacks.
  * Finds the service record, then resolves the vehicle tier for the given pax count.
  * Returns a TransportRate with base_rate_eur populated from the matched tier.
+ *
+ * Several rates answering the same question are chosen between by the
+ * owner's rule (lib/pricing/transport-choice): the one starred, else the
+ * cheapest of one company's (`cheapestOf`, for a warning), and rates of
+ * several companies with no one starred are no rate at all (`companies`,
+ * for the gap).
  */
-export function findTransportRate(
+export function findTransportRateExplained(
   cache: Map<string, TransportRate>,
   params: {
     serviceType: TransportServiceType
@@ -2552,8 +2593,10 @@ export function findTransportRate(
     /** Road transfers: the shape the rate must be; absent = one way. */
     tripShape?: TripShape
   }
-): TransportRate | null {
+): Pick<TransportChoice<TransportRate>, 'cheapestOf' | 'companies' | 'companiesStarred'> & { rate: TransportRate | null } {
   const { serviceType, city, duration, area, pax, vehicleType, originCity, destinationCity } = params
+  // Among the rates answering the found row's question (transport-choice).
+  const decide = (found: TransportRate) => chooseTransportRate(transportGroups.get(cache)?.get(transportIdentity(found)) ?? [found], pax)
   const cityLower = city.toLowerCase()
 
   let record: TransportRate | undefined
@@ -2563,16 +2606,22 @@ export function findTransportRate(
   // Aswan → Luxor day could price Aswan's Hurghada run — or nothing at all,
   // because they looked in the destination (2026-09-17).
   if (isRoadTransferType(serviceType)) {
-    if (!originCity || !destinationCity) return null
+    if (!originCity || !destinationCity) return { rate: null }
     record = cache.get(roadRouteKey(serviceType, originCity, destinationCity, params.tripShape ?? 'one_way'))
     if (!record) {
       debugLog(`❌ No road transfer rate: ${serviceType} ${originCity} → ${destinationCity} (${params.tripShape ?? 'one_way'})`)
-      return null
+      return { rate: null }
     }
+    const roadChoice = decide(record)
+    if (!roadChoice.rate) return { rate: null, companies: roadChoice.companies, companiesStarred: roadChoice.companiesStarred }
+    record = roadChoice.rate
     const band = getTransportRateForPax(record, pax)
-    return band
-      ? { ...record, base_rate_eur: band.rateEur, base_rate_non_eur: band.rateNonEur, vehicle_type: vehicleType || band.vehicleType, capacity_min: band.capacityMin, capacity_max: band.capacityMax }
-      : record
+    return {
+      rate: band
+        ? { ...record, base_rate_eur: band.rateEur, base_rate_non_eur: band.rateNonEur, vehicle_type: vehicleType || band.vehicleType, capacity_min: band.capacityMin, capacity_max: band.capacityMax }
+        : record,
+      cheapestOf: roadChoice.cheapestOf,
+    }
   }
 
   // Priority 1: Exact match (service_type + city + duration + area)
@@ -2621,8 +2670,12 @@ export function findTransportRate(
 
   if (!record) {
     debugLog(`❌ No transport rate found for: ${serviceType} | ${city} | ${duration} | ${area} | pax=${pax}`)
-    return null
+    return { rate: null }
   }
+
+  const choice = decide(record)
+  if (!choice.rate) return { rate: null, companies: choice.companies, companiesStarred: choice.companiesStarred }
+  record = choice.rate
 
   // Resolve the right vehicle tier for the pax count
   const tierResult = getTransportRateForPax(record, pax)
@@ -2630,17 +2683,20 @@ export function findTransportRate(
   if (tierResult) {
     // Return a copy with base_rate_eur/non_eur set to the matched tier's rate
     return {
-      ...record,
-      base_rate_eur: tierResult.rateEur,
-      base_rate_non_eur: tierResult.rateNonEur,
-      vehicle_type: vehicleType || tierResult.vehicleType,
-      capacity_min: tierResult.capacityMin,
-      capacity_max: tierResult.capacityMax
+      rate: {
+        ...record,
+        base_rate_eur: tierResult.rateEur,
+        base_rate_non_eur: tierResult.rateNonEur,
+        vehicle_type: vehicleType || tierResult.vehicleType,
+        capacity_min: tierResult.capacityMin,
+        capacity_max: tierResult.capacityMax
+      },
+      cheapestOf: choice.cheapestOf,
     }
   }
 
   // Fallback: return record as-is (uses old base_rate_eur if still populated)
-  return record
+  return { rate: record, cheapestOf: choice.cheapestOf }
 }
 
 // ============================================
@@ -4583,7 +4639,7 @@ export async function calculateDayBasedPricing(
     }
 
     // Find transport rate (resolves vehicle tier for 2 pax base)
-    const rate = findTransportRate(transportCacheFor(info.day), {
+    const found = findTransportRateExplained(transportCacheFor(info.day), {
       serviceType: needs.serviceType,
       city: info.city,
       duration: needs.duration,
@@ -4597,6 +4653,7 @@ export async function calculateDayBasedPricing(
       destinationCity: info.needs.destinationCity || info.city,
       tripShape: needs.tripShape,
     })
+    const rate = found.rate
 
     // Disambiguate ID when a day has more than one transport leg (B3 flight days).
     // Single-leg days keep the original `day${N}-transport` shape to avoid
@@ -4606,6 +4663,11 @@ export async function calculateDayBasedPricing(
     // come back "as-is" and add undefined/0 into the total silently.
     const usable = rate ? usableRate(rate.base_rate_eur) : null
     if (rate && usable != null) {
+      // One company's several rates answered: the cheapest was priced; say
+      // which, so the usual one can be starred (lib/pricing/transport-choice).
+      if (found.cheapestOf) {
+        warnings.push(cheapestOfWarning(info.day, `${transportServiceLabel(needs.serviceType).toLowerCase()} in ${info.city}`, found.cheapestOf))
+      }
       baseTransportCost += usable
       services.push({
         id: `day${info.day}-transport${idSuffix}`,
@@ -4644,9 +4706,13 @@ export async function calculateDayBasedPricing(
         lookupAttempted: `transportation_rates ${needs.serviceType}/${needs.duration}@${where}`,
         message: rate
           ? `The ${transportServiceLabel(needs.serviceType).toLowerCase()} rate for ${where} has no price for a group of 2. Fill its vehicles in Rates → Transportation.`
-          : `No ${transportServiceLabel(needs.serviceType).toLowerCase()} rate for ${where}. Add it in Rates → Transportation.`,
+          : found.companies
+            ? severalCompaniesMessage(`the ${transportServiceLabel(needs.serviceType).toLowerCase()} in ${where}`, found.companies, found.companiesStarred)
+            : `No ${transportServiceLabel(needs.serviceType).toLowerCase()} rate for ${where}. Add it in Rates → Transportation.`,
       })
-      warnings.push(`No transport rate in ${where} (${needs.serviceType}/${needs.duration})`)
+      warnings.push(found.companies
+        ? severalCompaniesMessage(`the ${transportServiceLabel(needs.serviceType).toLowerCase()} in ${where}`, found.companies, found.companiesStarred)
+        : `No transport rate in ${where} (${needs.serviceType}/${needs.duration})`)
     }
   }
 
