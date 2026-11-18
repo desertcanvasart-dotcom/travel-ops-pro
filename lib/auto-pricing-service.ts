@@ -25,6 +25,7 @@
 // - New: calculateDayBasedPricing() returns full pricing table
 // ============================================
 
+import { narrowCruiseCandidates, sailingEndCity } from '@/lib/rates/cruise-star'
 import { chooseTransportRate, cheapestOfWarning, severalCompaniesMessage, type TransportChoice } from '@/lib/pricing/transport-choice'
 import { GUIDE_ONLY, GUIDE_ONLY_VEHICLE, isGuideOnlyDay } from '@/lib/itineraries/guide-only-day'
 import { priceByBasis, toPricingBasis, unitsFor, type PricingBasis } from '@/lib/pricing/pricing-basis'
@@ -1774,7 +1775,10 @@ export async function resolveCruiseStay(
   normalizer?: RateNormalizer,
   chosenId?: string,
   /** The programme's nights aboard: a sailing that long is preferred. */
-  nights?: number
+  nights?: number,
+  /** Where the sailing ends (lib/rates/cruise-star sailingEndCity): a ship
+   *  ending there is preferred. */
+  disembarkCity?: string | null
 ): Promise<{ rates: CruiseStayRates | null; problem?: ChosenPropertyProblem }> {
   try {
     let raw: HotelOrCruiseRow | null
@@ -1790,7 +1794,12 @@ export async function resolveCruiseStay(
       // falls back to every ship at the tier — lib/pricing/property-candidates,
       // the same list the day editor offers.
       // A rate sheet valid on the sailing date first (property-candidates).
-      raw = (await cruiseCandidates(supabaseAdmin, orgId, tier, embarkCity, nights, travelDate))[0] ?? null
+      // Narrowed to the programme's length, then to where the sailing ends:
+      // an Aswan → Luxor ship no longer stands in for a Luxor → Aswan sailing.
+      // A length or port no ship matches keeps the wider list
+      // (lib/rates/cruise-star narrowCruiseCandidates).
+      const candidates = await cruiseCandidates(supabaseAdmin, orgId, tier, embarkCity, nights, travelDate)
+      raw = narrowCruiseCandidates(candidates, { nights, disembark: disembarkCity })[0] ?? null
     }
     const cruise = (raw && normalizer
       ? (await normalizer.normalize('nile_cruises', [raw]))?.[0]
@@ -3026,7 +3035,7 @@ export async function calculateDayBasedPricing(
     fetchCruiseTransportPricingRules(params.orgId, rateNormalizer),
     // Cruise rates only apply when the itinerary has cruise nights
     cruiseNights > 0
-      ? resolveCruiseStay(orgId, tier, firstCruiseDay?.city, isEurPassport, dateForDay(firstCruiseDay?.day), rateNormalizer, propertyChoices.cruiseId, cruiseNights)
+      ? resolveCruiseStay(orgId, tier, firstCruiseDay?.city, isEurPassport, dateForDay(firstCruiseDay?.day), rateNormalizer, propertyChoices.cruiseId, cruiseNights, sailingEndCity(itinerary))
       : Promise.resolve({ rates: null } as Awaited<ReturnType<typeof resolveCruiseStay>>),
     Promise.all(hotelCities.map(city => resolveHotelStay(orgId, city, tier, isEurPassport, params.travelDate, rateNormalizer, propertyChoices.hotelByCity.get(city.toLowerCase())))),
     fetchTicketRates(orgId, ticketLegs, rateNormalizer),
