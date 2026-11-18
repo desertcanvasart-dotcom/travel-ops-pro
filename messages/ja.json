@@ -8092,6 +8092,8 @@
     "hotelCheckin": "ホテルチェックイン",
     "hotelCheckout": "ホテルチェックアウト",
     "guideRequired": "ガイド必要",
+    "guideOnlyDay": "車とガイドの日",
+    "guideOnlyDayHint": "— 1日分のガイドと車。入場券なし",
     "attractions": "観光スポット",
     "addAttractionPlaceholder": "観光スポット名を追加...",
     "descriptionToggle": "説明（クリックで展開）",

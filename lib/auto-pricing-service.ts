@@ -25,6 +25,7 @@
 // - New: calculateDayBasedPricing() returns full pricing table
 // ============================================
 
+import { GUIDE_ONLY, GUIDE_ONLY_VEHICLE, isGuideOnlyDay } from '@/lib/itineraries/guide-only-day'
 import { priceByBasis, toPricingBasis, unitsFor, type PricingBasis } from '@/lib/pricing/pricing-basis'
 import { createClient } from '@supabase/supabase-js'
 import { PACKAGE_TYPE_CONFIGS } from '@/lib/package-types'
@@ -153,6 +154,10 @@ export interface ItineraryDay {
     dinner: MealStatus
   }
   attractions: string[]
+  /** 'guide_only': a car & guide day — guide and one full-day vehicle, no
+   *  tickets (lib/itineraries/guide-only-day). Holds only while the day names
+   *  no sight. */
+  sightseeing?: 'guide_only'
   /** entrance_fees ids picked from the fee table — exact tickets for the
    *  day; the wording above is then documentation only (lib/pricing/attractions). */
   attraction_ids?: string[]
@@ -876,6 +881,16 @@ export function determineTransportNeeds(
       useSpecialVehicle: false,
     })
   }
+  // A car & guide day names no sight but still has its car, for the day
+  // (lib/itineraries/guide-only-day): it used to get no vehicle at all.
+  else if (isGuideOnlyDay(day)) {
+    lines.push({
+      serviceType: GUIDE_ONLY_VEHICLE.serviceType,
+      duration: GUIDE_ONLY_VEHICLE.duration,
+      area: null,
+      useSpecialVehicle: false,
+    })
+  }
 
   // Boarding a sleeping train tonight with its transfers asked for: to the
   // station in this city, after the day's own sightseeing.
@@ -1031,8 +1046,10 @@ export function parseItinerary(itineraryData: any, opts?: {
 
     // Extract attractions from title if not provided — unless the operator
     // edited the day's sights, in which case an empty list means none.
+    // A car & guide day sells no tickets: its title must not pull sights in.
+    const guideOnly = isGuideOnlyDay(day)
     let attractions = day.attractions || []
-    if (attractions.length === 0 && day.title && day.attractions_set_by_hand !== true) {
+    if (attractions.length === 0 && day.title && day.attractions_set_by_hand !== true && !guideOnly) {
       attractions = extractAttractionsFromTitle(day.title)
     }
 
@@ -1051,6 +1068,14 @@ export function parseItinerary(itineraryData: any, opts?: {
     if (isLikelyTransferOnly) {
       attractions = []
       if (!setByHand.has('guide_required')) services.guide_required = false
+    }
+
+    // A car & guide day is guided by definition: the guide is on unless the
+    // operator unticked it by hand, and it is kept like a hand tick so the
+    // first/last-day rules (applyB2BDayRules) do not take it off again.
+    if (guideOnly && !setByHand.has('guide_required')) {
+      services.guide_required = true
+      setByHand.add('guide_required')
     }
 
     // Where the party sleeps. The programme's overnight_kind is the office's
@@ -1091,6 +1116,7 @@ export function parseItinerary(itineraryData: any, opts?: {
       meals,
       attractions,
       attraction_ids: Array.isArray(day.attraction_ids) ? day.attraction_ids.filter(Boolean).map(String) : undefined,
+      sightseeing: guideOnly ? GUIDE_ONLY : undefined,
       tickets_set_by_hand: day.tickets_set_by_hand === true || undefined,
       services,
       // Carried for applyB2BDayRules, which forces the same first/last-day flags.
