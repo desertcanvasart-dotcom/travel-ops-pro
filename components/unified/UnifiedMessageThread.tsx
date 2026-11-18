@@ -19,6 +19,7 @@ import { sanitizeHtml } from '@/lib/sanitize-html'
 import { escapeHtml } from '@/lib/html-escape'
 import { createClientHref as clientFormHref } from '@/lib/unified/create-client-link'
 import { ChannelBadge } from './ChannelBadge'
+import MessageBox from '@/components/whatsapp/MessageBox'
 import { UnifiedConversation, UnifiedMessage, ConversationChannel, EmailAttachment } from '@/types/unified'
 
 // Helper to extract and separate quoted content from emails
@@ -255,6 +256,7 @@ export function UnifiedMessageThread({
   const isPortal = conversation?.channel === 'portal' || isTrip
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const composerFormRef = useRef<HTMLFormElement>(null)
   const [messages, setMessages] = useState<UnifiedMessage[]>([])
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
@@ -1461,25 +1463,25 @@ export function UnifiedMessageThread({
         {translationEnabled && translatedMessage && !isTranslating && (
           <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
             <p className="text-xs text-blue-600 font-medium mb-1">{getLanguageInfo(customerLanguage).flag} {t('willSend')}</p>
-            <p className="text-sm text-gray-700">{translatedMessage}</p>
+            <p className="text-sm text-gray-700 whitespace-pre-wrap">{translatedMessage}</p>
           </div>
         )}
       </div>
 
       {/* Message Input */}
-      <form onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-200">
-        <div className="flex items-center gap-3">
-          <input
-            type="text"
+      <form ref={composerFormRef} onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-200">
+        <div className="flex items-end gap-3">
+          <MessageBox
             value={newMessage}
-            onChange={(e) => setNewMessage(e.target.value)}
+            onChange={setNewMessage}
+            onSend={() => composerFormRef.current?.requestSubmit()}
             placeholder={
               translationEnabled
                 ? t('typeInEnglish', { language: getLanguageInfo(customerLanguage).name })
                 : conversation.channel === 'whatsapp' ? t('typeMessageViaWhatsApp') : t('typeMessageViaEmail')
             }
-            className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-full focus:outline-none focus:ring-2"
-            style={{ '--tw-ring-color': colors.accent } as any}
+            className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-2xl focus:outline-none focus:ring-2"
+            style={{ '--tw-ring-color': colors.accent } as React.CSSProperties}
           />
           <button
             type="submit"
