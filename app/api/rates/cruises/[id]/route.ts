@@ -1,4 +1,5 @@
 // app/api/rates/cruises/[id]/route.ts
+import { clearCompetingCruiseStars } from '@/lib/rates/cruise-star-server'
 import { NextRequest, NextResponse } from 'next/server'
 import { clientMessage } from '@/lib/api-errors'
 import { seasonsWrite, seasonsPayloadError, datedPeriodCount, tooManyPeriodsMessage } from '@/lib/rates/rate-seasons'
@@ -107,7 +108,11 @@ export async function PUT(
     }
     if (error) throw error
 
-    return NextResponse.json({ success: true, data })
+    // Starred: one boat per tier, route and length (lib/rates/cruise-star).
+    // Also when only the route or length moved on a starred row.
+    const star = await clearCompetingCruiseStars(supabase, orgId, data)
+
+    return NextResponse.json({ success: true, data, ...(star ? { star } : {}) })
   } catch (error: any) {
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
   }

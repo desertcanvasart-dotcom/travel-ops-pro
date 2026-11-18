@@ -14,6 +14,7 @@
 
 import { planRoadTrips, type TripShape } from '@/lib/pricing/road-trips'
 import { choicesForTier } from '@/lib/pricing/property-choice'
+import { sailingEndCity } from '@/lib/rates/cruise-star'
 import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
@@ -113,7 +114,7 @@ export async function POST(request: NextRequest) {
     const tier = typeof body?.tier === 'string' && body.tier ? body.tier : 'standard'
     const firstCruiseDay = itinerary.find(d => d.accommodation_type === 'cruise')
     const ship = firstCruiseDay
-      ? (await resolveCruiseStay(orgId, tier, firstCruiseDay.city, false, null, undefined, choicesForTier(itinerary, tier).cruiseId, itinerary.filter(d => d.accommodation_type === 'cruise').length)).rates
+      ? (await resolveCruiseStay(orgId, tier, firstCruiseDay.city, false, null, undefined, choicesForTier(itinerary, tier).cruiseId, itinerary.filter(d => d.accommodation_type === 'cruise').length, sailingEndCity(itinerary))).rates
       : null
     const roadPlan = planRoadTrips(itinerary, ship?.row ? String((ship.row as Record<string, unknown>).disembark_city ?? '') || null : null)
 

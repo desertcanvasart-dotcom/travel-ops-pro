@@ -5696,6 +5696,7 @@
       "notifications": {
         "failedToLoad": "クルーズ料金の読み込みに失敗しました",
         "cruiseUpdated": "クルーズ料金を更新しました！",
+        "preferredMoved": "{ship} が {scope} の優先クルーズになりました。{cleared} のスターは外されました。",
         "cruiseCreated": "クルーズ料金を作成しました！",
         "failedToSave": "クルーズ料金の保存に失敗しました",
         "cruiseDeleted": "クルーズ料金を削除しました！",

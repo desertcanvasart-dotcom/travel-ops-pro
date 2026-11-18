@@ -4545,6 +4545,7 @@
       "notifications": {
         "failedToLoad": "Failed to load cruise rates",
         "cruiseUpdated": "Cruise rate updated successfully!",
+        "preferredMoved": "{ship} is now the preferred cruise for {scope}. The star was removed from {cleared}.",
         "cruiseCreated": "Cruise rate created successfully!",
         "failedToSave": "Failed to save cruise rate",
         "cruiseDeleted": "Cruise rate deleted successfully!",
