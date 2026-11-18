@@ -22,12 +22,13 @@ import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import {
   buildTransportCache,
   determineTransportNeeds,
-  findTransportRate,
+  findTransportRateExplained,
   parseItinerary,
   resolveCruiseStay,
   transportServiceLabel,
 } from '@/lib/auto-pricing-service'
 import { usableRate } from '@/lib/pricing/usable-rate'
+import { severalCompaniesMessage } from '@/lib/pricing/transport-choice'
 import { isRoadTransfer } from '@/lib/pricing/transport-lines'
 
 export const dynamic = 'force-dynamic'
@@ -125,7 +126,7 @@ export async function POST(request: NextRequest) {
         const from = needs.originCity || previousDay?.city || null
         const to = needs.destinationCity || city
         const road = isRoadTransfer(needs.serviceType)
-        const rate = findTransportRate(cache, {
+        const found = findTransportRateExplained(cache, {
           serviceType: needs.serviceType,
           city,
           duration: needs.duration,
@@ -136,6 +137,7 @@ export async function POST(request: NextRequest) {
           destinationCity: to,
           tripShape: needs.tripShape,
         })
+        const rate = found.rate
         const label = transportServiceLabel(needs.serviceType)
         if (needs.returnIncludedFromDay) {
           return {
@@ -160,7 +162,10 @@ export async function POST(request: NextRequest) {
             ? null
             : rate
               ? `The ${label.toLowerCase()} rate for ${where} has no price for ${seats} seats. Fill its vehicles in Rates → Transportation.`
-              : `No ${label.toLowerCase()} rate for ${where}. Add it in Rates → Transportation.`,
+              : found.companies
+                // Several companies quote it and none is starred: no price until one is (lib/pricing/transport-choice).
+                ? severalCompaniesMessage(`the ${label.toLowerCase()} in ${where}`, found.companies, found.companiesStarred)
+                : `No ${label.toLowerCase()} rate for ${where}. Add it in Rates → Transportation.`,
         }
       })
       const raw = rawDays[i] as { transport_lines?: unknown } | undefined

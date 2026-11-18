@@ -416,7 +416,14 @@ export default function ToursRatesPage() {
         <ul className="list-disc list-inside space-y-1 text-gray-700 mb-6">
           <li>Only rates valid on that day count (Valid From / Valid To). An expired rate does not price.</li>
           <li>The rate whose service type and city match the day. A road transfer is found by departure, destination and trip shape.</li>
-          <li>When several rates match (two suppliers, or an open-ended rate and a newer one), the one whose validity started most recently wins, then the lowest service code. The choice is the same every time.</li>
+          <li>One rate entered in several contract periods (an open-ended rate and a newer one for the same supplier and route name) is one rate: the period that started most recently wins.</li>
+          <li>When several different rates match:
+            <ul className="list-disc list-inside ml-6 mt-1 space-y-1">
+              <li>exactly one is starred (<strong>Preferred</strong>): that one;</li>
+              <li>otherwise, if they are all one supplier&apos;s: the cheapest for the group size, and the quote warns, naming the others, so you can star the usual one;</li>
+              <li>otherwise (several suppliers, none or several starred): no price. The day&apos;s transport is listed as missing, naming the suppliers. Star the one to book.</li>
+            </ul>
+          </li>
           <li>Inside the rate, the vehicle is the one whose size holds the group, else the smallest that seats it. A group bigger than the largest vehicle is priced as several of the largest vehicle: 12 people with a 7-seat minivan as the largest is 2 minivans at twice the price, shown as &ldquo;2 &times; Minivan&rdquo;.</li>
           <li>The price is per vehicle, a group cost shared by the travellers. A rate entered in another currency is converted to your rate currency, in trip pricing and in B2B quotes alike.</li>
         </ul>
