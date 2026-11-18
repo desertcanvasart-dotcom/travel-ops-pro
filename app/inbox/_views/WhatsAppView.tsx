@@ -787,7 +787,9 @@ export default function WhatsAppInboxPage() {
       })
       if (res.ok) {
         const data = await res.json()
-        setMessages(prev => [...prev, data.message])
+        // A long text goes as several messages: show every part sent.
+        setMessages(prev => [...prev, ...(Array.isArray(data.messages) && data.messages.length ? data.messages : [data.message])])
+        if (data.warning) dialog.alert('Sent in parts', data.warning, 'info')
         setNewMessage('')
         setTranslatedMessage('')
         setConversations(prev => prev.map(c => 

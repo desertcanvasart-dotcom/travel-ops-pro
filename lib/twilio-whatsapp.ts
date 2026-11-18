@@ -10,6 +10,7 @@ import twilio from 'twilio'
 import { createClient, type SupabaseClient } from '@supabase/supabase-js'
 import { formatMoney } from '@/lib/currency-totals'
 import { senderForOrg, NO_WHATSAPP_SENDER } from '@/lib/whatsapp-org'
+import { splitWhatsAppText, sendInParts, TWILIO_TEXT_LIMIT } from '@/lib/whatsapp-split'
 
 // Types
 export interface WhatsAppMessage {
@@ -146,41 +147,60 @@ export async function sendWhatsAppMessage({
 
     const formattedTo = formatWhatsAppNumber(to)
 
-    const message = await client.messages.create({
-      from,
-      to: formattedTo,
-      body,
-      ...(mediaUrl && { mediaUrl: [mediaUrl] })
-    })
+    const sendOne = async (text: string | undefined, media?: string): Promise<{ success: boolean; messageId?: string; error?: string; warning?: string }> => {
+      try {
+        const message = await client.messages.create({
+          from,
+          to: formattedTo,
+          ...(text ? { body: text } : {}),
+          ...(media && { mediaUrl: [media] })
+        })
 
-    console.log('✅ WhatsApp message sent:', message.sid, 'Status:', message.status)
+        console.log('✅ WhatsApp message sent:', message.sid, 'Status:', message.status)
 
-    // Check if message might be blocked by 24-hour window
-    const warning = message.status === 'queued' 
-      ? 'Message queued. If customer hasn\'t messaged in 24hrs, delivery may fail.'
-      : undefined
+        // Check if message might be blocked by 24-hour window
+        const warning = message.status === 'queued'
+          ? 'Message queued. If customer hasn\'t messaged in 24hrs, delivery may fail.'
+          : undefined
 
-    return {
-      success: true,
-      messageId: message.sid,
-      warning
-    }
-  } catch (error: any) {
-    console.error('❌ Failed to send WhatsApp message:', error)
-    
-    // Handle specific Twilio errors
-    if (error.code === 63016) {
-      return {
-        success: false,
-        error: 'Customer must message first (24-hour window). Use a template message to initiate.'
+        return { success: true, messageId: message.sid, warning }
+      } catch (error: any) {
+        console.error('❌ Failed to send WhatsApp message:', error)
+        return { success: false, error: twilioSendError(error) }
       }
     }
-    
-    return {
-      success: false,
-      error: error.message
+
+    // Longer than one WhatsApp message may be (Twilio: 1,600 characters):
+    // sent as several, in order, cut at paragraph or sentence breaks
+    // (lib/whatsapp-split.ts). Twilio's refusal used to leave the sender
+    // cutting it up by hand. With a file, the file goes on its own first and
+    // the words follow.
+    const parts = splitWhatsAppText(body ?? '', TWILIO_TEXT_LIMIT)
+    if (parts.length > 1) {
+      if (mediaUrl) {
+        const media = await sendOne(undefined, mediaUrl)
+        if (!media.success) return media
+        const text = await sendInParts(parts, part => sendOne(part))
+        return text.success
+          ? { ...media, warning: text.warning }
+          : { ...media, warning: `The file was sent; its message was not: ${text.error ?? 'unknown error'}` }
+      }
+      return await sendInParts(parts, part => sendOne(part))
     }
+
+    return await sendOne(body, mediaUrl)
+  } catch (error: any) {
+    console.error('❌ Failed to send WhatsApp message:', error)
+    return { success: false, error: twilioSendError(error) }
   }
+}
+
+/** Twilio's error, in words the sender can act on. */
+function twilioSendError(error: any): string {
+  if (error?.code === 63016) {
+    return 'Customer must message first (24-hour window). Use a template message to initiate.'
+  }
+  return error?.message ?? 'unknown error'
 }
 
 // ============================================

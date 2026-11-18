@@ -467,6 +467,7 @@ When a client sends a message to your business WhatsApp number, it appears in th
 - **Link Client** - Connect the conversation to an existing client record
 - **Create Client** - Create a new client directly from the conversation
 - **Send Documents** - Send quotes, invoices, contracts, and receipts through WhatsApp
+- **Long messages** - WhatsApp allows 1,600 characters in one message. A longer reply is sent as several messages, in order, cut at a paragraph, line or sentence break. When a document's message is too long, the document goes first and the text follows
 
 ### Message Status Icons
 - ✓ Message sent
