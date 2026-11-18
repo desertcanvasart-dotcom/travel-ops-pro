@@ -6,7 +6,7 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { OWN_SUPPLIER_EMBED, ownSupplierOnRow } from '@/lib/rates/own-supplier-embed'
-import { findServiceCodeClash } from '@/lib/rates/transport-natural-key'
+import { duplicateTransportRateMessage, editMakesDuplicate, findServiceCodeClash } from '@/lib/rates/transport-natural-key'
 import { rateDeleteBlocked } from '@/lib/rates/rate-delete-guard'
 import { validateRatePayload } from '@/lib/rate-validation'
 
@@ -135,6 +135,24 @@ export async function PUT(
 
     if (updateData.rate_valid_from && updateData.rate_valid_to && updateData.rate_valid_to < updateData.rate_valid_from) {
       return NextResponse.json({ error: 'Valid to must be on or after Valid from' }, { status: 400 })
+    }
+    // An edit never turns a rate into a copy of another one
+    // (lib/rates/transport-natural-key): only the code was checked, so
+    // changing a rate's supplier, city or dates onto another rate's saved a
+    // silent duplicate, and pricing then chose between the two.
+    if (currentRow) {
+      const { data: sameType } = await supabaseAdmin
+        .from('transportation_rates')
+        .select('*')
+        .eq('org_id', orgId)
+        .eq('service_type', updateData.service_type)
+      // The row as it will be saved: a field the body left out (undefined)
+      // is not written, so it keeps the row's value.
+      const defined = Object.fromEntries(Object.entries(updateData).filter(([, v]) => v !== undefined))
+      const twin = editMakesDuplicate(currentRow, { ...currentRow, ...defined }, sameType ?? [])
+      if (twin) {
+        return NextResponse.json({ error: duplicateTransportRateMessage(twin), existing: twin }, { status: 409 })
+      }
     }
     if (updateData.service_code) {
       const { data: sameCode } = await supabaseAdmin

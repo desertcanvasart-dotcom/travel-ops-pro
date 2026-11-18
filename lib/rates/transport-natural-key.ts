@@ -78,3 +78,40 @@ export function freeServiceCode(code: string, existing: readonly Row[]): string 
     if (!taken.has(text(next))) return next
   }
 }
+
+/** "2026-11-01" from a date or timestamp; '' when none. */
+const day = (v: unknown) => String(v ?? '').slice(0, 10)
+
+/**
+ * The message for a create or edit that would make a second copy of a rate:
+ * it names the card that already exists (its code, route, supplier and
+ * validity), so the operator can find it and edit it, instead of a bare
+ * "a rate with these details already exists". Ported from autoura-saas #837.
+ */
+export function duplicateTransportRateMessage(existing: Row): string {
+  const code = String(existing.service_code ?? '').trim()
+  const from = String(existing.origin_city ?? '').trim(), to = String(existing.destination_city ?? '').trim()
+  const route = String(existing.route_name ?? '').trim()
+    || (from && to ? `${from} → ${to}` : String(existing.city ?? '').trim())
+  const supplier = String(existing.supplier_name ?? '').trim() || 'no supplier (direct booking)'
+  const validFrom = day(existing.rate_valid_from), validTo = day(existing.rate_valid_to)
+  const validity = validFrom || validTo ? `, valid ${validFrom || '…'} to ${validTo || '…'}` : ''
+  const card = [code, route].filter(Boolean).join(' · ')
+  return `This rate already exists: ${card || 'an existing rate'}, from ${supplier}${validity}. ` +
+    'Edit that rate instead (search for its code in the list), or change what makes this one different: ' +
+    'the supplier, route name, city, duration, area or validity dates.'
+}
+
+/**
+ * An edit that turns a rate into a copy of ANOTHER one: the existing row it
+ * would duplicate, or null. Only when the edit changes the rate's identity:
+ * live data may already hold two copies, and refusing every edit to them
+ * would block fixing a price.
+ */
+export function editMakesDuplicate<T extends Row>(current: Row, edited: Row, others: readonly T[]): T | null {
+  const id = String(current.id ?? '')
+  const unchanged = transportRateKey(current) === transportRateKey(edited) &&
+    String(current.trip_shape ?? '') === String(edited.trip_shape ?? '')
+  if (unchanged) return null
+  return findSameTransportRate(edited, others.filter(r => String(r.id ?? '') !== id))
+}

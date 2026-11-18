@@ -406,8 +406,11 @@ export default function ToursRatesPage() {
         </ul>
         <p className="text-gray-600 mb-2">
           <strong>Duplicates:</strong> a rate with the same service type, city, destination, supplier, route name, trip
-          shape and validity dates as an existing one is refused, and so is a service code already in use. A second
-          supplier for the same service, a differently named route, or next year&apos;s dates make a separate rate.
+          shape and validity dates as an existing one is refused, and so is a service code already in use. The message
+          names the rate that exists (its code, route, supplier and validity dates), so you can find it and edit it.
+          The same applies when you edit a rate: changing its supplier, city, route name or dates so that it matches
+          another rate is refused. Editing anything else (a price, the notes) always saves. A second supplier for the
+          same service, a differently named route, or next year&apos;s dates make a separate rate.
         </p>
         <p className="text-gray-600 mb-2"><strong>How a trip day is priced:</strong></p>
         <ul className="list-disc list-inside space-y-1 text-gray-700 mb-6">

@@ -12,6 +12,7 @@ import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { OWN_SUPPLIER_EMBED, ownSupplierOnRows } from '@/lib/rates/own-supplier-embed'
 import { rateDeleteBlocked } from '@/lib/rates/rate-delete-guard'
+import { duplicateTransportRateMessage } from '@/lib/rates/transport-natural-key'
 import { rowsInRateCurrency } from '@/lib/rates/rows-in-rate-currency'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 
@@ -234,7 +235,9 @@ export async function POST(request: NextRequest) {
     // in sync with transportRateKey() in app/api/cron/data-invariants/route.ts.
     let existingQuery = supabaseAdmin
       .from('transportation_rates')
-      .select('id, service_code, trip_shape')
+      // Every column: the refusal names the rate that exists (its route,
+      // supplier and validity), not only its code.
+      .select('*')
       .eq('org_id', orgId)
       .eq('service_type', newRate.service_type)
 
@@ -272,7 +275,7 @@ export async function POST(request: NextRequest) {
     if (existing?.length) {
       return NextResponse.json({
         success: false,
-        error: 'A rate with these details already exists. Edit that rate, or change what makes this one different (supplier, period, class, city) before saving.',
+        error: duplicateTransportRateMessage(existing[0]),
         existing: existing[0],
       }, { status: 409 })
     }
