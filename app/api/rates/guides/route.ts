@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { attachGuideCities } from '@/lib/guides/guide-coverage'
+import { attachGuideCities, attachGuideLanguages } from '@/lib/guides/guide-coverage'
 import { guideRateNamesCity } from '@/lib/guides/guide-cities'
 import { guideModeKey } from '@/lib/guides/guide-mode'
-import { guideLanguageKey, sameGuideLanguage } from '@/lib/guides/guide-language'
+import { guideLanguageKey, guideLanguageRank, sameGuideLanguage } from '@/lib/guides/guide-language'
 import { clientMessage } from '@/lib/api-errors'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
@@ -55,8 +55,10 @@ export async function GET(request: NextRequest) {
 
     // Each rate carries its guide's cities (lib/guides/guide-cities): a rate
     // has no city of its own — the guide charges the same wherever they work.
-    let data: Record<string, any>[] = await attachGuideCities(supabaseAdmin, orgId, rows ?? [])
-    if (language) data = data.filter(r => sameGuideLanguage(r.guide_language, language))
+    // …and its guide's languages (suppliers.languages): a guide's rate serves
+    // every language the guide speaks (lib/guides/guide-language).
+    let data: Record<string, any>[] = await attachGuideLanguages(supabaseAdmin, orgId, await attachGuideCities(supabaseAdmin, orgId, (rows ?? []) as Array<{ supplier_id?: string | null } & Record<string, unknown>>))
+    if (language) data = data.filter(r => guideLanguageRank(r, language) < 2)
     // "Who can guide in Luxor": guides who work in Luxor, and every-city guides.
     if (city) data = data.filter(r => !r.guide_cities.length || guideRateNamesCity(r, city))
     // A picker that copies the rate onto a voucher or a trip asks for every

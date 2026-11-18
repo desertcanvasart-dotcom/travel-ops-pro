@@ -21,7 +21,7 @@
 //
 // Client-safe (no server imports).
 
-import { sameGuideLanguage } from '@/lib/guides/guide-language'
+import { guideLanguageRank } from '@/lib/guides/guide-language'
 import { rateGuideMode } from '@/lib/guides/guide-mode'
 import { guideCityRank } from '@/lib/guides/guide-cities'
 
@@ -91,18 +91,24 @@ export interface GuideAsk {
  * predate grades price as before; any other ask must match a real row.
  */
 export function pickGuideRate<T extends Record<string, any>>(rows: T[], ask: GuideAsk): T | null {
+  // A rate serves the trip's language when it was written for it, or when
+  // its guide speaks it (the guide's languages, attached as guide_languages
+  // by lib/guides/guide-coverage): one rate per guide covers every language
+  // they work in (owner, 2026-11-18).
   const ofLanguage = rows.filter(r =>
     r.is_active !== false &&
-    sameGuideLanguage(r.guide_language, ask.language) &&
+    guideLanguageRank(r, ask.language) < 2 &&
     rateGuideMode(r) === ask.mode &&
     rateValidOn(r, ask.date)
   )
   // A guide rate covers a LIST of cities (lib/guides/guide-cities): a Cairo
   // guide who also works Alexandria matches an Alexandria day like a rate
-  // written for Alexandria.
+  // written for Alexandria. Then the chosen guide, then a rate written for
+  // the language before one its guide merely speaks.
   const order = (list: T[]) => [...list].sort((a, b) =>
     guideCityRank(a, ask.city) - guideCityRank(b, ask.city) ||
     (ask.supplierId ? Number(b.supplier_id === ask.supplierId) - Number(a.supplier_id === ask.supplierId) : 0) ||
+    guideLanguageRank(a, ask.language) - guideLanguageRank(b, ask.language) ||
     stableCompare(a, b)
   )
   const exact = order(ofLanguage.filter(r => r.guide_type === ask.grade && r.tour_duration === ask.duration))

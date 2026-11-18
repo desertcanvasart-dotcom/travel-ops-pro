@@ -46,6 +46,40 @@ export async function attachGuideCities<T extends { supplier_id?: string | null 
   return withGuideCities(rows, await fetchGuideCityMap(db, orgId))
 }
 
+/** supplier id → the languages the guide works in (suppliers.languages), for one company. */
+export async function fetchGuideLanguageMap(db: Db, orgId: string | null | undefined): Promise<Map<string, string[]>> {
+  const map = new Map<string, string[]>()
+  if (!orgId) return map
+  const { data, error } = await db
+    .from('suppliers')
+    .select('id, languages')
+    .eq('org_id', orgId)
+  if (error) {
+    console.error('suppliers.languages read failed:', error.message)
+    return map
+  }
+  for (const row of (data ?? []) as { id: string; languages?: unknown }[]) {
+    const list = Array.isArray(row.languages) ? row.languages.map(String).map(l => l.trim()).filter(Boolean) : []
+    if (list.length) map.set(row.id, list)
+  }
+  return map
+}
+
+/**
+ * Guide rate rows with `guide_languages` attached: the languages their guide
+ * works in (lib/guides/guide-language guideLanguageRank). A rate with no
+ * guide, or a guide with no list, gets [] and serves its own language only.
+ */
+export async function attachGuideLanguages<T extends { supplier_id?: string | null }>(
+  db: Db,
+  orgId: string | null | undefined,
+  rows: readonly T[],
+): Promise<(T & { guide_languages: string[] })[]> {
+  if (!rows.length) return []
+  const bySupplier = await fetchGuideLanguageMap(db, orgId)
+  return rows.map(r => ({ ...r, guide_languages: r.supplier_id ? [...(bySupplier.get(r.supplier_id) ?? [])] : [] }))
+}
+
 /** One supplier's cities. */
 export async function fetchSupplierCities(db: Db, orgId: string, supplierId: string): Promise<string[]> {
   return (await fetchGuideCityMap(db, orgId)).get(supplierId) ?? []

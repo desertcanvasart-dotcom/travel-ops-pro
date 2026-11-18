@@ -13,7 +13,7 @@
 import { guideLanguageWord } from '@/lib/guides/guide-language'
 import { rateGuideMode } from '@/lib/guides/guide-mode'
 import { guideCitiesText, guideRateCities } from '@/lib/guides/guide-cities'
-import { attachGuideCities } from '@/lib/guides/guide-coverage'
+import { attachGuideCities, attachGuideLanguages } from '@/lib/guides/guide-coverage'
 import { seasonsForRow, plainPeriodName, type RateSeasonEntity } from '@/lib/rates/rate-seasons'
 import { periodLabel, type OptionPeriod } from '@/lib/rates/date-window'
 import { cruiseSailingLabel, sanitizeSailingDays } from '@/lib/rates/cruise-sailing'
@@ -133,7 +133,9 @@ export async function loadGridRateOptions(
   ] = await Promise.all([
     normalizer.normalize('transportation_rates', transportRates),
     // With the guide's cities (supplier_cities, lib/guides/guide-cities).
-    attachGuideCities(supabase, orgId, guideRates ?? []).then(rows => normalizer.normalize('guide_rates', rows)),
+    attachGuideCities(supabase, orgId, (guideRates ?? []) as Array<{ supplier_id?: string | null } & Record<string, unknown>>)
+      .then(rows => attachGuideLanguages(supabase, orgId, rows))
+      .then(rows => normalizer.normalize('guide_rates', rows)),
     normalizer.normalize('airport_staff_rates', airportRates),
     normalizer.normalize('hotel_staff_rates', hotelServiceRates),
     normalizer.normalize('tipping_rates', tippingRates),
@@ -244,6 +246,8 @@ export async function loadGridRateOptions(
       details: withValidity(r.guide_language ? guideLanguageWord(r.guide_language) : r.guide_language, r),
       // The dropdown filters by language and by kind of guide.
       language: r.guide_language ? guideLanguageWord(r.guide_language) : undefined,
+      // Every language it serves: its own, then its guide's (lib/guides/guide-language).
+      languages: [...new Set([r.guide_language, ...(r.guide_languages ?? [])].filter(Boolean).map((l: string) => guideLanguageWord(l)))],
       category: r.guide_type || 'Egyptologist',
     })),
 

@@ -28,9 +28,14 @@ export function useGuideLanguageChoice() {
       .then(r => r.json())
       .then(j => {
         const keys: string[] = []
-        for (const row of (j?.data ?? []) as { guide_language?: string; is_active?: boolean }[]) {
-          const k = guideLanguageKey(row.guide_language)
-          if (k && row.is_active !== false && !keys.includes(k)) keys.push(k)
+        // A rate serves its own language and every language its guide
+        // speaks (guide_languages, owner 2026-11-18).
+        for (const row of (j?.data ?? []) as { guide_language?: string; guide_languages?: string[]; is_active?: boolean }[]) {
+          if (row.is_active === false) continue
+          for (const lang of [row.guide_language, ...(row.guide_languages ?? [])]) {
+            const k = guideLanguageKey(lang)
+            if (k && !keys.includes(k)) keys.push(k)
+          }
         }
         setWithRate(keys)
       })

@@ -261,6 +261,9 @@ export interface RateOption {
   details?: string  // e.g., "4★", "Standard cabin", "Aswan → Luxor"
   /** Guides: the language, in the agency's word (a dropdown filter). */
   language?: string
+  /** Guides: every language the rate serves: its own and the guide's
+   *  (suppliers.languages). A guide's rate serves every language they speak. */
+  languages?: string[]
   /** Hotels: the board basis (BB, HB …) — a dropdown filter. */
   board_basis?: string
   // Optional metadata used by the rich gate. Transport rates carry

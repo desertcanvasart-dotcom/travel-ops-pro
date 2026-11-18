@@ -16,9 +16,22 @@ import type { GridDay, RateOption, SelectedItem } from '../types'
 
 const norm = (s: string | null | undefined) => String(s ?? '').trim().toLowerCase()
 
+/** Every language a guide rate serves: its own, and its guide's (owner
+ *  2026-11-18: a guide's languages belong to the guide). */
+const servesOf = (g: RateOption): string[] => [g.language, ...(g.languages ?? [])].map(l => String(l ?? '').trim()).filter(Boolean)
+
+/** The rate serves `language`: written for it, or its guide speaks it. */
+export const servesLanguage = (g: RateOption, language: string | null | undefined): boolean =>
+  servesOf(g).some(l => norm(l) === norm(language))
+
+/** The rate was written for `language` (before one whose guide merely speaks it). */
+const writtenFor = (g: RateOption, language: string) => norm(g.language) === norm(language)
+
 /** The languages the agency has guides in, A→Z. */
 export function guideLanguages(guides: RateOption[]): string[] {
-  return [...new Set(guides.map(g => String(g.language ?? '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b))
+  const all = new Map<string, string>()
+  for (const g of guides) for (const l of servesOf(g)) if (!all.has(norm(l))) all.set(norm(l), l)
+  return [...all.values()].sort((a, b) => a.localeCompare(b))
 }
 
 const guideItem = (day: GridDay): SelectedItem | undefined =>
@@ -40,7 +53,8 @@ export function majorityGuideLanguage(days: GridDay[], guides: RateOption[]): st
 /** Of `pool`, the guides in `language` first — the whole pool when none is. */
 export function preferLanguage(pool: RateOption[], language: string | null | undefined): RateOption[] {
   if (!language) return pool
-  const inLang = pool.filter(g => norm(g.language) === norm(language))
+  const inLang = pool.filter(g => servesLanguage(g, language))
+    .sort((a, b) => Number(writtenFor(b, language)) - Number(writtenFor(a, language)))
   return inLang.length ? inLang : pool
 }
 
@@ -48,7 +62,8 @@ export function preferLanguage(pool: RateOption[], language: string | null | und
  *  else same city. Null when the city has no guide in that language. */
 export function counterpart(current: RateOption, language: string, guides: RateOption[]): RateOption | null {
   const sameCity = (g: RateOption) => norm(g.city) === norm(current.city)
-  const inLang = guides.filter(g => norm(g.language) === norm(language) && sameCity(g))
+  const inLang = guides.filter(g => servesLanguage(g, language) && sameCity(g))
+    .sort((a, b) => Number(writtenFor(b, language)) - Number(writtenFor(a, language)))
   return inLang.find(g => norm(g.category) === norm(current.category)) ?? inLang[0] ?? null
 }
 
@@ -69,7 +84,7 @@ export function alignGuideLanguage(days: GridDay[], guides: RateOption[], langua
   const next = days.map(day => {
     const item = guideItem(day)
     const current = item ? byId.get(item.rateId) : undefined
-    if (!current || !current.language || norm(current.language) === norm(language)) return day
+    if (!current || !current.language || servesLanguage(current, language)) return day
     const swap = counterpart(current, language, guides)
     if (!swap) {
       unmatched.push(day.dayNumber)

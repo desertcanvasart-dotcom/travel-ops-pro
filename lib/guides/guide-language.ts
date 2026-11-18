@@ -35,3 +35,20 @@ export const BUILT_IN_GUIDE_LANGUAGES = [
   'English', 'Arabic', 'French', 'German', 'Spanish', 'Italian',
   'Russian', 'Chinese', 'Japanese', 'Portuguese', 'Dutch', 'Polish',
 ] as const
+
+/**
+ * How well a guide rate serves a trip's language (owner, 2026-11-18: a
+ * guide's languages belong to the guide, as its cities do since #691).
+ *   0: the rate was written for that language (guide_language);
+ *   1: the guide speaks it (suppliers.languages, attached as guide_languages)
+ *      — one rate per guide covers every language they work in;
+ *   2: neither: the rate does not serve the language.
+ */
+export function guideLanguageRank(
+  row: { guide_language?: string | null; guide_languages?: readonly string[] | null },
+  language: string | null | undefined,
+): number {
+  if (sameGuideLanguage(row.guide_language, language)) return 0
+  if ((row.guide_languages ?? []).some(l => sameGuideLanguage(l, language))) return 1
+  return 2
+}

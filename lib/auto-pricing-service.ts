@@ -29,7 +29,7 @@ import { priceByBasis, toPricingBasis, unitsFor, type PricingBasis } from '@/lib
 import { createClient } from '@supabase/supabase-js'
 import { PACKAGE_TYPE_CONFIGS } from '@/lib/package-types'
 import { roundToCurrency } from '@/lib/currency-totals'
-import { attachGuideCities } from '@/lib/guides/guide-coverage'
+import { attachGuideCities, attachGuideLanguages } from '@/lib/guides/guide-coverage'
 import { DEFAULT_RATE_CURRENCY, normaliseRateCurrency } from '@/lib/org-rate-currency'
 import {
   seasonForDate,
@@ -2088,9 +2088,11 @@ export async function fetchGuideRows(orgId: string | null | undefined): Promise<
     .select('*')
     .eq('org_id', orgId ?? NO_ORG)
     .eq('is_active', true)
-  // Each with its guide's cities (supplier_cities): pickGuideRate prefers a
-  // guide who works in the day's city (lib/guides/guide-cities).
-  return attachGuideCities(supabaseAdmin, orgId, (data ?? []) as Record<string, any>[])
+  // Each with its guide's cities (supplier_cities) and languages
+  // (suppliers.languages): pickGuideRate prefers a guide who works in the
+  // day's city, and a guide's rate serves every language they speak
+  // (lib/guides/guide-cities, lib/guides/guide-language).
+  return attachGuideLanguages(supabaseAdmin, orgId, await attachGuideCities(supabaseAdmin, orgId, (data ?? []) as Array<{ supplier_id?: string | null } & Record<string, any>>))
 }
 
 /** The two guide grades the operator sells (2026-09-04): a licensed
