@@ -170,6 +170,40 @@ describe('Transportation Rates form (/api/resources/transportation)', () => {
     expect((await rows('transportation_rates')).some(r => r.route_name === 'Cairo Airport → Giza')).toBe(true)
   })
 
+  it('#837: the 409 names the card that exists: code, route, supplier and validity', async () => {
+    const first = await call(postResource(req(transportBody({ route_name: 'Cairo Airport → Downtown', rate_valid_from: '2026-11-01', rate_valid_to: '2027-10-31' }))))
+    const again = await call(postResource(req(transportBody({ route_name: 'Cairo Airport → Downtown', rate_valid_from: '2026-11-01', rate_valid_to: '2027-10-31', service_code: 'TYPED' }))))
+    expect(again.status).toBe(409)
+    expect(again.json.error).toBe(
+      `This rate already exists: ${first.json.service_code} · Cairo Airport → Downtown, from Own Cars, valid 2026-11-01 to 2027-10-31. ` +
+      'Edit that rate instead (search for its code in the list), or change what makes this one different: the supplier, route name, city, duration, area or validity dates.')
+  })
+
+  it('#837: an edit that turns a rate into a copy of another is refused, naming it; nothing is written', async () => {
+    const a = await call(postResource(req(transportBody())))
+    const b = await call(postResource(req(transportBody({ supplier_id: '__none__', service_code: 'CAIRO-DIRECT' }))))
+    expect(b.status).toBe(201)
+    // Give B the same supplier as A: now the same rate.
+    const edit = await call(putResource(req(transportBody({ service_code: 'CAIRO-DIRECT' })), ctx(b.json.id)))
+    expect(edit.status).toBe(409)
+    expect(edit.json.existing.id).toBe(a.json.id)
+    expect(edit.json.error).toMatch(new RegExp(`^This rate already exists: ${a.json.service_code}`))
+    expect((await rows('transportation_rates')).find(r => r.id === b.json.id)!.supplier_id).toBeNull()
+  })
+
+  it('#837: an edit that keeps a rate as it is saves, even where a copy already exists (a price fix must not be blocked)', async () => {
+    setMockTables({
+      suppliers: [{ id: OWN, name: 'Own Cars', org_id: 'org-1' }],
+      transportation_rates: [
+        { id: 'r1', org_id: 'org-1', service_code: 'C1', service_type: 'airport_transfer', city: 'Cairo', supplier_id: OWN, supplier_name: 'Own Cars', vehicles, rate_valid_from: '2026-01-01', rate_valid_to: '2099-12-31' },
+        { id: 'r2', org_id: 'org-1', service_code: 'C2', service_type: 'airport_transfer', city: 'Cairo', supplier_id: OWN, supplier_name: 'Own Cars', vehicles, rate_valid_from: '2026-01-01', rate_valid_to: '2099-12-31' },
+      ],
+      itinerary_services: [], tour_templates: [], tour_variation_services: [], b2b_pricing_rules: [], org_vocabularies: [],
+    })
+    const edit = await call(putResource(req(transportBody({ service_code: 'C2', rate_valid_from: '2026-01-01', rate_valid_to: '2099-12-31', vehicles: [{ ...vehicles[0], rate_eur: 45 }] })), ctx('r2')))
+    expect(edit.status).toBe(200)
+  })
+
   it('T5: the summary counts every rate of the company, whatever the list shows', async () => {
     setMockTables({
       suppliers: [],

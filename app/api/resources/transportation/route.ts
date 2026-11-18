@@ -6,7 +6,7 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
 import { OWN_SUPPLIER_EMBED, ownSupplierOnRow, ownSupplierOnRows } from '@/lib/rates/own-supplier-embed'
-import { findSameTransportRate, freeServiceCode } from '@/lib/rates/transport-natural-key'
+import { duplicateTransportRateMessage, findSameTransportRate, freeServiceCode } from '@/lib/rates/transport-natural-key'
 import { validateRatePayload } from '@/lib/rate-validation'
 
 // Actor-attributed service-role client (lib/supabase-actor): rate-table
@@ -159,10 +159,7 @@ export async function POST(request: NextRequest) {
     // taken it saves as CODE-2, CODE-3, … instead of being refused.
     const existing = findSameTransportRate(newRate, (orgRates ?? []).filter((r: any) => r.service_type === newRate.service_type))
     if (existing) {
-      return NextResponse.json({
-        error: 'A rate with these details already exists. Edit that rate, or change what makes this one different (supplier, route name, validity dates, city) before saving.',
-        existing,
-      }, { status: 409 })
+      return NextResponse.json({ error: duplicateTransportRateMessage(existing), existing }, { status: 409 })
     }
     newRate.service_code = freeServiceCode(newRate.service_code, orgRates ?? [])
 
