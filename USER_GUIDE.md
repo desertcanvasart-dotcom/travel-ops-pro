@@ -522,6 +522,8 @@ You can:
 - Download attachments
 - Link emails to client records
 
+**Enquiries from your own website form.** Many website forms email the office from one of its own addresses (for example concierge@yourdomain) to another (info@), with the visitor in *Reply-To*. Such an email is filed as the visitor writing to you: it shows their name and address, can become a lead, and your reply goes to them.
+
 ---
 
 ## Tour Templates
