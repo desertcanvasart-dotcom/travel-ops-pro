@@ -7508,6 +7508,8 @@
     "hotelCheckin": "Hotel Check-in",
     "hotelCheckout": "Hotel Check-out",
     "guideRequired": "Guide Required",
+    "guideOnlyDay": "Car & guide day",
+    "guideOnlyDayHint": "— guide and car for the day, no entrance tickets",
     "attractions": "Attractions",
     "addAttractionPlaceholder": "Add attraction name...",
     "descriptionToggle": "Description (click to expand)",

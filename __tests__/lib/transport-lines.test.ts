@@ -127,7 +127,7 @@ describe('pricing follows the list', () => {
 describe('the editor shows what pricing charges', () => {
   it('the preview route runs the engine\'s own steps, not a copy of the rules', () => {
     const src = readFileSync('app/api/b2b/transport-preview/route.ts', 'utf8')
-    for (const fn of ['parseItinerary(', 'determineTransportNeeds(', 'findTransportRate(', 'buildTransportCache(']) {
+    for (const fn of ['parseItinerary(', 'determineTransportNeeds(', 'findTransportRateExplained(', 'buildTransportCache(']) {
       expect(src).toContain(fn)
     }
   })
