@@ -552,6 +552,12 @@ export function UnifiedMessageThread({
         // to a notified send. Mirrors PortalMessagesPanel on the booking page.
         // A trip reply emails the traveller that it is waiting; when it could
         // not, say why, as for portal replies.
+        // A long WhatsApp text goes as several messages; say so (and if only
+        // some of them went, say that).
+        if (conversation.channel === 'whatsapp') {
+          const json = await res.json().catch(() => null)
+          if (json?.warning) setSendNotice(json.warning)
+        }
         if (conversation.channel === 'trip') {
           const json = await res.json().catch(() => null)
           // 'grouped' is not a failure: the email for a reply just before covers it.

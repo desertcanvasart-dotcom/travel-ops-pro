@@ -5,6 +5,7 @@ import { createServerClient } from '@/lib/supabase-server'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { senderForOrg, NO_WHATSAPP_SENDER } from '@/lib/whatsapp-org'
 import twilio from 'twilio'
+import { splitWhatsAppText, TWILIO_TEXT_LIMIT } from '@/lib/whatsapp-split'
 
 const twilioClient = twilio(
   process.env.TWILIO_ACCOUNT_SID,
@@ -79,7 +80,7 @@ export async function POST(request: NextRequest) {
     const body = await request.json()
     const { conversation_id, phone_number, message } = body
 
-    if (!message || (!conversation_id && !phone_number)) {
+    if (!message || !String(message).trim() || (!conversation_id && !phone_number)) {
       return NextResponse.json({ 
         error: 'Message and either conversation_id or phone_number required' 
       }, { status: 400 })
@@ -143,34 +144,59 @@ export async function POST(request: NextRequest) {
     // Format phone number for Twilio
     const formattedPhone = toPhone.startsWith('+') ? toPhone : `+${toPhone}`
 
-    // Send via Twilio
-    const twilioMessage = await twilioClient.messages.create({
-      body: message,
-      from,
-      to: `whatsapp:${formattedPhone}`,
-      statusCallback: `${process.env.NEXT_PUBLIC_APP_URL || "https://autoura.net"}/api/whatsapp/status-callback`
-    })
+    // Longer than one WhatsApp message may be (Twilio: 1,600 characters):
+    // sent as several, in order, each kept as its own message in the thread
+    // so it shows what the customer received. Twilio's refusal used to leave
+    // the agent cutting the text up by hand.
+    const parts = splitWhatsAppText(String(message), TWILIO_TEXT_LIMIT)
+    const saved: Record<string, unknown>[] = []
+    let firstSid: string | null = null
+    let warning: string | undefined
+    for (let i = 0; i < parts.length; i++) {
+      let twilioMessage
+      try {
+        twilioMessage = await twilioClient.messages.create({
+          body: parts[i],
+          from,
+          to: `whatsapp:${formattedPhone}`,
+          statusCallback: `${process.env.NEXT_PUBLIC_APP_URL || "https://autoura.net"}/api/whatsapp/status-callback`
+        })
+      } catch (sendError: any) {
+        // The first part failing is the send failing, as before.
+        if (i === 0) throw sendError
+        warning = `Only ${i} of ${parts.length} parts were sent: ${clientMessage(sendError, 'unknown error')}`
+        break
+      }
+      firstSid ??= twilioMessage.sid
 
-    // Store in database
-    const { data: savedMessage, error: saveError } = await supabase
-      .from('whatsapp_messages')
-      .insert({
-        conversation_id: convId,
-        message_sid: twilioMessage.sid,
-        direction: 'outbound',
-        message_body: message,
-        status: twilioMessage.status,
-        sent_at: new Date().toISOString()
-      })
-      .select()
-      .single()
+      // Store in database
+      const { data: savedMessage, error: saveError } = await supabase
+        .from('whatsapp_messages')
+        .insert({
+          conversation_id: convId,
+          message_sid: twilioMessage.sid,
+          direction: 'outbound',
+          message_body: parts[i],
+          status: twilioMessage.status,
+          sent_at: new Date().toISOString()
+        })
+        .select()
+        .single()
 
-    if (saveError) throw saveError
+      if (saveError) throw saveError
+      saved.push(savedMessage)
+    }
+    if (!warning && parts.length > 1) {
+      warning = `Sent as ${parts.length} messages (WhatsApp allows ${TWILIO_TEXT_LIMIT.toLocaleString('en-US')} characters in one).`
+    }
 
-    return NextResponse.json({ 
-      success: true, 
-      message: savedMessage,
-      twilio_sid: twilioMessage.sid 
+    return NextResponse.json({
+      success: true,
+      // `message` is the first part (older callers read one); `messages` is every part sent.
+      message: saved[0],
+      messages: saved,
+      twilio_sid: firstSid,
+      ...(warning ? { warning } : {}),
     })
   } catch (error: any) {
     console.error('Error sending message:', error)

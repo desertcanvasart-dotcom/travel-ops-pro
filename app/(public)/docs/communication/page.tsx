@@ -60,6 +60,7 @@ export default function CommunicationPage() {
           yellow notice under the conversation says why.
         </p>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li><strong>Long WhatsApp messages</strong> &mdash; WhatsApp allows 1,600 characters in one message. A longer reply is sent as several messages, in order, cut at a paragraph, line or sentence break, and a notice says how many it took. If one part fails, the notice says how many went.</li>
           <li><strong>Translation</strong> &mdash; translate incoming messages to English and write in English to send in the customer&apos;s language.</li>
           <li><strong>Generate Itinerary</strong> &mdash; opens the Pricing Grid with the conversation, the client and their contact details filled in.</li>
           <li><strong>View Client</strong> / <strong>Create Client</strong> &mdash; open the linked client, or start a new one pre-filled with the phone number (WhatsApp), the address (email) or the booking&apos;s client email (portal and trip chats).</li>
