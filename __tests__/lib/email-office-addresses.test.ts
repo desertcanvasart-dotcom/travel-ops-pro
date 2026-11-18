@@ -46,9 +46,12 @@ describe('the office rule', () => {
 describe('wiring', () => {
   it('sync and the live poller judge direction by the rule, and the scheduled sync repairs stored mail', () => {
     const sync = readFileSync('lib/email/sync-mailbox.ts', 'utf8')
-    expect(sync).toContain('isOfficeAddress(rule, from)')
+    // Both judge by the rule through lib/email/relayed-sender messageSender,
+    // which also files a form the office's website relays as the traveller's.
+    expect(sync).toContain('messageSender(headers, rule)')
+    expect(sync).toContain('messageSender(msgHeaders, rule)')
     expect(sync).not.toMatch(/fromEmail === userEmail/)
-    expect(readFileSync('app/api/gmail/poll/route.ts', 'utf8')).toContain('isOfficeAddress(officeRuleForPoll, fromEmail)')
+    expect(readFileSync('app/api/gmail/poll/route.ts', 'utf8')).toContain('messageSender(headers, officeRuleForPoll)')
     // Per company: each organisation's own rule over its own mail (20261204).
     expect(readFileSync('app/api/cron/gmail-sync/route.ts', 'utf8')).toContain('applyOfficeRuleWhenDue(db, orgId, await loadOfficeRule(db, orgId))')
     expect(readFileSync('app/settings/email/page.tsx', 'utf8')).toContain('<OfficeAddressesCard />')

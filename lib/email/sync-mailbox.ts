@@ -34,6 +34,7 @@
 // Gmail message can sit in two companies' mailboxes), this mailbox's
 // conversations, its office rule and its known contacts.
 
+import { messageSender } from '@/lib/email/relayed-sender'
 import { isOfficeAddress, officeRule, type OfficeRule } from '@/lib/email/office-addresses'
 import { loadOfficeRule } from '@/lib/email/office-addresses-server'
 import { createClient } from '@supabase/supabase-js'
@@ -80,15 +81,6 @@ export function extractEmailAddress(fromString: string | undefined | null): stri
   if (!fromString) return ''
   const match = fromString.match(/<([^>]+)>/)
   return match ? match[1].toLowerCase() : fromString.toLowerCase()
-}
-
-// Ours when the sender is the office — the connected mailbox, its domain, or
-// an address listed in Settings (lib/email/office-addresses). It was the
-// connected address only, so a reply from a colleague's office address read
-// as the customer writing.
-function getDirection(from: string | undefined | null, rule: OfficeRule): 'inbound' | 'outbound' {
-  if (!from) return 'inbound' // Default to inbound if we can't determine
-  return isOfficeAddress(rule, from) ? 'outbound' : 'inbound'
 }
 
 /** Gmail's "no such thing": a history id too old to replay, or a message
@@ -426,14 +418,15 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
         const getHeader = (name: string) =>
           headers.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || ''
 
-        const from = getHeader('From')
         const to = getHeader('To')
         const subject = getHeader('Subject')
 
-        // Determine client email (the external party)
-        const direction = getDirection(from, rule)
+        // Determine client email (the external party). A website form the
+        // office relays is the traveller's (messageSender).
+        const firstSender = messageSender(headers, rule)
+        const direction = firstSender.direction
         const clientEmail = direction === 'inbound'
-          ? extractEmailAddress(from)
+          ? extractEmailAddress(firstSender.fromHeader)
           : (to.split(',').map(extractEmailAddress).find((addr: string) => addr.includes('@') && !isOfficeAddress(rule, addr)) || extractEmailAddress(to))
 
         // Get last message for snippet
@@ -450,10 +443,7 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
         // is — machine signals on the counterparty do not outweigh a reply.
         if (!existingConvId) {
           const operatorWroteHere = messages.some(
-            m => getDirection(
-              (m.payload?.headers || []).find(h => h.name?.toLowerCase() === 'from')?.value,
-              rule
-            ) === 'outbound'
+            m => messageSender(m.payload?.headers || [], rule).direction === 'outbound'
           )
           const everyInboundAutomated = messages.every(m => {
             const hdrs: Record<string, string> = {}
@@ -461,7 +451,11 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
               if (h.name && typeof h.value === 'string') hdrs[h.name] = h.value
             }
             const fromValue = hdrs['From'] ?? hdrs['from'] ?? ''
-            if (getDirection(fromValue, rule) === 'outbound') return true // judge inbound only
+            const sender = messageSender(m.payload?.headers || [], rule)
+            if (sender.direction === 'outbound') return true // judge inbound only
+            // A traveller's enquiry relayed by the office's own website form
+            // is a person writing, whatever headers the form's mailer adds.
+            if (sender.relayed) return false
             return looksAutomated({
               counterpartyEmail: extractEmailAddress(fromValue),
               headers: hdrs,
@@ -481,7 +475,7 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
               if (h.name && typeof h.value === 'string') hdrs[h.name] = h.value
             }
             return isOwnNotificationMail({
-              outbound: getDirection(hdrs['From'] ?? hdrs['from'] ?? '', rule) === 'outbound',
+              outbound: messageSender(m.payload?.headers || [], rule).direction === 'outbound',
               headers: hdrs,
               subject: hdrs['Subject'] ?? hdrs['subject'] ?? '',
             })
@@ -540,12 +534,14 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
           const getMsgHeader = (name: string) =>
             msgHeaders.find(h => h.name?.toLowerCase() === name.toLowerCase())?.value || ''
 
-          const msgFrom = getMsgHeader('From')
+          // Who really wrote it: a relayed website form is the traveller's.
+          const msgSender = messageSender(msgHeaders, rule)
+          const msgFrom = msgSender.fromHeader
           const msgTo = getMsgHeader('To')
           const msgCc = getMsgHeader('Cc')
           const msgSubject = getMsgHeader('Subject')
           const msgDate = new Date(parseInt(message.internalDate || '0')).toISOString()
-          const msgDirection = getDirection(msgFrom, rule)
+          const msgDirection = msgSender.direction
 
           // Extract body
           let bodyHtml = ''
@@ -636,7 +632,7 @@ export async function syncMailbox(user_id: string, options: Partial<Omit<EmailSy
             for (const h of msgHeaders) if (h.name && typeof h.value === 'string') hdrs[h.name] = h.value
             // …nor does one of Autoura's own notifications (lib/email/own-notification-mail).
             const ownMail = isOwnNotificationMail({ outbound: msgDirection === 'outbound', headers: hdrs, subject: msgSubject })
-            revive = !ownMail && (msgDirection === 'outbound' || !looksAutomated({
+            revive = !ownMail && (msgDirection === 'outbound' || msgSender.relayed || !looksAutomated({
               counterpartyEmail: extractEmailAddress(msgFrom),
               headers: hdrs,
               labelIds: message.labelIds || [],

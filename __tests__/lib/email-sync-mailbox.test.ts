@@ -490,3 +490,51 @@ describe("Autoura's own notification mail is never a conversation", () => {
     expect(h.state.tables.email_conversations[0]).toMatchObject({ is_hidden: true, status: 'trashed' })
   })
 })
+
+// autoura-saas #812: the office's own website form writes From and To the
+// office, with the traveller in Reply-To. It read as the office writing to
+// itself: stored outbound, the office as the customer, so no lead was made
+// and a reply went back to the office.
+describe('a website form the office relays is the traveller writing', () => {
+  function formMail(id: string, threadId: string, extra: Array<{ name: string; value: string }> = []) {
+    const m = msg(id, threadId, 'Concierge <concierge@travel2egypt.org>', OFFICE, 40)
+    m.payload.headers = [
+      { name: 'From', value: 'Concierge <concierge@travel2egypt.org>' },
+      { name: 'To', value: OFFICE },
+      { name: 'Reply-To', value: 'Jane Doe <jane.doe@gmail.com>' },
+      { name: 'Subject', value: 'Itinerary request' },
+      ...extra,
+    ]
+    return m
+  }
+
+  it('stored as inbound, from the traveller, with the traveller as the customer', async () => {
+    seedStore()
+    h.gmail.mailbox.set('f1', formMail('f1', 'tf1'))
+    h.gmail.listed = ['f1', 'm2', 'm1']
+    await syncMailbox('u1', { max_results: 50, days_back: 3 })
+    const conv = writesTo('email_conversations', 'insert').map(w => w.payload)
+    expect(conv).toEqual([expect.objectContaining({ thread_id: 'tf1', client_email: 'jane.doe@gmail.com' })])
+    const stored = writesTo('email_messages', 'insert').map(w => w.payload).find(p => p.message_id === 'f1')
+    expect(stored).toMatchObject({ direction: 'inbound', from_address: 'Jane Doe <jane.doe@gmail.com>' })
+  })
+
+  it('kept even when the form\'s mailer marks it automated', async () => {
+    seedStore()
+    h.gmail.mailbox.set('f2', formMail('f2', 'tf2', [{ name: 'Auto-Submitted', value: 'auto-generated' }]))
+    h.gmail.listed = ['f2', 'm2', 'm1']
+    await syncMailbox('u1', { max_results: 50, days_back: 3 })
+    expect(writesTo('email_conversations', 'insert').map(w => w.payload.thread_id)).toEqual(['tf2'])
+  })
+
+  it('the office writing to a customer is unchanged', async () => {
+    seedStore()
+    const m = msg('o2', 'to2', OFFICE, CUSTOMER, 30, ['SENT'])
+    m.payload.headers.push({ name: 'Reply-To', value: 'someone@else.com' })
+    h.gmail.mailbox.set('o2', m)
+    h.gmail.listed = ['o2', 'm2', 'm1']
+    await syncMailbox('u1', { max_results: 50, days_back: 3 })
+    expect(writesTo('email_conversations', 'insert')[0].payload.client_email).toBe('poch.narcis@gmail.com')
+    expect(writesTo('email_messages', 'insert').find(w => w.payload.message_id === 'o2')!.payload).toMatchObject({ direction: 'outbound', from_address: OFFICE })
+  })
+})

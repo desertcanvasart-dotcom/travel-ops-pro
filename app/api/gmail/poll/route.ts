@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { isOfficeAddress, officeRule } from '@/lib/email/office-addresses'
+import { officeRule } from '@/lib/email/office-addresses'
 import { isOwnNotificationMail } from '@/lib/email/own-notification-mail'
+import { messageSender } from '@/lib/email/relayed-sender'
 import { loadOfficeRule } from '@/lib/email/office-addresses-server'
 import { clientMessage } from '@/lib/api-errors'
 import { createClient } from '@supabase/supabase-js'
@@ -170,9 +171,13 @@ export async function GET(request: NextRequest) {
                 return match ? match[1].toLowerCase() : str.toLowerCase()
               }
 
-              const fromEmail = extractEmail(from)
-              // Ours when the sender is the office, not only this mailbox (lib/email/office-addresses).
-              const direction = isOfficeAddress(officeRuleForPoll, fromEmail) ? 'outbound' : 'inbound'
+              // Ours when the sender is the office, not only this mailbox
+              // (lib/email/office-addresses); the traveller's when the
+              // office's own website form relayed it (lib/email/relayed-sender).
+              const sender = messageSender(headers, officeRuleForPoll)
+              const storedFrom = sender.fromHeader
+              const fromEmail = extractEmail(storedFrom)
+              const direction = sender.direction
               const clientEmail = direction === 'inbound' ? fromEmail : extractEmail(to)
 
               // Extract body
@@ -240,7 +245,8 @@ export async function GET(request: NextRequest) {
                   subject: hdrs['Subject'] ?? hdrs['subject'] ?? '',
                   snippet: message.data.snippet ?? '',
                 })
-                if (automated && !knownContacts.has(clientEmail)) {
+                // A relayed website enquiry is a person writing.
+                if (automated && !sender.relayed && !knownContacts.has(clientEmail)) {
                   continue
                 }
               }
@@ -299,7 +305,7 @@ export async function GET(request: NextRequest) {
                     message_id: message.data.id,
                     thread_id: threadId,
                     direction,
-                    from_address: from,
+                    from_address: storedFrom,
                     to_addresses: to ? to.split(',').map((e: string) => e.trim()) : [],
                     subject,
                     body_text: bodyText || null,
@@ -319,7 +325,7 @@ export async function GET(request: NextRequest) {
                   for (const h of headers) {
                     if (h.name && typeof h.value === 'string') hdrs[h.name] = h.value
                   }
-                  const human = !ownNotification && (direction !== 'inbound' || !looksAutomated({
+                  const human = !ownNotification && (direction !== 'inbound' || sender.relayed || !looksAutomated({
                     counterpartyEmail: clientEmail,
                     headers: hdrs,
                     labelIds: (message.data.labelIds || []) as string[],
