@@ -694,6 +694,10 @@ export default function CruisesPage() {
       
       if (data.success) {
         showToast('success', editingCruise ? t('notifications.cruiseUpdated') : t('notifications.cruiseCreated'))
+        // One starred boat per tier, route and length: say whose star moved (lib/rates/cruise-star).
+        if (data.star?.cleared?.length) {
+          showToast('success', t('notifications.preferredMoved', { ship: data.data?.ship_name ?? '', scope: data.star.scope, cleared: data.star.cleared.join(', ') }))
+        }
         setShowModal(false)
         fetchCruises()
       } else {

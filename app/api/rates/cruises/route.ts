@@ -1,3 +1,4 @@
+import { clearCompetingCruiseStars } from '@/lib/rates/cruise-star-server'
 import { NextRequest, NextResponse } from 'next/server'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
 import { clientMessage } from '@/lib/api-errors'
@@ -140,7 +141,10 @@ export async function POST(request: NextRequest) {
     }
     if (error) throw error
 
-    return NextResponse.json({ success: true, data, updated: false })
+    // Starred: one boat per tier, route and length (lib/rates/cruise-star).
+    const star = await clearCompetingCruiseStars(supabaseAdmin, orgId, data)
+
+    return NextResponse.json({ success: true, data, updated: false, ...(star ? { star } : {}) })
   } catch (error: any) {
     console.error('Error creating cruise:', error)
     return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
