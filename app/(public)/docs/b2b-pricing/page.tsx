@@ -76,6 +76,25 @@ export default function B2BPricingPage() {
         </ul>
       </section>
 
+      {/* Car & guide day */}
+      <section className="mb-10">
+        <h2 className="text-xl font-semibold text-gray-900 mb-4">Car &amp; Guide Days</h2>
+        <p className="text-gray-600 mb-3">
+          A car &amp; guide day is a guide and a car for the day (up to 8 hours), with water and the driver&apos;s tip,
+          and no fixed route, so it sells no entrance tickets. In the calculator&apos;s day editor, tick{' '}
+          <strong>Car &amp; guide day</strong> on a day that names no sight. The day is then priced with:
+        </p>
+        <ul className="list-disc list-inside space-y-1 text-gray-700">
+          <li>the guide, as on any guided day (untick <strong>Guide Required</strong> by hand if you want no guide);</li>
+          <li>one full-day vehicle (a day tour rate for the city), whatever the day&apos;s title says;</li>
+          <li>no entrance tickets: sights in the title are not read.</li>
+        </ul>
+        <p className="text-gray-600 mt-3">
+          The box is shown only while the day names no sight. Adding a sight or picking a ticket ends the car &amp; guide day,
+          and the day is priced from its sights again. A day whose transport you set by hand keeps your transport list.
+        </p>
+      </section>
+
       {/* Rate Sheet */}
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Rate Sheet Generation</h2>

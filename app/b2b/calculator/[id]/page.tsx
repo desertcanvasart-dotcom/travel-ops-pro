@@ -1,5 +1,6 @@
 'use client'
 
+import { GUIDE_ONLY, dayNamesSights, dropGuideOnlyWhenSightsPicked, setGuideOnly } from '@/lib/itineraries/guide-only-day'
 import { useVocabOptions } from '@/hooks/useVocabOptions'
 import { isEngineGuideMode } from '@/lib/guides/guide-mode'
 import { DayBandRow, DAY_LINE_EDGE } from '@/components/pricing/DayBand'
@@ -451,6 +452,17 @@ function TourPriceCalculatorInner() {
     setHasUnsavedChanges(true)
   }
 
+  // A car & guide day: the guide and one full-day vehicle, no tickets
+  // (lib/itineraries/guide-only-day).
+  const setDayGuideOnly = (dayIndex: number, on: boolean) => {
+    setEditableDays(prev => {
+      const updated = [...prev]
+      updated[dayIndex] = setGuideOnly(updated[dayIndex], on)
+      return updated
+    })
+    setHasUnsavedChanges(true)
+  }
+
   const toggleMeal = (dayIndex: number, meal: string) => {
     setEditableDays(prev => {
       const updated = [...prev]
@@ -469,7 +481,8 @@ function TourPriceCalculatorInner() {
     setEditableDays(prev => {
       const updated = [...prev]
       const attractions = [...(updated[dayIndex].attractions || []), attraction.trim()]
-      updated[dayIndex] = { ...updated[dayIndex], attractions, attractions_set_by_hand: true }
+      // Naming a sight ends a car & guide day (lib/itineraries/guide-only-day).
+      updated[dayIndex] = dropGuideOnlyWhenSightsPicked({ ...updated[dayIndex], attractions, attractions_set_by_hand: true })
       return updated
     })
     setHasUnsavedChanges(true)
@@ -588,7 +601,7 @@ function TourPriceCalculatorInner() {
       const updated = [...prev]
       // The picker's list is the day's whole list from now on — unticking the
       // last ticket must not let the engine re-read tickets from the wording.
-      updated[dayIndex] = { ...updated[dayIndex], attraction_ids: ids, tickets_set_by_hand: true }
+      updated[dayIndex] = dropGuideOnlyWhenSightsPicked({ ...updated[dayIndex], attraction_ids: ids, tickets_set_by_hand: true })
       return updated
     })
     setHasUnsavedChanges(true)
@@ -1465,6 +1478,23 @@ function TourPriceCalculatorInner() {
                                 ))}
                               </div>
                             </div>
+
+                            {/* Row 5 (end): a car & guide day — guide and one full-day vehicle, no tickets.
+                                Picking a sight ends it, so it is offered only on a day naming none. */}
+                            {!dayNamesSights(day) && (
+                              <label className="flex items-start gap-1.5 cursor-pointer">
+                                <input
+                                  type="checkbox"
+                                  checked={day.sightseeing === GUIDE_ONLY}
+                                  onChange={(e) => setDayGuideOnly(index, e.target.checked)}
+                                  className="mt-0.5 w-4 h-4 text-[#647C47] rounded border-gray-300 focus:ring-[#647C47]"
+                                />
+                                <span className="text-xs">
+                                  <span className="font-medium">{t('guideOnlyDay')}</span>{' '}
+                                  <span className="text-gray-500">{t('guideOnlyDayHint')}</span>
+                                </span>
+                              </label>
+                            )}
 
                             {/* Row 5a: The hotel or ship this stay uses at the pricing tier */}
                             {(day.accommodation_type === 'hotel' || day.accommodation_type === 'cruise') && (
