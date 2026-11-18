@@ -13,6 +13,7 @@ import {
   Settings, Filter, UserCheck, UserX
 } from 'lucide-react'
 import { useConfirmDialog, useConfirm } from '@/components/ConfirmDialog'
+import MessageBox from '@/components/whatsapp/MessageBox'
 
 // Supported languages
 const QUICK_LANGUAGES = [
@@ -551,6 +552,7 @@ export default function WhatsAppInboxPage() {
   const router = useRouter()
   const dialog = useConfirmDialog()
   const messagesEndRef = useRef<HTMLDivElement>(null)
+  const composerFormRef = useRef<HTMLFormElement>(null)
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -1165,15 +1167,15 @@ export default function WhatsAppInboxPage() {
               {translationEnabled && translatedMessage && !isTranslating && (
                 <div className="mt-2 p-2 bg-blue-50 border border-blue-200 rounded-lg">
                   <p className="text-xs text-blue-600 font-medium mb-1">{getLanguageInfo(customerLanguage).flag} Will send:</p>
-                  <p className="text-sm text-gray-700">{translatedMessage}</p>
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">{translatedMessage}</p>
                 </div>
               )}
             </div>
 
             {/* Message Input */}
-            <form onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-200">
-              <div className="flex items-center gap-3">
-                <input type="text" value={newMessage} onChange={(e) => setNewMessage(e.target.value)} placeholder={translationEnabled ? `Type in English → sends in ${getLanguageInfo(customerLanguage).name}` : "Type a message..."} className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-full focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+            <form ref={composerFormRef} onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-200">
+              <div className="flex items-end gap-3">
+                <MessageBox value={newMessage} onChange={setNewMessage} onSend={() => composerFormRef.current?.requestSubmit()} placeholder={translationEnabled ? `Type in English → sends in ${getLanguageInfo(customerLanguage).name}` : "Type a message... (Shift+Enter for a new line)"} className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
                 <button type="submit" disabled={!newMessage.trim() || sending || (translationEnabled && isTranslating)} className="p-2.5 bg-[#25D366] text-white rounded-full hover:bg-[#20bd5a] disabled:opacity-50">
                   {sending ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Send className="w-5 h-5" />}
                 </button>

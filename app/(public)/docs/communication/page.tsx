@@ -52,7 +52,9 @@ export default function CommunicationPage() {
       <section className="mb-10">
         <h2 className="text-xl font-semibold text-gray-900 mb-4">Answering</h2>
         <p className="text-gray-600 mb-3">
-          Type in the box under the conversation and send. A WhatsApp reply goes from your company&apos;s number, an email
+          Type in the box under the conversation and send. <strong>Enter</strong> sends; <strong>Shift+Enter</strong> starts
+          a new line, and line breaks (in a pasted itinerary, say) go to the customer as you typed them. The box grows
+          as you write. A WhatsApp reply goes from your company&apos;s number, an email
           reply from the mailbox the thread came from, and a portal or trip reply is shown to the traveller on their page
           with an email telling them a reply is waiting. When a send fails, or the traveller could not be emailed, a
           yellow notice under the conversation says why.

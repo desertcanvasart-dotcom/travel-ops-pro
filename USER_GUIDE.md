@@ -457,7 +457,7 @@ When a client sends a message to your business WhatsApp number, it appears in th
 1. Go to **WhatsApp Inbox** in the sidebar
 2. The left panel shows all conversations with the latest message preview
 3. Click a conversation to open the full chat on the right
-4. Type your reply at the bottom and press **Send**
+4. Type your reply at the bottom and press **Send** or **Enter**. **Shift+Enter** starts a new line; line breaks reach the client as you typed them
 
 ### Features
 
