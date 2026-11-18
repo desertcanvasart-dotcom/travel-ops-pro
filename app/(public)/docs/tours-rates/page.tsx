@@ -307,8 +307,10 @@ export default function ToursRatesPage() {
         </p>
         <p className="text-gray-600 mb-3">How automatic pricing picks a guide rate for a day:</p>
         <ul className="list-disc list-inside space-y-1 text-gray-700">
-          <li>The rate&apos;s language, guide type and guide mode must match the quote. A throughout quote is priced only from Throughout rates; with none, the guide shows as &ldquo;No rate&rdquo;.</li>
-          <li>A rate for the day&apos;s city comes first, then a rate with no city, then another city&apos;s rate.</li>
+          <li>The rate must serve the quote&apos;s language, and its guide type and guide mode must match. A throughout quote is priced only from Throughout rates; with none, the guide shows as &ldquo;No rate&rdquo;.</li>
+          <li>A rate serves its own language and <strong>every language its guide speaks</strong> (the guide&apos;s languages, edited beside the guide&apos;s cities on this page). So one rate per guide is enough: a guide who speaks English and French, with one English rate, is priced for French trips too. No copy of the rate per language is needed.</li>
+          <li>A rate for the day&apos;s city comes first, then a rate with no city, then another city&apos;s rate. Then the guide you chose, then a rate written for the language before one whose guide speaks it.</li>
+          <li>The language picker on quotes, the B2B calculator and departures offers every language a rate serves this way, and the Quote Builder&apos;s guide list shows those guides under each language they speak.</li>
           <li><strong>Full Day</strong> prices an ordinary guiding day. <strong>Half Day</strong> prices a day only when the trip marks it as a half day (a half-day tour, or a day whose transport is set to a half day). With no Half Day rate, that day is priced at the Full Day rate and the line says so.</li>
           <li><strong>Meet &amp; Assist day</strong> prices a throughout guide&apos;s days without sightseeing (arrival and departure).</li>
           <li><strong>Extended</strong> and <strong>Hourly</strong> rates are never used by automatic pricing. You can pick them on supplier vouchers and in the Pricing Grid.</li>
