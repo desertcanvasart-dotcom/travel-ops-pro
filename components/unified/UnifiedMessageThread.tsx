@@ -13,8 +13,11 @@ import {
   Send, User, Clock, Loader2, CheckCheck, Check,
   AlertCircle, Plus, History, Paperclip, Download,
   MessageSquare, Mail, UserPlus, UserX, ChevronDown,
-  ExternalLink, Languages, Sparkles, Trash2, Archive, MailOpen, X, Plane, Route, RotateCcw
+  ExternalLink, Languages, Sparkles, Trash2, Archive, MailOpen, X, Plane, Route, RotateCcw, Ban
 } from 'lucide-react'
+import { useRole } from '@/hooks/useRole'
+import { useBlockedNumbers } from '@/components/whatsapp/useBlockedNumbers'
+import { findBlocked, BLOCK_ROLES } from '@/lib/whatsapp-blocked'
 import { sanitizeHtml } from '@/lib/sanitize-html'
 import { escapeHtml } from '@/lib/html-escape'
 import { createClientHref as clientFormHref } from '@/lib/unified/create-client-link'
@@ -266,6 +269,29 @@ export function UnifiedMessageThread({
   const confirmSendConflict = useSendConflictConfirm()
   const { confirm: confirmDialog, alert: alertDialog } = useConfirmDialog()
   const dialog = { alert: alertDialog }
+  // Blocked WhatsApp numbers (20270120): owners, admins and managers block a sender.
+  const { canAccess } = useRole()
+  const canBlock = canAccess([...BLOCK_ROLES])
+  const blockedNumbers = useBlockedNumbers()
+  const [blockBusy, setBlockBusy] = useState(false)
+  const selectedBlock = conversation?.channel === 'whatsapp' ? findBlocked(blockedNumbers.blocked, conversation.contact_info) : null
+  const toggleBlock = async () => {
+    const phone = conversation?.contact_info
+    if (conversation?.channel !== 'whatsapp' || !phone || blockBusy) return
+    if (!selectedBlock) {
+      const ok = await confirmDialog({
+        title: 'Block this number?',
+        message: `New WhatsApp messages from ${phone} will be ignored: not shown in the inbox, not counted as unread, and no AI draft. They can still send to your number. This blocks inside the app only. You can unblock it any time.`,
+        variant: 'danger',
+        confirmText: 'Block',
+      })
+      if (!ok) return
+    }
+    setBlockBusy(true)
+    const r = selectedBlock ? await blockedNumbers.unblock(phone) : await blockedNumbers.block(phone)
+    setBlockBusy(false)
+    if (!r.ok) await dialog.alert(selectedBlock ? 'Could not unblock' : 'Could not block', r.error, 'warning')
+  }
   const [dismissingLead, setDismissingLead] = useState(false)
   // Portal replies: the message stored fine, but the traveller may not have
   // been told (no address, mail not connected, no live link). The booking
@@ -1033,7 +1059,10 @@ export function UnifiedMessageThread({
                   </button>
                 )}
               </div>
-              <p className="text-xs text-gray-500 truncate">{conversation.contact_info}</p>
+              <p className="text-xs text-gray-500 truncate">
+                {conversation.contact_info}
+                {selectedBlock && <span className="ml-2 inline-flex items-center gap-1 px-1.5 py-0.5 rounded bg-red-50 text-red-700 text-[10px] font-medium"><Ban className="w-3 h-3" />Blocked: new messages are ignored</span>}
+              </p>
               {(conversation.channel === 'email' || isPortal) && conversation.subject && (
                 <p className="text-xs text-gray-700 font-medium truncate mt-0.5 max-w-[300px]" title={conversation.subject}>
                   {conversation.subject}
@@ -1198,6 +1227,19 @@ export function UnifiedMessageThread({
               >
                 <RotateCcw className="w-3.5 h-3.5" />
                 {t('restore')}
+              </button>
+            )}
+
+            {conversation.channel === 'whatsapp' && canBlock && conversation.contact_info && (
+              <button
+                type="button"
+                onClick={toggleBlock}
+                disabled={blockBusy}
+                className={`p-1.5 rounded transition-colors disabled:opacity-50 ${selectedBlock ? 'bg-red-50 text-red-700 hover:bg-red-100' : 'text-gray-400 hover:text-red-500 hover:bg-red-50'}`}
+                title={selectedBlock ? 'Unblock number' : 'Block number'}
+                aria-label={selectedBlock ? 'Unblock number' : 'Block number'}
+              >
+                {blockBusy ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Ban className="w-3.5 h-3.5" />}
               </button>
             )}
 

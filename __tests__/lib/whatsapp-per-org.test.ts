@@ -225,6 +225,56 @@ describe('inbound webhook', () => {
   })
 })
 
+describe('inbound webhook: a number the company blocked (20270120)', () => {
+  const inbound = (to: string, from = 'whatsapp:+447700900123') => {
+    const fd = new FormData()
+    fd.set('From', from)
+    fd.set('To', to)
+    fd.set('Body', 'spam')
+    fd.set('MessageSid', `SM-blk-${to}-${from}`)
+    fd.set('NumMedia', '0')
+    return { formData: async () => fd, headers: new Headers(), url: 'https://x/api/whatsapp/webhook' } as never
+  }
+
+  it('stores nothing, drafts nothing, and only counts the message on the block row', async () => {
+    twoOrgs()
+    db.tables.whatsapp_blocked_numbers = [{ id: 'b1', org_id: 'org-b', phone_number: '+447700900123', blocked_message_count: 2 }]
+    const res = await webhook(inbound('whatsapp:+201001234567'))
+    expect(res.status).toBe(200)
+    expect(db.inserts).toEqual([])
+    expect(db.tables.whatsapp_conversations ?? []).toEqual([])
+    expect(createCopilotInboxEntry).not.toHaveBeenCalled()
+    expect(db.tables.whatsapp_blocked_numbers[0].blocked_message_count).toBe(3)
+    expect(db.tables.whatsapp_blocked_numbers[0].last_blocked_at).toBeTruthy()
+  })
+
+  it("one company's block never touches another company's inbox", async () => {
+    twoOrgs()
+    db.tables.whatsapp_blocked_numbers = [{ id: 'b1', org_id: 'org-b', phone_number: '+447700900123', blocked_message_count: 0 }]
+    await webhook(inbound('whatsapp:+819012345678'))
+    expect(db.tables.whatsapp_conversations.map(c => c.org_id)).toEqual(['org-a'])
+    expect(db.tables.whatsapp_blocked_numbers[0].blocked_message_count).toBe(0)
+  })
+
+  it('a failed block lookup asks Twilio to retry instead of filing the message', async () => {
+    twoOrgs()
+    db.failOn = 'whatsapp_blocked_numbers'
+    const err = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const res = await webhook(inbound('whatsapp:+201001234567'))
+    expect(res.status).toBe(503)
+    expect(db.inserts).toEqual([])
+    err.mockRestore()
+  })
+
+  it('the check sits before anything is created', () => {
+    const c = code('app/api/whatsapp/webhook/route.ts')
+    const at = c.indexOf('inboundIsBlocked(')
+    expect(at).toBeGreaterThan(c.indexOf('orgForWhatsAppNumber('))
+    expect(at).toBeLessThan(c.indexOf(".from('clients')"))
+    expect(at).toBeLessThan(c.indexOf(".from('whatsapp_conversations')"))
+  })
+})
+
 describe('outbound: every send uses the org sender', () => {
   it('lib/twilio-whatsapp takes the org and resolves its sender, never the env number directly', () => {
     const lib = code('lib/twilio-whatsapp.ts')
