@@ -2141,33 +2141,10 @@ export async function getGuideRate(
       }
     }
 
-    // 3. Legacy fallback to the guides supplier view — default ask only: a
-    //    'senior' or 'meet_greet' ask must never be silently priced from a
-    //    supplier's generic daily_rate.
-    if (grade !== 'egyptologist' || duration !== 'full_day' || mode !== 'spot' || !orgId) {
-      console.warn(`⚠️ No ${mode} guide rate for ${language} ${grade}/${duration} — flagging hole (no fabrication)`)
-      return null
-    }
-    const { data: guides, error } = await supabaseAdmin
-      .from('guides')
-      .select('id, name, daily_rate, languages, tier')
-      .eq('org_id', orgId)
-      .eq('is_active', true)
-      .contains('languages', [language])
-      .order('is_preferred', { ascending: false })
-
-    if (!error && guides && guides.length > 0) {
-      const selected = guides.find(g => g.tier === tier) || guides[0]
-      if ((selected.daily_rate ?? 0) > 0) {
-        debugLog(`✅ Guide (guides): ${selected.name} | €${selected.daily_rate}/day`)
-        return {
-          id: selected.id,
-          name: selected.name,
-          dailyRate: selected.daily_rate
-        }
-      }
-    }
-
+    // No guides.daily_rate fallback any more: it read a supplier's generic
+    // day rate, and when no guide of the tier had one, the FIRST guide of the
+    // language, whatever its tier (owner, 2026-11-19: a missing price is a
+    // gap, never a guess). Guides are priced from Rates → Guides only.
     // No language-matched DB rate. We do NOT fall back to an any-language guide
     // (fuzzy) or a hardcoded default — flag the hole instead.
     console.warn(`⚠️ No guide rate for ${language} (${tier}) — flagging hole (no fabrication)`)

@@ -5,7 +5,7 @@ import { getTieredActivityRate, applyActivityTiers } from '@/lib/rates/activity-
 import { createRateNormalizer, type RateNormalizer } from '@/lib/rates/rate-currency'
 import { makeDayTourVehicleFinder } from '@/lib/rates/day-tour-vehicle'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
-import { loadSeasonWindows } from '@/lib/auto-pricing-service'
+import { getGuideRate, loadSeasonWindows, type ServiceTier } from '@/lib/auto-pricing-service'
 import { computeUplift, seasonForDate } from '@/lib/pricing/season-uplift'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { currencySymbol } from '@/lib/currency-totals'
@@ -39,50 +39,19 @@ const supabaseAdmin = createServerClient()
 // HELPER FUNCTIONS (same as calculate-price/route.ts)
 // ============================================
 
-// The quoting company's guides only (suppliers.org_id, 20261205).
-async function selectGuideFromB2CTable(orgId: string | null, language: string = 'English', tier: string = 'standard'): Promise<{ rate: number; name: string; id: string } | null> {
+// A guiding day's rate: the company's own guide rates (Rates → Guides), for
+// the language, the day's city and date, as automatic pricing reads them
+// (getGuideRate). It read the old guides list instead: when no guide of the
+// tier had a day rate it took the FIRST guide of the language, and with none
+// of the language ANY guide at all (owner, 2026-11-19: a missing price is a
+// gap, never a guess). No rate keeps the line's stored cost.
+async function guideRateFor(
+  orgId: string | null, language: string, tier: string, normalizer: RateNormalizer,
+  city: string | null | undefined, date: string | null,
+): Promise<{ rate: number; name: string; id: string } | null> {
   if (!orgId) return null
-  const { data: guides, error } = await supabaseAdmin
-    .from('guides')
-    .select('id, name, daily_rate, languages, tier, is_preferred')
-    .eq('org_id', orgId)
-    .eq('is_active', true)
-    .contains('languages', [language])
-    .order('is_preferred', { ascending: false })
-
-  if (error || !guides || guides.length === 0) {
-    const { data: anyGuide } = await supabaseAdmin
-      .from('guides')
-      .select('id, name, daily_rate, tier')
-      .eq('org_id', orgId)
-      .eq('is_active', true)
-      .order('is_preferred', { ascending: false })
-      .limit(1)
-
-    if (!anyGuide || anyGuide.length === 0) return null
-
-    const anyRate = usableRate(anyGuide[0].daily_rate)
-    if (anyRate === null) return null
-
-    return {
-      rate: anyRate,
-      name: anyGuide[0].name || 'Guide',
-      id: anyGuide[0].id
-    }
-  }
-
-  // Prefer a guide of the right tier who HAS a rate. Most of this table has no
-  // daily_rate at all, and picking the first name in the list handed the caller
-  // a zero that wiped the itinerary's own guide cost.
-  const priced = guides.filter((g: any) => usableRate(g.daily_rate) !== null)
-  if (priced.length === 0) return null
-  const selectedGuide = priced.find((g: any) => g.tier === tier) || priced[0]
-
-  return {
-    rate: usableRate(selectedGuide.daily_rate)!,
-    name: selectedGuide.name || 'Guide',
-    id: selectedGuide.id
-  }
+  const found = await getGuideRate(orgId, language, tier as ServiceTier, normalizer, { city, date })
+  return found && found.dailyRate > 0 ? { rate: found.dailyRate, name: found.name, id: found.id } : null
 }
 
 // This company's entrance fee, in the rate currency the quote is built in
@@ -432,7 +401,7 @@ export async function POST(request: NextRequest) {
 
         // Guide
         if (serviceType === 'guide') {
-          const guide = await selectGuideFromB2CTable(orgId, language, tier)
+          const guide = await guideRateFor(orgId, language, tier, activityNormalizer, day.city || day.overnight_location, departureDate)
           if (guide) {
             unitCost = guide.rate
             lineTotal = guide.rate
@@ -495,8 +464,8 @@ export async function POST(request: NextRequest) {
     // 5. Calculate tour leader cost
     let tourLeaderCost = 0
     if (tour_leader_included) {
-      const guide = await selectGuideFromB2CTable(orgId, language, tier)
       const leaderCity = (days || [])[0]?.city || (days || [])[0]?.overnight_location || ''
+      const guide = await guideRateFor(orgId, language, tier, activityNormalizer, leaderCity, departureDate)
       const vehicle = await findDayTourVehicle(leaderCity, numPax + 1, is_eur_passport)
       const guideRate = guide?.rate || 0
       const baseVehicle = await findDayTourVehicle(leaderCity, numPax, is_eur_passport)

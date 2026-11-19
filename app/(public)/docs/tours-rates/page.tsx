@@ -314,6 +314,7 @@ export default function ToursRatesPage() {
           <li>The language picker on quotes, the B2B calculator and departures offers every language a rate serves this way, and the Quote Builder&apos;s guide list shows those guides under each language they speak.</li>
           <li><strong>Full Day</strong> prices an ordinary guiding day. <strong>Half Day</strong> prices a day only when the trip marks it as a half day (a half-day tour, or a day whose transport is set to a half day). With no Half Day rate, that day is priced at the Full Day rate and the line says so.</li>
           <li><strong>Meet &amp; Assist day</strong> prices a throughout guide&apos;s days without sightseeing (arrival and departure).</li>
+          <li>Only these rates price a guide, in automatic pricing and in B2B quotes made from an itinerary. A guide&apos;s general day rate on the old guide list is never used, and neither is the first guide found when none fits: with no rate for the language, city and date, the guide is a gap.</li>
           <li><strong>Extended</strong> and <strong>Hourly</strong> rates are never used by automatic pricing. You can pick them on supplier vouchers and in the Pricing Grid.</li>
           <li>The throughout guide&apos;s bed is not here. Enter it as <strong>Guide bed / night</strong> on the hotel&apos;s rate periods in Rates › Hotels.</li>
         </ul>
