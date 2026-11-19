@@ -41,6 +41,7 @@ export default function ZonesDocPage() {
           <li>A rate answers only its own area. A rate with no area, or set to the default area, is the city&apos;s rate. A West Bank hotel uses the West Bank rate; with no West Bank rate the day is <strong>a gap that names the area</strong> (&ldquo;&hellip; for Luxor for West Bank hotels&rdquo;), never the city price.</li>
           <li><strong>Sights</strong> &mdash; when rates list the sights they cover, the smallest rate that covers <em>every</em> sight of the day is used (Karnak alone &rarr; East Bank; Karnak and the Valley of the Kings &rarr; both banks). Several equally small: the starred one, else the cheapest with a warning; several transport companies and none starred is a gap. When no listing rate covers the day, a rate that lists no sights is used; with none of those either, a gap names the sights.</li>
           <li>The quote, the per-group prices and the transport preview all use the same rule.</li>
+          <li>The old <strong>Area</strong> of a transport rate (a guess from a fixed list of sight names: East Bank, Pyramids&hellip;) is gone. The pickup area and the sights covered replace it; the transport spreadsheet no longer has an Area column.</li>
         </ul>
       </section>
     </div>

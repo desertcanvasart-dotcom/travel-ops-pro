@@ -300,7 +300,6 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       colEnum('trip_shape', 'Trip Shape', ['one_way', 'same_day_return', 'overnight_return'], false),
       col('route_name', 'Route Name', 'text', false),
       col('duration', 'Duration', 'text', false),
-      col('area', 'Area', 'text', false),
       // The pickup area (20270125): one of the city's zones, by name or key;
       // and the sights a sightseeing rate covers, by their entrance-fee
       // names ("Karnak Temple; Luxor Temple"). Blank keeps what is stored.

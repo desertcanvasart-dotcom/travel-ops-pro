@@ -72,9 +72,9 @@ describe('determineTransportNeeds with the operator\'s list', () => {
       ['half_day', 'half_day', null],
       ['dinner_transfer', 'one_way', 'Karnak'],
     ])
-    // Sightseeing is priced by the attractions' area, like the rules do.
-    expect(needs[0].area).not.toBeNull()
-    expect(needs[1].area).toBeNull()
+    // No keyword-guessed area any more (20270126): the pickup area and the
+    // sights a rate covers decide (lib/pricing/transport-zone).
+    expect('area' in needs[0]).toBe(false)
   })
 
   it('an empty list is no transport that day', () => {

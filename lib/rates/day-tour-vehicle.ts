@@ -57,7 +57,6 @@ export function makeDayTourVehicleFinder(
       serviceType: 'day_tour',
       city: city || '',
       duration: 'full_day',
-      area: null,
       pax,
     })
     if (!record) return null

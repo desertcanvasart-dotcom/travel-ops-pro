@@ -176,7 +176,7 @@ describe('Transportation Rates form (/api/resources/transportation)', () => {
     expect(again.status).toBe(409)
     expect(again.json.error).toBe(
       `This rate already exists: ${first.json.service_code} · Cairo Airport → Downtown, from Own Cars, valid 2026-11-01 to 2027-10-31. ` +
-      'Edit that rate instead (search for its code in the list), or change what makes this one different: the supplier, route name, city, duration, area or validity dates.')
+      'Edit that rate instead (search for its code in the list), or change what makes this one different: the supplier, route name, city, duration, pickup area or validity dates.')
   })
 
   it('#837: an edit that turns a rate into a copy of another is refused, naming it; nothing is written', async () => {

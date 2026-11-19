@@ -10,7 +10,7 @@
 // - Mixed itineraries (Hotel + Cruise)
 // - Tour Leader (+0/+1) support
 // - Multi-pax calculation (1-40)
-// - Smart transportation selection (duration, area)
+// - Smart transportation selection (duration, pickup area, sights)
 // - All service types (accommodation, meals, entrances, transport, guide, airport, hotel services)
 //
 // v4 Changes:
@@ -131,16 +131,6 @@ export function transportServiceLabel(serviceType: string): string {
 
 export type TransportDuration = 'full_day' | 'half_day' | 'one_way'
 
-export type TransportArea = 
-  | 'east_bank'
-  | 'west_bank'
-  | 'pyramids'
-  | 'islamic_cairo'
-  | 'old_cairo'
-  | 'temple_visit'
-  | 'nubian_village'
-  | null
-
 // Cruise package type
 export type CruisePackageType = 'cruise_only' | 'cruise_plus_hotels' | null
 
@@ -200,7 +190,6 @@ export interface ItineraryDay {
   transport?: {
     service_type?: TransportServiceType
     duration?: TransportDuration
-    area?: TransportArea
     vehicle_type?: string // e.g., 'Horse Carriage' for Edfu
   }
   // NEW: Nile Cruise package flag - when true, uses bundled transport package
@@ -393,7 +382,6 @@ interface TransportRate {
   origin_city: string | null
   destination_city: string | null
   duration: string | null
-  area: string | null
   route_name: string | null
   /** one_way / same_day_return / overnight_return (lib/pricing/road-trips). */
   trip_shape?: string | null
@@ -489,37 +477,6 @@ export const VEHICLE_TYPES = [
 
 export type VehicleType = (typeof VEHICLE_TYPES)[number]
 
-// Area to attractions mapping (for auto-detection)
-const AREA_ATTRACTIONS: Record<string, string[]> = {
-  'east_bank': [
-    'karnak', 'karnak temple', 'luxor temple'
-  ],
-  'west_bank': [
-    'valley of the kings', 'valley of kings', 'hatshepsut', 'hatshepsut temple',
-    'colossi of memnon', 'medinet habu', 'valley of the queens',
-    'deir el-medina', 'ramesseum'
-  ],
-  'pyramids': [
-    'pyramids', 'pyramid', 'giza', 'sphinx', 'great sphinx',
-    'solar boat', 'khufu', 'khafre', 'menkaure'
-  ],
-  'islamic_cairo': [
-    'citadel', 'saladin citadel', 'khan el khalili', 'khan el-khalili',
-    'al-azhar', 'hussein mosque', 'old cairo bazaar'
-  ],
-  'old_cairo': [
-    'coptic cairo', 'hanging church', 'ben ezra', 'coptic museum',
-    'st. sergius', 'church of st. george'
-  ],
-  'temple_visit': [
-    'edfu', 'edfu temple', 'kom ombo', 'kom ombo temple',
-    'horus temple', 'sobek temple'
-  ],
-  'nubian_village': [
-    'nubian', 'nubian village', 'elephantine', 'elephantine island'
-  ]
-}
-
 // There used to be a city → vehicle table here ('edfu' → 'Horse Carriage').
 // It was a LABEL override only — the rate chosen never depended on it — and
 // it was Egypt written into a white-label engine. A vehicle a city needs is
@@ -572,27 +529,6 @@ export function getTierCategory(tier: ServiceTier, ladder: readonly string[] = P
 }
 
 /**
- * Detect area from attractions list
- */
-export function detectAreaFromAttractions(attractions: string[]): TransportArea {
-  if (!attractions || attractions.length === 0) return null
-  
-  const attractionsLower = attractions.map(a => a.toLowerCase())
-  
-  for (const [area, keywords] of Object.entries(AREA_ATTRACTIONS)) {
-    for (const keyword of keywords) {
-      for (const attraction of attractionsLower) {
-        if (attraction.includes(keyword)) {
-          return area as TransportArea
-        }
-      }
-    }
-  }
-  
-  return null
-}
-
-/**
  * Detect duration from number of attractions
  * Business rules:
  *   0 attractions → null (no sightseeing transport needed)
@@ -614,7 +550,6 @@ export function detectDurationFromAttractions(attractions: string[]): TransportD
 export interface TransportNeed {
   serviceType: TransportServiceType
   duration: TransportDuration
-  area: TransportArea
   useSpecialVehicle: boolean
   specialVehicleType?: VehicleType
   // Optional city override for rate lookup. Used when this leg's rate should
@@ -662,7 +597,6 @@ export function determineTransportNeeds(
     return day.transport_lines.map(line => ({
       serviceType: line.service_type,
       duration: durationFor(line.service_type),
-      area: isSightseeing(line.service_type) && day.attractions?.length ? detectAreaFromAttractions(day.attractions) : null,
       useSpecialVehicle: false,
       ...(line.city ? { city: line.city } : {}),
       ...(isRoadTransfer(line.service_type)
@@ -680,7 +614,6 @@ export function determineTransportNeeds(
     lines.push({
       serviceType: day.transport.service_type,
       duration: day.transport.duration || 'full_day',
-      area: day.transport.area || null,
       useSpecialVehicle: !!day.transport.vehicle_type,
       specialVehicleType: day.transport.vehicle_type as VehicleType,
       // A pinned road transfer still rides the planned route and shape —
@@ -725,7 +658,6 @@ export function determineTransportNeeds(
   // station transfers are emitted.
   const isTicketLeg = day.transport_type === 'train' || day.transport_type === 'sleeping_train'
   const isCruise = day.is_cruise_day === true
-  const transportArea = hasAttractions ? detectAreaFromAttractions(day.attractions) : null
 
   // Road alongside the day's travel (see ItineraryDay.road_transfers). Off on
   // a day with no train ticket means no road vehicle that day at all — only
@@ -738,7 +670,6 @@ export function determineTransportNeeds(
     lines.push({
       serviceType: 'intercity',
       duration: 'one_way',
-      area: null,
       useSpecialVehicle: false,
       originCity: ctx.road.from,
       destinationCity: ctx.road.to,
@@ -752,7 +683,6 @@ export function determineTransportNeeds(
   const stationTransfer = (city?: string): TransportNeed => ({
     serviceType: 'city_transfer',
     duration: 'one_way',
-    area: null,
     useSpecialVehicle: false,
     ...(city ? { city } : {}),
   })
@@ -778,7 +708,6 @@ export function determineTransportNeeds(
     lines.push({
       serviceType: hasAttractions && !isCruise ? 'airport_with_sightseeing' : 'airport_transfer',
       duration: 'one_way',
-      area: hasAttractions && !isCruise ? transportArea : null,
       useSpecialVehicle: false,
       ...(day.leg_to ? { city: day.leg_to } : {}),
     })
@@ -790,7 +719,6 @@ export function determineTransportNeeds(
       lines.push({
         serviceType: 'airport_with_sightseeing',
         duration: 'one_way',
-        area: transportArea,
         useSpecialVehicle: false,
       })
     } else {
@@ -798,14 +726,12 @@ export function determineTransportNeeds(
       lines.push({
         serviceType: 'airport_transfer',
         duration: 'one_way',
-        area: null,
         useSpecialVehicle: false,
       })
       if (hasAttractions) {
         lines.push({
           serviceType: sightseeingServiceType(attractionCount),
           duration: sightseeingDuration(attractionCount),
-          area: transportArea,
           useSpecialVehicle: false,
         })
       }
@@ -816,7 +742,6 @@ export function determineTransportNeeds(
     lines.push({
       serviceType: 'airport_transfer',
       duration: 'one_way',
-      area: null,
       useSpecialVehicle: false,
     })
   }
@@ -832,7 +757,6 @@ export function determineTransportNeeds(
       lines.push({
         serviceType: 'airport_transfer',
         duration: 'one_way',
-        area: null,
         useSpecialVehicle: false,
         city: departureCity, // departure-side: the leg's origin airport
       })
@@ -842,7 +766,6 @@ export function determineTransportNeeds(
     lines.push({
       serviceType: hasAttractions && !isCruise ? 'airport_with_sightseeing' : 'airport_transfer',
       duration: 'one_way',
-      area: hasAttractions && !isCruise ? transportArea : null,
       useSpecialVehicle: false,
       ...(day.leg_to ? { city: day.leg_to } : {}),
     })
@@ -865,7 +788,6 @@ export function determineTransportNeeds(
     lines.push({
       serviceType: hasAttractions ? 'intercity_with_sightseeing' : 'intercity',
       duration: 'one_way',
-      area: null,
       useSpecialVehicle: false,
       originCity: planned ? planned.from : previousDay?.city,
       destinationCity: planned ? planned.to : day.city,
@@ -882,7 +804,6 @@ export function determineTransportNeeds(
       lines.push({
         serviceType: sightseeingServiceType(attractionCount),
         duration: sightseeingDuration(attractionCount),
-        area: transportArea,
         useSpecialVehicle: false,
       })
     }
@@ -892,7 +813,6 @@ export function determineTransportNeeds(
     lines.push({
       serviceType: sightseeingServiceType(attractionCount),
       duration: sightseeingDuration(attractionCount),
-      area: transportArea,
       useSpecialVehicle: false,
     })
   }
@@ -902,7 +822,6 @@ export function determineTransportNeeds(
     lines.push({
       serviceType: GUIDE_ONLY_VEHICLE.serviceType,
       duration: GUIDE_ONLY_VEHICLE.duration,
-      area: null,
       useSpecialVehicle: false,
     })
   }
@@ -947,7 +866,6 @@ function appendExtras(lines: TransportNeed[], day: ItineraryDay): void {
     lines.push({
       serviceType: extra,
       duration: 'one_way',
-      area: null,
       useSpecialVehicle: false,
     })
   }
@@ -2418,7 +2336,7 @@ async function getItemizedTips(orgId: string | null | undefined, tier: ServiceTi
 
 /**
  * Build transport cache from database
- * Key format: "service_type|city|duration|area" (one entry per service, all vehicle rates in one row)
+ * Key format: "service_type|city|duration|zone" (one entry per service, all vehicle rates in one row)
  */
 export async function buildTransportCache(
   orgId: string | null | undefined,
@@ -2512,13 +2430,13 @@ export function orderTransportRows<T extends Record<string, any>>(rows: readonly
 }
 
 /** The question a rate answers: its road route and shape, or its service
- *  type, city, duration and area. Rates with one identity compete for a
+ *  type, city, duration and pickup area. Rates with one identity compete for a
  *  lookup (lib/pricing/transport-choice). */
 function transportIdentity(rate: TransportRate): string {
   if (isRoadTransferType(rate.service_type) && rateDeparture(rate) && rate.destination_city) {
     return roadRouteKey(rate.service_type, rateDeparture(rate), rate.destination_city, rateTripShape(rate))
   }
-  return [rate.service_type || '', (rate.city || rate.origin_city || '').toLowerCase(), rate.duration || '', rate.area || '', rate.zone || ''].join('|')
+  return [rate.service_type || '', (rate.city || rate.origin_city || '').toLowerCase(), rate.duration || '', rate.zone || ''].join('|')
 }
 
 /** Every rate of one identity, per cache (in the cache's order). */
@@ -2548,34 +2466,21 @@ export function transportCacheFromRows(rows: readonly TransportRate[], onDate?: 
     // Build multiple keys for flexible lookup (no vehicle_type — one row has all tiers)
     // The pickup area (20270125; '' = the city's default) is part of every
     // city key: a West Bank rate never answers an East Bank lookup.
+    // (The old `area` keyword guess is gone, 20270126: the pickup area and
+    // the sights a rate covers do its job.)
     const baseKey = [
       rate.service_type || '',
       effectiveCity.toLowerCase(),
       rate.duration || '',
-      rate.area || '',
       rate.zone || ''
     ].join('|')
 
     if (!cache.has(baseKey)) cache.set(baseKey, rate)
 
-    // Also cache without area for fallback
-    const keyNoArea = [
-      rate.service_type || '',
-      effectiveCity.toLowerCase(),
-      rate.duration || '',
-      '',
-      rate.zone || ''
-    ].join('|')
-
-    if (!cache.has(keyNoArea)) {
-      cache.set(keyNoArea, rate)
-    }
-
-    // Also cache without duration AND area for maximum fallback
+    // Also cache without duration for fallback
     const keyNoDurationNoArea = [
       rate.service_type || '',
       effectiveCity.toLowerCase(),
-      '',
       '',
       rate.zone || ''
     ].join('|')
@@ -2669,7 +2574,6 @@ export function findTransportRateExplained(
     serviceType: TransportServiceType
     city: string
     duration: TransportDuration
-    area: TransportArea
     pax: number
     vehicleType?: VehicleType  // Optional override for special vehicles
     originCity?: string
@@ -2686,7 +2590,7 @@ export function findTransportRateExplained(
   /** Rates list their sights and none covers the day's: a gap naming them. */
   uncovered?: { sights: string[]; rates: string[] }
 } {
-  const { serviceType, city, duration, area, pax, vehicleType, originCity, destinationCity } = params
+  const { serviceType, city, duration, pax, vehicleType, originCity, destinationCity } = params
   // Among the rates answering the found row's question (transport-choice).
   // When they list the sights they cover (20270125), the day's sights choose
   // which of them are in play first (lib/pricing/transport-zone).
@@ -2729,25 +2633,16 @@ export function findTransportRateExplained(
     }
   }
 
-  // Priority 1: Exact match (service_type + city + duration + area)
-  const exactKey = [serviceType, cityLower, duration, area || '', zone].join('|')
+  // Priority 1: Exact match (service_type + city + duration + pickup area)
+  const exactKey = [serviceType, cityLower, duration, zone].join('|')
   if (cache.has(exactKey)) {
     record = cache.get(exactKey)!
     debugLog(`✅ Transport exact match: ${exactKey}`)
   }
 
-  // Priority 2: Match without area
+  // Priority 2: Match without duration
   if (!record) {
-    const noAreaKey = [serviceType, cityLower, duration, '', zone].join('|')
-    if (cache.has(noAreaKey)) {
-      record = cache.get(noAreaKey)!
-      debugLog(`✅ Transport match (no area): ${noAreaKey}`)
-    }
-  }
-
-  // Priority 3: Match without duration
-  if (!record) {
-    const noDurationKey = [serviceType, cityLower, '', '', zone].join('|')
+    const noDurationKey = [serviceType, cityLower, '', zone].join('|')
     if (cache.has(noDurationKey)) {
       record = cache.get(noDurationKey)!
       debugLog(`⚠️ Transport fallback (no duration): ${noDurationKey}`)
@@ -2774,7 +2669,7 @@ export function findTransportRateExplained(
   // a missing one is listed and marks the price incomplete (2026-09-16).
 
   if (!record) {
-    debugLog(`❌ No transport rate found for: ${serviceType} | ${city} | ${duration} | ${area} | pax=${pax}`)
+    debugLog(`❌ No transport rate found for: ${serviceType} | ${city} | ${duration} | zone=${zone || 'default'} | pax=${pax}`)
     return { rate: null }
   }
 
@@ -4699,7 +4594,7 @@ export async function calculateDayBasedPricing(
       })
       const suffix = needsList.length > 1 ? ` leg ${legIndex + 1}/${needsList.length}` : ''
       const cruiseTag = isCruisePackageDay ? ' [cruise day]' : ''
-      debugLog(`🚗 Day ${day.day} (${legCity})${suffix}${cruiseTag}: ${needs.serviceType} | ${needs.duration} | area: ${needs.area || 'none'} | special: ${needs.useSpecialVehicle ? needs.specialVehicleType : 'no'}`)
+      debugLog(`🚗 Day ${day.day} (${legCity})${suffix}${cruiseTag}: ${needs.serviceType} | ${needs.duration} | special: ${needs.useSpecialVehicle ? needs.specialVehicleType : 'no'}`)
     })
   }
 
@@ -4772,7 +4667,6 @@ export async function calculateDayBasedPricing(
       serviceType: needs.serviceType,
       city: info.city,
       duration: needs.duration,
-      area: needs.area,
       pax: 2,
       vehicleType: needs.useSpecialVehicle ? needs.specialVehicleType : undefined,
       // Prefer per-leg overrides set by determineTransportNeeds (used for the
@@ -4812,7 +4706,7 @@ export async function calculateDayBasedPricing(
         enteredCurrency: rate.rate_currency ?? null,
         isPerPax: false,
         isOptional: false,
-        notes: `${needs.serviceType} | ${needs.duration}${needs.area ? ` | ${needs.area}` : ''}`
+        notes: `${needs.serviceType} | ${needs.duration}`
       })
     } else {
       const origin = info.needs.originCity || itinerary[info.day - 2]?.city
@@ -4930,8 +4824,7 @@ export async function calculateDayBasedPricing(
         serviceType: needs.serviceType,
         city: info.city,
         duration: needs.duration,
-        area: needs.area,
-        pax,
+          pax,
         vehicleType: needs.useSpecialVehicle ? needs.specialVehicleType : undefined,
         originCity: info.needs.originCity || itinerary[info.day - 2]?.city,
         destinationCity: info.needs.destinationCity || info.city,

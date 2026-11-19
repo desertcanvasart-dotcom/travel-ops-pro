@@ -22,12 +22,12 @@ import { chooseTransportRate } from '@/lib/pricing/transport-choice'
 
 const v = (rate: number) => [{ key: 'sedan', rate_eur: rate, rate_non_eur: null, capacity_min: 1, capacity_max: 2 }]
 const row = (id: string, rate: number, over: Record<string, unknown> = {}) => ({
-  id, service_code: `LXR-DAY-${id}`, service_type: 'day_tour', city: 'Luxor', duration: 'full_day', area: null,
+  id, service_code: `LXR-DAY-${id}`, service_type: 'day_tour', city: 'Luxor', duration: 'full_day',
   vehicles: v(rate), is_active: true, rate_valid_from: '2026-01-01', rate_valid_to: '2099-12-31',
   supplier_id: 'sup-nile', supplier_name: 'Nile Cars', ...over,
 }) as any
 const lookup = (rows: any[], pax = 2) => findTransportRateExplained(transportCacheFromRows(rows, '2026-12-01'), {
-  serviceType: 'day_tour', city: 'Luxor', duration: 'full_day', area: null as any, pax,
+  serviceType: 'day_tour', city: 'Luxor', duration: 'full_day', pax,
 })
 
 // One company, two different rates (named routes) for the same question.

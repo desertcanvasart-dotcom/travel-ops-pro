@@ -137,7 +137,6 @@ export async function POST(request: NextRequest) {
           serviceType: needs.serviceType,
           city,
           duration: needs.duration,
-          area: needs.area,
           pax: seats,
           vehicleType: needs.useSpecialVehicle ? needs.specialVehicleType : undefined,
           originCity: from ?? undefined,

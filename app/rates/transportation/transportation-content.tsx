@@ -55,7 +55,6 @@ interface TransportationRate {
   origin_city?: string | null
   destination_city?: string | null
   duration?: string | null
-  area?: string | null
   /** The pickup area in its city: a Settings → Zones key (20270125). */
   zone?: string | null
   /** Sightseeing rates: the entrance-fee names of the sights it covers. */
@@ -1601,9 +1600,8 @@ export default function TransportationContent() {
               )}
             </div>
 
-            {/* The pickup area and the sights covered (Settings → Zones; 20270125).
-                Pricing uses them from the next step; until then a rate in a
-                non-default area is not used by automatic pricing. */}
+            {/* The pickup area and the sights covered (Settings → Zones; 20270125):
+                automatic pricing chooses the rate by them (lib/pricing/transport-zone). */}
             {(zonesOfCity(zones, formData.city).length > 0 || sightsApply(formData.service_type)) && formData.city && (
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 {zonesOfCity(zones, formData.city).length > 0 && (
