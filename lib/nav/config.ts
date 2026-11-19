@@ -32,7 +32,7 @@ import {
   Train, BedDouble, Ship, Building, Shield, BookOpen, Handshake, Route, Package, Briefcase,
   Tags, Globe, Mail, Droplets, Calculator, Sparkles, CalendarDays, CalendarRange, Building2,
   ScrollText, ReceiptText, HandCoins, ClipboardPaste, ClipboardList, User, Bell, Link as LinkIcon,
-  Plug, SlidersHorizontal, PenLine, Bot, Hammer, Boxes, BellRing, Smartphone, Upload, Contact,
+  Plug, MapPin, SlidersHorizontal, PenLine, Bot, Hammer, Boxes, BellRing, Smartphone, Upload, Contact,
   PlusCircle, Store, Signature, Phone,
 } from 'lucide-react'
 
@@ -384,6 +384,7 @@ export const SETTINGS_NAV: SettingsGroup[] = [
     items: [
       { labelKey: 'destinations', descKey: 'destinations', href: '/settings/destinations', icon: Globe, roles: AM, adminEdits: true, keywords: ['countries', 'cities'] },
       { labelKey: 'vocabulary', descKey: 'vocabulary', href: '/settings/vocabulary', icon: BookOpen, roles: AM, adminEdits: true, keywords: ['words', 'dropdowns', 'tiers'] },
+      { labelKey: 'zones', descKey: 'zones', href: '/settings/zones', icon: MapPin, roles: AM, adminEdits: true, keywords: ['areas', 'east bank', 'west bank', 'transfers'] },
     ],
   },
   {
