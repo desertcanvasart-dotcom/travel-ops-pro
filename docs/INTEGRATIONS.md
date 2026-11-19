@@ -192,6 +192,34 @@ The response deliberately contains **no** internal notes, booked counts, client
 names or prices. You need to know whether a date is open, not how the operator's
 business is doing.
 
+### Seasons (the operator's peak calendar)
+
+```
+GET /api/public/v1/seasons?date=2026-12-31
+Authorization: Bearer tops_live_…
+```
+
+```json
+{
+  "success": true,
+  "asOf": "2026-11-19",
+  "rule": { "matchBy": "departure_date", "overlap": "highest_wins", "appliesTo": "per_person_selling_price" },
+  "seasons": [
+    { "name": "Winter peak", "upliftPercent": 10, "ranges": [{ "start": "2026-12-01", "end": "2027-02-28", "label": "Winter 26/27" }] },
+    { "name": "New Year", "upliftPercent": 25, "ranges": [{ "start": "2026-12-24", "end": "2027-01-02", "label": null }] }
+  ],
+  "date": { "date": "2026-12-31", "season": { "name": "New Year", "upliftPercent": 25 } }
+}
+```
+
+- The same key as availability. `?date=` is optional; without it there is no `date`.
+- The rules are the quotes' (`lib/pricing/season-feed.ts`): the **departure** date
+  decides; where windows overlap the **highest** premium wins, never the sum;
+  peak price per person = price × (1 + upliftPercent / 100), to the cent.
+- Switched-off seasons, 0% seasons and windows that have ended are left out.
+- Season names, premiums and dates only: no prices, costs or bookings. Cache for
+  up to 5 minutes.
+
 ---
 
 ## 4. Adding a new platform
