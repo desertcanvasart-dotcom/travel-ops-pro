@@ -16,6 +16,7 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { guardAiRate } from '@/lib/rate-limit/ai-limit'
 import { createMessageWithRetry, getUserFriendlyError } from '@/lib/ai/anthropic-client'
 import { MODEL_DRAFT } from '@/lib/ai/models'
+import { messageWords } from '@/lib/whatsapp/transcript'
 import { buildPolishPrompt, parsePolishReply, polishStyle, unsourcedNumbers, type PolishMessage } from '@/lib/whatsapp/polish-reply'
 
 export const dynamic = 'force-dynamic'
@@ -66,12 +67,14 @@ export async function POST(request: NextRequest) {
 
     const { data: rows } = await supabase
       .from('whatsapp_messages')
-      .select('direction, message_body, sent_at')
+      // '*': metadata (a voice note's transcript, 20270122) when it exists.
+      .select('*')
       .eq('conversation_id', conversationId)
       .order('sent_at', { ascending: false })
       .limit(12)
-    const messages: PolishMessage[] = ((rows ?? []) as Array<{ direction: string | null; message_body: string | null }>)
-      .map(m => ({ direction: m.direction === 'inbound' ? 'inbound' as const : 'outbound' as const, text: (m.message_body ?? '').trim() }))
+    // A voice note counts by its transcript (lib/whatsapp/transcript).
+    const messages: PolishMessage[] = ((rows ?? []) as Array<{ direction: string | null; message_body: string | null; metadata?: unknown }>)
+      .map(m => ({ direction: m.direction === 'inbound' ? 'inbound' as const : 'outbound' as const, text: messageWords(m) }))
       .filter(m => m.text)
       .reverse()
 

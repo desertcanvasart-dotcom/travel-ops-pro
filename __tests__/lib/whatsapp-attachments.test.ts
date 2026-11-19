@@ -7,7 +7,7 @@ import path from 'path'
 import {
   checkSendable, resolveMime, safeFileName, downloadName, extFor, labelFor, SENDABLE_ACCEPT, FILE_TYPES,
 } from '@/lib/whatsapp/attachments'
-import { outboundFilePath, inboundFilePath, storagePathBelongsTo, uploadWhatsAppMedia, isOwnTwilioMediaUrl } from '@/lib/whatsapp/media-storage'
+import { outboundFilePath, outboundVoicePath, inboundFilePath, storagePathBelongsTo, uploadWhatsAppMedia, isOwnTwilioMediaUrl } from '@/lib/whatsapp/media-storage'
 import { keepTwilioMedia } from '@/lib/whatsapp/keep-inbound-media'
 import * as backfill from '@/scripts/keep-whatsapp-media.mjs'
 
@@ -81,6 +81,13 @@ describe('where files are kept, and which a message may point at', () => {
     expect(storagePathBelongsTo(p, { message_sid: 'SMx', org_id: org })).toBe(true)
     expect(storagePathBelongsTo(p, { message_sid: 'SMx', org_id: other })).toBe(false)
     expect(storagePathBelongsTo(`outbound/${org}/abc/../../x.pdf`, { message_sid: 'SMx', org_id: org })).toBe(false)
+  })
+
+  it('a voice note is outbound/<org>/<id>.ogg, for its company only', () => {
+    const p = outboundVoicePath(org, 'v-1')
+    expect(p).toBe(`outbound/${org}/v-1.ogg`)
+    expect(storagePathBelongsTo(p, { message_sid: 'SMx', org_id: org })).toBe(true)
+    expect(storagePathBelongsTo(p, { message_sid: 'SMx', org_id: other })).toBe(false)
   })
 
   it('a customer\'s file is inbound/<org>/<its sid>.<ext>, for that message of that company only', () => {

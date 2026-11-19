@@ -13,6 +13,7 @@ import {
   Settings, Filter, UserCheck, UserX, Ban, Paperclip
 } from 'lucide-react'
 import MessageMedia from '@/components/whatsapp/MessageMedia'
+import VoiceRecorder from '@/components/whatsapp/VoiceRecorder'
 import { SENDABLE_ACCEPT, checkSendable } from '@/lib/whatsapp/attachments'
 import { useRole } from '@/hooks/useRole'
 import { useBlockedNumbers } from '@/components/whatsapp/useBlockedNumbers'
@@ -79,6 +80,7 @@ interface Message {
   media_type?: string | null
   media_storage_path?: string | null
   media_filename?: string | null
+  metadata?: unknown
   status: string
   sent_at: string
 }
@@ -577,6 +579,8 @@ export default function WhatsAppInboxPage() {
   const [sending, setSending] = useState(false)
   // A file chosen with the attach button; the typed text goes with it as the caption.
   const [attachedFile, setAttachedFile] = useState<File | null>(null)
+  // A voice note being recorded or reviewed takes the message box's place.
+  const [voiceActive, setVoiceActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [showNewChat, setShowNewChat] = useState(false)
   const [newPhoneNumber, setNewPhoneNumber] = useState('')
@@ -1275,13 +1279,32 @@ export default function WhatsAppInboxPage() {
                     setAttachedFile(f)
                   }}
                 />
-                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="p-2.5 text-gray-500 hover:text-gray-800 rounded-full hover:bg-gray-100 disabled:opacity-50" title="Attach a photo, video or document" aria-label="Attach a file">
-                  <Paperclip className="w-5 h-5" />
-                </button>
-                <MessageBox value={newMessage} onChange={setNewMessage} onSend={() => composerFormRef.current?.requestSubmit()} placeholder={translationEnabled ? `Type in English → sends in ${getLanguageInfo(customerLanguage).name}` : "Type a message... (Shift+Enter for a new line)"} className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
-                <button type="submit" disabled={(!newMessage.trim() && !attachedFile) || sending || (translationEnabled && isTranslating)} className="p-2.5 bg-[#25D366] text-white rounded-full hover:bg-[#20bd5a] disabled:opacity-50">
-                  {sending ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Send className="w-5 h-5" />}
-                </button>
+                {!voiceActive && (
+                  <>
+                    <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="p-2.5 text-gray-500 hover:text-gray-800 rounded-full hover:bg-gray-100 disabled:opacity-50" title="Attach a photo, video or document" aria-label="Attach a file">
+                      <Paperclip className="w-5 h-5" />
+                    </button>
+                    <MessageBox value={newMessage} onChange={setNewMessage} onSend={() => composerFormRef.current?.requestSubmit()} placeholder={translationEnabled ? `Type in English → sends in ${getLanguageInfo(customerLanguage).name}` : "Type a message... (Shift+Enter for a new line)"} className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
+                  </>
+                )}
+                {/* Text or a file → Send; nothing typed → the microphone (as in WhatsApp). */}
+                {!voiceActive && (newMessage.trim() || attachedFile) && (
+                  <button type="submit" disabled={sending || (translationEnabled && isTranslating)} className="p-2.5 bg-[#25D366] text-white rounded-full hover:bg-[#20bd5a] disabled:opacity-50">
+                    {sending ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Send className="w-5 h-5" />}
+                  </button>
+                )}
+                <VoiceRecorder
+                  conversationId={selectedConversation.id}
+                  showIdleButton={!newMessage.trim() && !attachedFile}
+                  onActiveChange={setVoiceActive}
+                  onError={msg => { dialog.alert('Voice message', msg, 'warning') }}
+                  onSent={saved => {
+                    setMessages(prev => [...prev, saved as Message])
+                    setConversations(prev => prev.map(c =>
+                      c.id === selectedConversation.id ? { ...c, last_message: '🎤 Voice message', last_message_at: new Date().toISOString() } : c
+                    ))
+                  }}
+                />
               </div>
             </form>
           </>
