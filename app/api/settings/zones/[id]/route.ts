@@ -10,8 +10,10 @@
 // autoura-saas #830.
 
 import { NextRequest, NextResponse } from 'next/server'
+// The client is createServerClient() from lib/supabase-server (via zoneAuth):
+// the actor-attributed one, so the hotel read below is never an unattributed write.
 import { zoneAuth } from '@/lib/rates/zone-auth'
-import { ZONE_COLS, canDeleteZone, validateZone, zonesOfCity } from '@/lib/rates/city-zones'
+import { ZONE_COLS, canDeleteZone, validateZone, zoneInUseError, zonesOfCity } from '@/lib/rates/city-zones'
 
 export const dynamic = 'force-dynamic'
 
@@ -85,14 +87,19 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     const { db: supabase, orgId } = auth
 
     const { id } = await params
-    const { data: all, error: readError } = await supabase.from('city_zones').select('id, city, label, is_default').eq('org_id', orgId)
+    const { data: all, error: readError } = await supabase.from('city_zones').select('id, city, key, label, is_default').eq('org_id', orgId)
     if (readError) throw readError
     const current = (all ?? []).find(z => z.id === id)
     if (!current) return NextResponse.json({ success: false, error: 'Zone not found' }, { status: 404 })
     const verdict = canDeleteZone(current, all ?? [])
     if (!verdict.ok) return NextResponse.json({ success: false, error: verdict.error }, { status: 400 })
-    // Steps 2 and 3 add hotels and transport cards that point at a zone; from
-    // then on a zone in use is refused here, naming where it is used.
+    // A zone hotels are in stays (20270124): deleting it would quietly move
+    // them to the city's default. Before that migration no hotel has a zone.
+    const { data: hotels, error: hotelError } = await supabase.from('accommodation_rates')
+      .select('property_name').eq('org_id', orgId).eq('zone', current.key).ilike('city', current.city.trim())
+    if (hotelError && !['42703', 'PGRST204'].includes(hotelError.code ?? '')) throw hotelError
+    const used = zoneInUseError(current, (hotels ?? []).map(h => h.property_name || 'a hotel'))
+    if (used) return NextResponse.json({ success: false, error: used }, { status: 400 })
 
     const { data, error } = await supabase.from('city_zones').delete().eq('id', id).eq('org_id', orgId).select('id')
     if (error) throw error

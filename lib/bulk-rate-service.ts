@@ -259,6 +259,9 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('property_name', 'Property Name', 'text', true),
       col('property_type', 'Property Type', 'text', false),
       col('city', 'City', 'text', false),
+      // The hotel's area within its city (20270124): one of the city's zones
+      // (Settings → Zones), by name or key. Blank keeps what is stored.
+      col('zone', 'Zone', 'text', false),
       // The tier the engine picks the hotel at (hotelCandidates matches
       // tier exactly). The sheet had none, so every hotel it created had
       // tier NULL and was never picked. Blank = the row's current tier, or
