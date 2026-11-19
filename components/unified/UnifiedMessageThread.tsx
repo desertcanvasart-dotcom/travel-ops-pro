@@ -25,6 +25,7 @@ import { escapeHtml } from '@/lib/html-escape'
 import { createClientHref as clientFormHref } from '@/lib/unified/create-client-link'
 import { ChannelBadge } from './ChannelBadge'
 import MessageBox from '@/components/whatsapp/MessageBox'
+import PolishBar from '@/components/whatsapp/PolishBar'
 import { UnifiedConversation, UnifiedMessage, ConversationChannel, EmailAttachment } from '@/types/unified'
 
 // Helper to extract and separate quoted content from emails
@@ -1550,6 +1551,9 @@ export function UnifiedMessageThread({
 
       {/* Message Input */}
       <form ref={composerFormRef} onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-200">
+        {conversation.channel === 'whatsapp' && (
+          <PolishBar conversationId={conversation.id} text={newMessage} setText={setNewMessage} disabled={sending} />
+        )}
         {conversation.channel === 'whatsapp' && attachedFile && (
           <div className="mb-2 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
             <Paperclip className="w-4 h-4 shrink-0 text-gray-500" aria-hidden />

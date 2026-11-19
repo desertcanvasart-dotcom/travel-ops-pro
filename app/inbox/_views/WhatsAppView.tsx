@@ -19,6 +19,7 @@ import { useBlockedNumbers } from '@/components/whatsapp/useBlockedNumbers'
 import { findBlocked, BLOCK_ROLES } from '@/lib/whatsapp-blocked'
 import { useConfirmDialog, useConfirm } from '@/components/ConfirmDialog'
 import MessageBox from '@/components/whatsapp/MessageBox'
+import PolishBar from '@/components/whatsapp/PolishBar'
 
 // Supported languages
 const QUICK_LANGUAGES = [
@@ -1250,6 +1251,7 @@ export default function WhatsAppInboxPage() {
 
             {/* Message Input */}
             <form ref={composerFormRef} onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-200">
+              <PolishBar conversationId={selectedConversation.id} text={newMessage} setText={setNewMessage} disabled={sending} />
               {attachedFile && (
                 <div className="mb-2 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
                   <Paperclip className="w-4 h-4 shrink-0 text-gray-500" aria-hidden />
