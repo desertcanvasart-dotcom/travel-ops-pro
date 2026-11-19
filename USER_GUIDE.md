@@ -467,6 +467,7 @@ When a client sends a message to your business WhatsApp number, it appears in th
 - **Link Client** - Connect the conversation to an existing client record
 - **Create Client** - Create a new client directly from the conversation
 - **Send Documents** - Send quotes, invoices, contracts, and receipts through WhatsApp
+- **Polish** - With WhatsApp AI on (Settings), type your reply your own way, pick a style (Professional & friendly, Short, Detailed, Formal) and press **Polish**: the box gets a finished message in the customer's language. Nothing is sent until you press Send; **Undo** restores your notes. A number that is not in your notes or the chat is flagged to check
 - **Block number** - Owners, admins and managers can block a number from the conversation header (🚫). Its new messages are ignored: not stored, not counted as unread, no AI draft. Only a count is kept. It blocks inside the app only; the sender can still send to your number. See and manage the list in **Settings → WhatsApp → Blocked numbers**
 - **Long messages** - WhatsApp allows 1,600 characters in one message. A longer reply is sent as several messages, in order, cut at a paragraph, line or sentence break. When a document's message is too long, the document goes first and the text follows
 

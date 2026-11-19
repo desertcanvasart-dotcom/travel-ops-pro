@@ -17,6 +17,7 @@ import { useBlockedNumbers } from '@/components/whatsapp/useBlockedNumbers'
 import { findBlocked, BLOCK_ROLES } from '@/lib/whatsapp-blocked'
 import { useConfirmDialog, useConfirm } from '@/components/ConfirmDialog'
 import MessageBox from '@/components/whatsapp/MessageBox'
+import PolishBar from '@/components/whatsapp/PolishBar'
 
 // Supported languages
 const QUICK_LANGUAGES = [
@@ -1217,6 +1218,7 @@ export default function WhatsAppInboxPage() {
 
             {/* Message Input */}
             <form ref={composerFormRef} onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-200">
+              <PolishBar conversationId={selectedConversation.id} text={newMessage} setText={setNewMessage} disabled={sending} />
               <div className="flex items-end gap-3">
                 <MessageBox value={newMessage} onChange={setNewMessage} onSend={() => composerFormRef.current?.requestSubmit()} placeholder={translationEnabled ? `Type in English → sends in ${getLanguageInfo(customerLanguage).name}` : "Type a message... (Shift+Enter for a new line)"} className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
                 <button type="submit" disabled={!newMessage.trim() || sending || (translationEnabled && isTranslating)} className="p-2.5 bg-[#25D366] text-white rounded-full hover:bg-[#20bd5a] disabled:opacity-50">
