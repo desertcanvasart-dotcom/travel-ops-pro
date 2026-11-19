@@ -65,16 +65,6 @@ function isIntercityType(serviceType: string | null | undefined, intercityTypes:
 const DURATIONS = ['full_day', 'half_day', 'one_way'] as const
 
 
-const AREAS = [
-  'east_bank',
-  'west_bank',
-  'pyramids',
-  'islamic_cairo',
-  'old_cairo',
-  'temple_visit',
-  'nubian_village'
-] as const
-
 // Helper to parse tiered rate fields from request body
 // Vehicles are resolved by lib/rates/vehicle-bands-server (a list, or the
 // legacy per-vehicle fields), validated against the agency's vehicle types,
@@ -89,7 +79,6 @@ export async function GET(request: NextRequest) {
     const city = searchParams.get('city')
     const serviceType = searchParams.get('service_type')
     const duration = searchParams.get('duration')
-    const area = searchParams.get('area')
     const originCity = searchParams.get('origin_city')
     const destinationCity = searchParams.get('destination_city')
     const supplierId = searchParams.get('supplier_id')
@@ -103,13 +92,11 @@ export async function GET(request: NextRequest) {
       .order('city')
       .order('service_type')
       .order('duration')
-      .order('area')
 
     // Apply filters
     if (city) query = query.ilike('city', `%${city}%`)
     if (serviceType) query = query.eq('service_type', serviceType)
     if (duration) query = query.eq('duration', duration)
-    if (area) query = query.eq('area', area)
     if (originCity) query = query.ilike('origin_city', `%${originCity}%`)
     if (destinationCity) query = query.ilike('destination_city', `%${destinationCity}%`)
     // Only one of the caller's company's suppliers (lib/suppliers/supplier-org).
@@ -140,7 +127,6 @@ export async function GET(request: NextRequest) {
         serviceTypes: SERVICE_TYPES,
         durations: DURATIONS,
         vehicleTiers: await vocabularyItemsForCurrentOrg('vehicle_type').then(items => items.length ? items.map(i => i.key) : [...PRESET_VEHICLE_KEYS]),
-        areas: AREAS
       }
     })
   } catch (error: any) {
@@ -191,7 +177,6 @@ export async function POST(request: NextRequest) {
       // Road transfers: the trip's shape (lib/pricing/road-trips); others none.
       trip_shape: tripShapeWrite.value,
       duration: body.duration || null,
-      area: body.area || null,
       route_name: routeName,
       includes: body.includes || null,
       season: body.season || null,
@@ -248,7 +233,6 @@ export async function POST(request: NextRequest) {
     } else {
       existingQuery = existingQuery.ilike('city', newRate.city)
       if (newRate.duration) existingQuery = existingQuery.eq('duration', newRate.duration)
-      if (newRate.area) existingQuery = existingQuery.eq('area', newRate.area)
     }
     if (newRate.supplier_id) {
       existingQuery = existingQuery.eq('supplier_id', newRate.supplier_id)
@@ -340,10 +324,11 @@ export async function PUT(request: NextRequest) {
       }
     }
 
-    // Keep the vehicle fields out of the raw spread — the patch above owns them.
+    // Keep the vehicle fields out of the raw spread — the patch above owns
+    // them — and the retired `area` (20270126: the pickup area is `zone`).
     const updates: Record<string, any> = {}
     for (const [key, val] of Object.entries(rawUpdates)) {
-      if (key !== 'vehicles' && !PRESET_VEHICLE_KEYS.some(t => key.startsWith(`${t}_`))) {
+      if (key !== 'vehicles' && key !== 'area' && !PRESET_VEHICLE_KEYS.some(t => key.startsWith(`${t}_`))) {
         updates[key] = val
       }
     }
@@ -360,7 +345,7 @@ export async function PUT(request: NextRequest) {
     }
 
     // Regenerate route_name if relevant fields changed
-    if (updates.city || updates.service_type || updates.duration || updates.area) {
+    if (updates.city || updates.service_type || updates.duration) {
       const { data: current } = await supabaseAdmin
         .from('transportation_rates')
         .select('*')
@@ -447,10 +432,6 @@ function generateServiceCode(data: any, intercityTypes: Set<string>): string {
   } else {
     parts.push(data.city?.toUpperCase().replace(/\s+/g, '') || 'CITY')
 
-    if (data.area) {
-      parts.push(data.area.toUpperCase().replace(/_/g, ''))
-    }
-
     if (data.duration === 'half_day') {
       parts.push('HALF')
     } else if (data.duration === 'full_day') {
@@ -491,19 +472,6 @@ function generateRouteName(data: any, intercityTypes: Set<string>): string {
 
   const parts: string[] = []
   parts.push(data.city || 'City')
-
-  if (data.area) {
-    const areaNames: Record<string, string> = {
-      'east_bank': 'East Bank',
-      'west_bank': 'West Bank',
-      'pyramids': 'Pyramids',
-      'islamic_cairo': 'Islamic Cairo',
-      'old_cairo': 'Old Cairo',
-      'temple_visit': 'Temple Visit',
-      'nubian_village': 'Nubian Village'
-    }
-    parts.push(areaNames[data.area] || data.area)
-  }
 
   if (data.duration === 'half_day') {
     parts.push('Half Day')

@@ -127,7 +127,6 @@ export async function POST(request: NextRequest) {
       // Road transfers: the trip's shape (lib/pricing/road-trips); others none.
       trip_shape: tripShapeWrite.value,
       duration: body.duration || null,
-      area: body.area || null,
       ...zoneWrite.patch,
       // The form's Route Name — it was sent and dropped.
       route_name: body.route_name || null,

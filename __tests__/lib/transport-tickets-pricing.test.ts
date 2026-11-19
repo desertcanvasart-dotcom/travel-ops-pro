@@ -172,11 +172,11 @@ describe('R1: a train fare of 0 or blank is a hole; a blank guide fare is the cu
 describe('T1: two rows for one service are picked in a FIXED order, validity honoured', () => {
   const v = (rate: number) => [{ key: 'sedan', rate_eur: rate, rate_non_eur: null, capacity_min: 1, capacity_max: 2 }]
   const row = (id: string, rate: number, over: Record<string, unknown> = {}) => ({
-    id, service_code: `CAI-APT-${id}`, service_type: 'airport_transfer', city: 'Cairo', duration: null, area: null,
+    id, service_code: `CAI-APT-${id}`, service_type: 'airport_transfer', city: 'Cairo', duration: null,
     vehicles: v(rate), is_active: true, rate_valid_from: '2026-01-01', rate_valid_to: '2099-12-31', ...over,
   }) as any
   const find = (rows: any[], on?: string) => findTransportRate(transportCacheFromRows(rows, on), {
-    serviceType: 'airport_transfer', city: 'Cairo', duration: 'one_way', area: null as any, pax: 2,
+    serviceType: 'airport_transfer', city: 'Cairo', duration: 'one_way', pax: 2,
   })
 
   it('the same answer whatever order the rows arrive in', () => {
@@ -261,7 +261,7 @@ describe('T3: a group bigger than the largest vehicle rides in several, priced a
 
   it('the engine’s transport lookup prices the fleet and names it', () => {
     const cache = transportCacheFromRows([{ id: 'r', service_code: 'LXR-APT', service_type: 'airport_transfer', city: 'Luxor', is_active: true, ...sedanMinivan } as any])
-    const hit = findTransportRate(cache, { serviceType: 'airport_transfer', city: 'Luxor', duration: 'one_way', area: null as any, pax: 12 })
+    const hit = findTransportRate(cache, { serviceType: 'airport_transfer', city: 'Luxor', duration: 'one_way', pax: 12 })
     expect(hit).toMatchObject({ base_rate_eur: 100, vehicle_type: '2 × Minivan' })
   })
 })

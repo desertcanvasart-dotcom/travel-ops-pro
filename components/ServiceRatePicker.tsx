@@ -79,7 +79,7 @@ export function normalizeRates(serviceType: string, data: any[], paxCount: numbe
           rate_non_eur: resolved?.rateNonEur || 0,
           supplier_id: r.supplier_id || null,
           supplier_name: r.supplier_name || r.supplier?.name || null,
-          details: [r.service_type, r.area, resolved?.vehicleType].filter(Boolean).join(' · '),
+          details: [r.service_type, r.zone, resolved?.vehicleType].filter(Boolean).join(' · '),
           ...entered(r),
           vehicleType: resolved?.vehicleType
         }

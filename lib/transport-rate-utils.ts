@@ -19,7 +19,6 @@ export interface TransportRateRecord {
   origin_city?: string | null
   destination_city?: string | null
   duration?: string | null
-  area?: string | null
   supplier_id?: string | null
   supplier_name?: string | null
   includes?: string | null

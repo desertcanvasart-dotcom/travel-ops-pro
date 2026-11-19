@@ -10,7 +10,7 @@
 //
 // The identity is every column the form lets the operator set that tells one
 // priced service from another: service type, city, departure and destination,
-// duration, area, supplier, route name, trip shape and validity window
+// duration, pickup area, supplier, route name, trip shape and validity window
 // (rate_valid_from/to — next year's price is its own row, and pricing picks it
 // on the days it covers). NOT the service code:
 // it is unique per company already (a clash is answered separately), and a
@@ -33,7 +33,7 @@ export function transportRateKey(r: Row): string {
   return [
     text(r.service_type),
     text(r.city), text(r.origin_city), text(r.destination_city),
-    text(r.duration), text(r.area),
+    text(r.duration),
     // The pickup area (20270125): the same route is priced once per area.
     text(r.zone),
     text(r.supplier_id),
@@ -101,7 +101,7 @@ export function duplicateTransportRateMessage(existing: Row): string {
   const card = [code, route].filter(Boolean).join(' · ')
   return `This rate already exists: ${card || 'an existing rate'}, from ${supplier}${validity}. ` +
     'Edit that rate instead (search for its code in the list), or change what makes this one different: ' +
-    'the supplier, route name, city, duration, area or validity dates.'
+    'the supplier, route name, city, duration, pickup area or validity dates.'
 }
 
 /**

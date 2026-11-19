@@ -192,7 +192,7 @@ describe('findTransportRate never borrows another city\'s rate', () => {
 
   it('an Aswan → Cairo road leg with no rate of its own is not priced from Luxor', () => {
     const hit = findTransportRate(cache, {
-      serviceType: 'intercity', city: 'Cairo', duration: 'one_way', area: null as any, pax: 2,
+      serviceType: 'intercity', city: 'Cairo', duration: 'one_way', pax: 2,
       originCity: 'Aswan', destinationCity: 'Cairo',
     })
     expect(hit).toBeNull()
@@ -200,10 +200,10 @@ describe('findTransportRate never borrows another city\'s rate', () => {
 
   it('a road leg is found by its route and shape, never by one city (2026-09-17)', () => {
     // The old city-only key no longer finds a road transfer at all…
-    expect(findTransportRate(cache, { serviceType: 'intercity', city: 'Luxor', duration: 'one_way', area: null as any, pax: 2 })).toBeNull()
+    expect(findTransportRate(cache, { serviceType: 'intercity', city: 'Luxor', duration: 'one_way', pax: 2 })).toBeNull()
     // …its route does: departure (city) → destination, one way.
     const routed = new Map([['road|intercity|luxor|aswan|one_way', { ...record, destination_city: 'Aswan' }]])
-    const hit = findTransportRate(routed as any, { serviceType: 'intercity', city: 'Aswan', duration: 'one_way', area: null as any, pax: 2, originCity: 'Luxor', destinationCity: 'Aswan' })
+    const hit = findTransportRate(routed as any, { serviceType: 'intercity', city: 'Aswan', duration: 'one_way', pax: 2, originCity: 'Luxor', destinationCity: 'Aswan' })
     expect(hit?.id).toBe('luxor-intercity')
   })
 })

@@ -29,7 +29,8 @@ interface TransportRate {
   city: string | null
   origin_city: string | null
   destination_city: string | null
-  area: string | null
+  /** The pickup area (a Settings → Zones key; 20270125). */
+  zone: string | null
   duration: string | null
   /** The vehicles list (lib/rates/vehicle-bands) — every vehicle the row prices. */
   vehicles: unknown
@@ -286,7 +287,7 @@ export default function EditSupplierDocumentPage() {
           city: r.city,
           origin_city: r.origin_city,
           destination_city: r.destination_city,
-          area: r.area,
+          zone: r.zone ?? null,
           duration: r.duration,
           vehicles: r.vehicles ?? null,
           includes: r.includes,
@@ -1486,7 +1487,7 @@ export default function EditSupplierDocumentPage() {
                                     {rate.origin_city && rate.destination_city
                                       ? `${rate.origin_city} → ${rate.destination_city}`
                                       : rate.city || '—'}
-                                    {rate.area && <span className="ml-1 text-gray-400">({rate.area.replace(/_/g, ' ')})</span>}
+                                    {rate.zone && <span className="ml-1 text-gray-400">({rate.zone.replace(/_/g, ' ')})</span>}
                                   </p>
                                 </div>
                                 <div className="text-right shrink-0 ml-3">

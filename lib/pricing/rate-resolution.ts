@@ -48,7 +48,6 @@ export type {
   VehicleType,
   TransportServiceType,
   TransportDuration,
-  TransportArea,
 } from '@/lib/auto-pricing-service'
 
 // Provenance + hole types live in the harness types module.

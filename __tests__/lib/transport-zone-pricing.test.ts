@@ -68,12 +68,12 @@ describe('ratesForSights: the smallest covering rate', () => {
 // ---------------------------------------------------------------------------
 const v = (rate: number) => [{ key: 'sedan', rate_eur: rate, rate_non_eur: null, capacity_min: 1, capacity_max: 2 }]
 const row = (id: string, rate: number, over: Record<string, unknown> = {}) => ({
-  id, service_code: `LXR-${id}`, service_type: 'day_tour', city: 'Luxor', duration: 'full_day', area: null,
+  id, service_code: `LXR-${id}`, service_type: 'day_tour', city: 'Luxor', duration: 'full_day',
   vehicles: v(rate), is_active: true, rate_valid_from: '2026-01-01', rate_valid_to: '2099-12-31',
   supplier_id: 'sup-nile', supplier_name: 'Nile Cars', route_name: id, zone: null, covers_sights: [], org_id: 'org-1', ...over,
 }) as any
 const lookup = (rows: any[], extra: Record<string, unknown> = {}) => findTransportRateExplained(transportCacheFromRows(rows, '2026-12-01'), {
-  serviceType: 'day_tour', city: 'Luxor', duration: 'full_day', area: null as any, pax: 2, ...extra,
+  serviceType: 'day_tour', city: 'Luxor', duration: 'full_day', pax: 2, ...extra,
 })
 
 describe('the lookup', () => {
