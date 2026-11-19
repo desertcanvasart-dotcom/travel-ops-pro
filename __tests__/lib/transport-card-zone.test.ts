@@ -102,9 +102,10 @@ describe('sheet, same-rate rule and engine wiring', () => {
       expect(src).toContain('...zoneWrite.patch,')
     }
   })
-  it('the engine leaves out non-default-area rates until step 4, and keeps every rate if zones cannot be read', () => {
+  it('the engine reads each rate as its area (the default area = none), and drops area rates if zones cannot be read', () => {
     const src = read('lib/auto-pricing-service.ts')
-    expect(src).toContain('zones ? rows.filter(r => !isNonDefaultZone(zones, r.city, (r as { zone?: string | null }).zone)) : rows')
+    expect(src).toContain('.filter(r => zones || !r.zone)')
+    expect(src).toContain('zone: zones && isNonDefaultZone(zones, r.city, r.zone) ? r.zone : null')
     expect(src).toMatch(/if \(error\) \{ console\.error\('city zones read error:', error\.message\); return null \}/)
   })
   it('deleting a zone transport rates price is refused', () => {

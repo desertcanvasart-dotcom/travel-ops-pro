@@ -26,7 +26,8 @@
 // ============================================
 
 import { narrowCruiseCandidates, sailingEndCity } from '@/lib/rates/cruise-star'
-import { chooseTransportRate, cheapestOfWarning, severalCompaniesMessage, type TransportChoice } from '@/lib/pricing/transport-choice'
+import { chooseTransportRate, cheapestOfWarning, rateName, severalCompaniesMessage, type TransportChoice } from '@/lib/pricing/transport-choice'
+import { pickupZoneFor, ratesForSights, uncoveredSightsMessage } from '@/lib/pricing/transport-zone'
 import { GUIDE_ONLY, GUIDE_ONLY_VEHICLE, isGuideOnlyDay } from '@/lib/itineraries/guide-only-day'
 import { priceByBasis, toPricingBasis, unitsFor, type PricingBasis } from '@/lib/pricing/pricing-basis'
 import { createClient } from '@supabase/supabase-js'
@@ -70,7 +71,7 @@ import { PRESET_TIERS, presetTierFor } from '@/lib/vocabulary'
 import { hotelServiceCategories, pickHotelServiceRow } from '@/lib/pricing/hotel-service-pick'
 import { cruiseSailings, packageForDuration, sailingRoute, type Sailing } from '@/lib/pricing/cruise-package'
 import { vehicleKeyLabel, vehicleRateForPax } from '@/lib/rates/vehicle-bands'
-import { isNonDefaultZone, type CityZone } from '@/lib/rates/city-zones'
+import { isNonDefaultZone, zoneLabel, type CityZone } from '@/lib/rates/city-zones'
 import { isHalfDayGuiding, mealCostForGroup, pickGuideRate, pickMealRate, rateValidOn, todayIso, type GuideAskDuration, type PickedMeal } from '@/lib/pricing/service-rates'
 
 const supabaseAdmin = createClient(
@@ -164,6 +165,10 @@ export interface ItineraryDay {
   /** entrance_fees ids picked from the fee table — exact tickets for the
    *  day; the wording above is then documentation only (lib/pricing/attractions). */
   attraction_ids?: string[]
+  /** The pickup area of the day's transport (a zone key, 20270123) when the
+   *  day has no hotel there to say it: a cruise day, a quote with no hotel.
+   *  Absent = from the hotel (lib/pricing/transport-zone). */
+  pickup_zone?: string | null
   /** The operator picked this day's tickets by hand: attraction_ids is the
    *  whole list, even when empty — the wording is not priced. */
   tickets_set_by_hand?: boolean
@@ -377,6 +382,10 @@ export interface DayPricingResult {
 // Transport rate from database
 interface TransportRate {
   id: string
+  /** The pickup area in its city (20270125); normalised when fetched: the city's default reads as null. */
+  zone?: string | null
+  /** The sights a sightseeing rate covers, by entrance-fee name (20270125). */
+  covers_sights?: string[] | null
   service_code: string
   service_type: string
   vehicle_type: string | null
@@ -1122,6 +1131,7 @@ export function parseItinerary(itineraryData: any, opts?: {
       meals,
       attractions,
       attraction_ids: Array.isArray(day.attraction_ids) ? day.attraction_ids.filter(Boolean).map(String) : undefined,
+      ...(typeof day.pickup_zone === 'string' && /^[a-z0-9][a-z0-9_]{0,59}$/.test(day.pickup_zone.trim()) ? { pickup_zone: day.pickup_zone.trim() } : {}),
       sightseeing: guideOnly ? GUIDE_ONLY : undefined,
       tickets_set_by_hand: day.tickets_set_by_hand === true || undefined,
       services,
@@ -2427,21 +2437,37 @@ export async function fetchTransportRows(orgId: string | null | undefined, norma
     .eq('org_id', orgId ?? NO_ORG)
     .eq('is_active', true)
   if (normalizer && allRates) allRates = await normalizer.normalize('transportation_rates', allRates) as typeof allRates
-  // A rate in a NON-default area of its city (20270125) is left out until the
-  // engine prices by the hotel's area (transport zones step 4): it would
-  // otherwise compete with the city's rate on the same lookup. Rates with no
-  // area, or the city's default area, price exactly as before.
-  const rows = (allRates ?? []) as TransportRate[]
-  if (!rows.some(r => (r as { zone?: string | null }).zone)) return rows
+  // Each rate answers for its pickup area (20270125, transport zones step 4):
+  // the city's default area reads as no area, so an old rate and a rate set
+  // to the default are the same rate; a West Bank rate answers only a West
+  // Bank lookup. Zones unreadable: rates with an area are left out, never
+  // priced in the city rate's place.
+  const raw = (allRates ?? []) as TransportRate[]
+  // Always read: a hotel in the city's default area must find the city's
+  // rate, and a gap names the area by its label.
   const zones = await loadEngineCityZones(orgId)
-  return zones ? rows.filter(r => !isNonDefaultZone(zones, r.city, (r as { zone?: string | null }).zone)) : rows
+  const rows = raw
+    .filter(r => zones || !r.zone)
+    .map(r => ({ ...r, zone: zones && isNonDefaultZone(zones, r.city, r.zone) ? r.zone : null, covers_sights: Array.isArray(r.covers_sights) ? r.covers_sights : [] }))
+  rowZones.set(rows, zones ?? [])
+  return rows
+}
+
+/** The zones a fetched rows array was normalised with, for its caches. */
+const rowZones = new WeakMap<readonly TransportRate[], Array<Pick<CityZone, 'city' | 'key' | 'label' | 'is_default'>>>()
+/** The zones a cache's lookups are normalised with (the default area reads as none). */
+const cacheZones = new WeakMap<Map<string, TransportRate>, Array<Pick<CityZone, 'city' | 'key' | 'label' | 'is_default'>>>()
+
+/** The lookup's pickup area as the cache keys it: '' for none or the city's default. */
+function lookupZone(cache: Map<string, TransportRate>, city: string, zone: string | null | undefined): string {
+  return zone && isNonDefaultZone(cacheZones.get(cache) ?? [], city, zone) ? zone : ''
 }
 
 /** The company's zones for the engine; null when unreadable (then every rate prices as before). */
-async function loadEngineCityZones(orgId: string | null | undefined): Promise<Array<Pick<CityZone, 'city' | 'key' | 'is_default'>> | null> {
-  const { data, error } = await supabaseAdmin.from('city_zones').select('city, key, is_default').eq('org_id', orgId ?? NO_ORG)
+async function loadEngineCityZones(orgId: string | null | undefined): Promise<Array<Pick<CityZone, 'city' | 'key' | 'label' | 'is_default'>> | null> {
+  const { data, error } = await supabaseAdmin.from('city_zones').select('city, key, label, is_default').eq('org_id', orgId ?? NO_ORG)
   if (error) { console.error('city zones read error:', error.message); return null }
-  return (data ?? []) as Array<Pick<CityZone, 'city' | 'key' | 'is_default'>>
+  return (data ?? []) as Array<Pick<CityZone, 'city' | 'key' | 'label' | 'is_default'>>
 }
 
 /**
@@ -2492,7 +2518,7 @@ function transportIdentity(rate: TransportRate): string {
   if (isRoadTransferType(rate.service_type) && rateDeparture(rate) && rate.destination_city) {
     return roadRouteKey(rate.service_type, rateDeparture(rate), rate.destination_city, rateTripShape(rate))
   }
-  return [rate.service_type || '', (rate.city || rate.origin_city || '').toLowerCase(), rate.duration || '', rate.area || ''].join('|')
+  return [rate.service_type || '', (rate.city || rate.origin_city || '').toLowerCase(), rate.duration || '', rate.area || '', rate.zone || ''].join('|')
 }
 
 /** Every rate of one identity, per cache (in the cache's order). */
@@ -2513,17 +2539,21 @@ export function transportCacheFromRows(rows: readonly TransportRate[], onDate?: 
     else groups.set(id, [rate])
   }
   transportGroups.set(cache, groups)
+  cacheZones.set(cache, rowZones.get(rows) ?? [])
 
   for (const rate of allRates) {
     // Use origin_city as fallback for city (some records use origin_city instead)
     const effectiveCity = rate.city || rate.origin_city || ''
 
     // Build multiple keys for flexible lookup (no vehicle_type — one row has all tiers)
+    // The pickup area (20270125; '' = the city's default) is part of every
+    // city key: a West Bank rate never answers an East Bank lookup.
     const baseKey = [
       rate.service_type || '',
       effectiveCity.toLowerCase(),
       rate.duration || '',
-      rate.area || ''
+      rate.area || '',
+      rate.zone || ''
     ].join('|')
 
     if (!cache.has(baseKey)) cache.set(baseKey, rate)
@@ -2533,7 +2563,8 @@ export function transportCacheFromRows(rows: readonly TransportRate[], onDate?: 
       rate.service_type || '',
       effectiveCity.toLowerCase(),
       rate.duration || '',
-      ''
+      '',
+      rate.zone || ''
     ].join('|')
 
     if (!cache.has(keyNoArea)) {
@@ -2545,7 +2576,8 @@ export function transportCacheFromRows(rows: readonly TransportRate[], onDate?: 
       rate.service_type || '',
       effectiveCity.toLowerCase(),
       '',
-      ''
+      '',
+      rate.zone || ''
     ].join('|')
 
     if (!cache.has(keyNoDurationNoArea)) {
@@ -2586,6 +2618,32 @@ export function transportCacheFromRows(rows: readonly TransportRate[], onDate?: 
   return cache
 }
 
+/** Whether any rate in this cache lists the sights it covers (20270125). */
+export function transportCacheListsSights(cache: Map<string, TransportRate>): boolean {
+  for (const group of transportGroups.get(cache)?.values() ?? []) {
+    if (group.some(r => (r.covers_sights?.length ?? 0) > 0)) return true
+  }
+  return false
+}
+
+/**
+ * Each day's sights by entrance-fee name, counted per day, as the engine
+ * reads them for transport (fees valid on `onDate`): for callers outside
+ * calculateDayBasedPricing, e.g. the transport preview.
+ */
+export async function daySightsFor(orgId: string | null | undefined, itinerary: readonly ItineraryDay[], onDate?: string | null): Promise<Map<number, string[]>> {
+  const [fees, aliases] = await Promise.all([
+    buildEntranceFeeCache(orgId),
+    supabaseAdmin.from('attraction_aliases').select('alias, canonical_name').eq('org_id', orgId ?? NO_ORG).eq('is_active', true)
+      .then(({ data }) => buildAliasMap(data as { alias: string; canonical_name: string }[] | null)),
+  ])
+  const on = onDate ?? todayIso()
+  const valid = fees.filter(f => rateValidOn(f, on))
+  const out = new Map<number, string[]>()
+  for (const d of itinerary) out.set(d.day, [...new Set(resolveAttractions([d], valid, aliases, true).tickets.map(t => t.name))])
+  return out
+}
+
 /** The rate for a lookup, with why: see findTransportRateExplained. */
 export function findTransportRate(
   cache: Map<string, TransportRate>,
@@ -2618,12 +2676,33 @@ export function findTransportRateExplained(
     destinationCity?: string
     /** Road transfers: the shape the rate must be; absent = one way. */
     tripShape?: TripShape
+    /** The pickup area (a zone key), from the guests' hotel (lib/pricing/transport-zone). */
+    zone?: string | null
+    /** The day's sights, by entrance-fee name: they pick among rates that list theirs. */
+    sights?: readonly string[]
   }
-): Pick<TransportChoice<TransportRate>, 'cheapestOf' | 'companies' | 'companiesStarred'> & { rate: TransportRate | null } {
+): Pick<TransportChoice<TransportRate>, 'cheapestOf' | 'companies' | 'companiesStarred'> & {
+  rate: TransportRate | null
+  /** Rates list their sights and none covers the day's: a gap naming them. */
+  uncovered?: { sights: string[]; rates: string[] }
+} {
   const { serviceType, city, duration, area, pax, vehicleType, originCity, destinationCity } = params
   // Among the rates answering the found row's question (transport-choice).
-  const decide = (found: TransportRate) => chooseTransportRate(transportGroups.get(cache)?.get(transportIdentity(found)) ?? [found], pax)
+  // When they list the sights they cover (20270125), the day's sights choose
+  // which of them are in play first (lib/pricing/transport-zone).
+  const decide = (found: TransportRate): TransportChoice<TransportRate> & { uncovered?: { sights: string[]; rates: string[] } } => {
+    const group = transportGroups.get(cache)?.get(transportIdentity(found)) ?? [found]
+    if (params.sights && group.some(r => (r.covers_sights?.length ?? 0) > 0)) {
+      const pool = ratesForSights(group, params.sights)
+      if (pool.kind === 'uncovered') {
+        return { rate: null, uncovered: { sights: [...new Set(params.sights)], rates: [...new Set(pool.rates.map(rateName))] } }
+      }
+      return chooseTransportRate(pool.rates, pax)
+    }
+    return chooseTransportRate(group, pax)
+  }
   const cityLower = city.toLowerCase()
+  const zone = lookupZone(cache, city, params.zone)
 
   let record: TransportRate | undefined
 
@@ -2651,7 +2730,7 @@ export function findTransportRateExplained(
   }
 
   // Priority 1: Exact match (service_type + city + duration + area)
-  const exactKey = [serviceType, cityLower, duration, area || ''].join('|')
+  const exactKey = [serviceType, cityLower, duration, area || '', zone].join('|')
   if (cache.has(exactKey)) {
     record = cache.get(exactKey)!
     debugLog(`✅ Transport exact match: ${exactKey}`)
@@ -2659,7 +2738,7 @@ export function findTransportRateExplained(
 
   // Priority 2: Match without area
   if (!record) {
-    const noAreaKey = [serviceType, cityLower, duration, ''].join('|')
+    const noAreaKey = [serviceType, cityLower, duration, '', zone].join('|')
     if (cache.has(noAreaKey)) {
       record = cache.get(noAreaKey)!
       debugLog(`✅ Transport match (no area): ${noAreaKey}`)
@@ -2668,7 +2747,7 @@ export function findTransportRateExplained(
 
   // Priority 3: Match without duration
   if (!record) {
-    const noDurationKey = [serviceType, cityLower, '', ''].join('|')
+    const noDurationKey = [serviceType, cityLower, '', '', zone].join('|')
     if (cache.has(noDurationKey)) {
       record = cache.get(noDurationKey)!
       debugLog(`⚠️ Transport fallback (no duration): ${noDurationKey}`)
@@ -2700,7 +2779,7 @@ export function findTransportRateExplained(
   }
 
   const choice = decide(record)
-  if (!choice.rate) return { rate: null, companies: choice.companies, companiesStarred: choice.companiesStarred }
+  if (!choice.rate) return { rate: null, companies: choice.companies, companiesStarred: choice.companiesStarred, uncovered: choice.uncovered }
   record = choice.rate
 
   // Resolve the right vehicle tier for the pax count
@@ -4631,6 +4710,30 @@ export async function calculateDayBasedPricing(
   const baseVehicleType = getVehicleTypeByPax(2)
   let baseTransportCost = 0
 
+  // Where each transport line starts, and what the day sees (transport zones
+  // step 4): the pickup area is the area of the hotel the guests leave from
+  // or arrive at in that city (lib/pricing/transport-zone); the day's sights,
+  // by entrance-fee name and counted per day, pick among rates that list the
+  // sights they cover. One context for the lines AND the per-group money, so
+  // they always price the same rate.
+  const hotelZoneIn = (city: string): string | null => {
+    for (const [c, stay] of hotelRatesMap) if (c.trim().toLowerCase() === city.trim().toLowerCase()) return (stay.row as { zone?: string | null }).zone ?? null
+    return null
+  }
+  const daySights = new Map<number, string[]>()
+  for (const d of itinerary) {
+    daySights.set(d.day, [...new Set(resolveAttractions([d], feesOnDate, attractionAliases, isEurPassport).tickets.map(t => t.name))])
+  }
+  const lookupContext = (dayNumber: number, city: string) => ({
+    zone: pickupZoneFor(itinerary, itinerary.findIndex(d => d.day === dayNumber), city, hotelZoneIn),
+    sights: daySights.get(dayNumber) ?? [],
+  })
+  /** " for West Bank hotels" when a line's pickup area is not the city's default: named in its gap. */
+  const zoneText = (cache: Map<string, TransportRate>, city: string, zone: string | null) => {
+    const zones = cacheZones.get(cache) ?? []
+    return zone && isNonDefaultZone(zones, city, zone) ? ` for ${zoneLabel(zones, city, zone)} hotels` : ''
+  }
+
   // Transport is looked up per DAY, among the rows valid on that day
   // (orderTransportRows): a rate whose validity window has ended does not
   // price, and next year's rate takes over on the day it starts.
@@ -4678,6 +4781,7 @@ export async function calculateDayBasedPricing(
       originCity: info.needs.originCity || itinerary[info.day - 2]?.city,
       destinationCity: info.needs.destinationCity || info.city,
       tripShape: needs.tripShape,
+      ...lookupContext(info.day, info.city),
     })
     const rate = found.rate
 
@@ -4717,7 +4821,8 @@ export async function calculateDayBasedPricing(
       const shapeWord = road ? ({ one_way: 'one-way', same_day_return: 'same-day return', overnight_return: 'overnight return' } as const)[needs.tripShape ?? 'one_way'] : ''
       const where = road && origin && destination && cityKey(origin) !== cityKey(destination)
         ? `${origin} → ${destination}${shapeWord ? ` (${shapeWord})` : ''}`
-        : info.city
+        : `${info.city}${road ? '' : zoneText(transportCacheFor(info.day), info.city, lookupContext(info.day, info.city).zone)}`
+      const what = `${transportServiceLabel(needs.serviceType).toLowerCase()} in ${where}`
       listUnpriced({
         id: `day${info.day}-transport${idSuffix}`,
         dayNumber: info.day,
@@ -4733,12 +4838,16 @@ export async function calculateDayBasedPricing(
         message: rate
           ? `The ${transportServiceLabel(needs.serviceType).toLowerCase()} rate for ${where} has no price for a group of 2. Fill its vehicles in Rates → Transportation.`
           : found.companies
-            ? severalCompaniesMessage(`the ${transportServiceLabel(needs.serviceType).toLowerCase()} in ${where}`, found.companies, found.companiesStarred)
-            : `No ${transportServiceLabel(needs.serviceType).toLowerCase()} rate for ${where}. Add it in Rates → Transportation.`,
+            ? severalCompaniesMessage(`the ${what}`, found.companies, found.companiesStarred)
+            : found.uncovered
+              ? uncoveredSightsMessage(what, found.uncovered.sights, found.uncovered.rates)
+              : `No ${transportServiceLabel(needs.serviceType).toLowerCase()} rate for ${where}. Add it in Rates → Transportation${zoneText(transportCacheFor(info.day), info.city, lookupContext(info.day, info.city).zone) && !road ? ', with that pickup area' : ''}.`,
       })
       warnings.push(found.companies
-        ? severalCompaniesMessage(`the ${transportServiceLabel(needs.serviceType).toLowerCase()} in ${where}`, found.companies, found.companiesStarred)
-        : `No transport rate in ${where} (${needs.serviceType}/${needs.duration})`)
+        ? severalCompaniesMessage(`the ${what}`, found.companies, found.companiesStarred)
+        : found.uncovered
+          ? `Day ${info.day}: ${uncoveredSightsMessage(what, found.uncovered.sights, found.uncovered.rates)}`
+          : `No transport rate in ${where} (${needs.serviceType}/${needs.duration})`)
     }
   }
 
@@ -4827,6 +4936,7 @@ export async function calculateDayBasedPricing(
         originCity: info.needs.originCity || itinerary[info.day - 2]?.city,
         destinationCity: info.needs.destinationCity || info.city,
         tripShape: needs.tripShape,
+        ...lookupContext(info.day, info.city),
       })
       if (needs.returnIncludedFromDay) continue
       total += usableRate(rate?.base_rate_eur) ?? 0
