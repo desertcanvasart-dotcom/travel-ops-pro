@@ -22,12 +22,15 @@ import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { createRateNormalizer } from '@/lib/rates/rate-currency'
 import {
   buildTransportCache,
+  daySightsFor,
   determineTransportNeeds,
   findTransportRateExplained,
   parseItinerary,
   resolveCruiseStay,
+  transportCacheListsSights,
   transportServiceLabel,
 } from '@/lib/auto-pricing-service'
+import { pickupZoneFor, uncoveredSightsMessage } from '@/lib/pricing/transport-zone'
 import { usableRate } from '@/lib/pricing/usable-rate'
 import { severalCompaniesMessage } from '@/lib/pricing/transport-choice'
 import { isRoadTransfer } from '@/lib/pricing/transport-lines'
@@ -108,6 +111,9 @@ export async function POST(request: NextRequest) {
 
     const itinerary = parseItinerary(rawDays, { packageType })
     const cache = await buildTransportCache(orgId, createRateNormalizer(currency))
+    // The day's sights choose among rates that list theirs (20270125), as the
+    // engine does; read only when some rate lists sights.
+    const sightsByDay = transportCacheListsSights(cache) ? await daySightsFor(orgId, itinerary) : null
 
     // The trip's road plan, as the engine builds it: the day after a cruise
     // starts from the ship's end port — the ship chosen for this tier, else
@@ -137,6 +143,10 @@ export async function POST(request: NextRequest) {
           originCity: from ?? undefined,
           destinationCity: to,
           tripShape: needs.tripShape,
+          // No hotel is chosen here: the day's own pickup area, else the
+          // city's default (lib/pricing/transport-zone).
+          zone: pickupZoneFor(itinerary, i, city, () => null),
+          ...(sightsByDay ? { sights: sightsByDay.get(day.day) ?? [] } : {}),
         })
         const rate = found.rate
         const label = transportServiceLabel(needs.serviceType)
@@ -166,7 +176,9 @@ export async function POST(request: NextRequest) {
               : found.companies
                 // Several companies quote it and none is starred: no price until one is (lib/pricing/transport-choice).
                 ? severalCompaniesMessage(`the ${label.toLowerCase()} in ${where}`, found.companies, found.companiesStarred)
-                : `No ${label.toLowerCase()} rate for ${where}. Add it in Rates → Transportation.`,
+                : found.uncovered
+                  ? uncoveredSightsMessage(`${label.toLowerCase()} in ${where}`, found.uncovered.sights, found.uncovered.rates)
+                  : `No ${label.toLowerCase()} rate for ${where}. Add it in Rates → Transportation.`,
         }
       })
       const raw = rawDays[i] as { transport_lines?: unknown } | undefined
