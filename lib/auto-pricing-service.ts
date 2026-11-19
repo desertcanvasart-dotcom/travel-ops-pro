@@ -2477,17 +2477,10 @@ export function transportCacheFromRows(rows: readonly TransportRate[], onDate?: 
 
     if (!cache.has(baseKey)) cache.set(baseKey, rate)
 
-    // Also cache without duration for fallback
-    const keyNoDurationNoArea = [
-      rate.service_type || '',
-      effectiveCity.toLowerCase(),
-      '',
-      rate.zone || ''
-    ].join('|')
-
-    if (!cache.has(keyNoDurationNoArea)) {
-      cache.set(keyNoDurationNoArea, rate)
-    }
+    // No "without duration" copy of the key: a half-day rate never answers
+    // a full-day ask, nor the other way round (owner, 2026-11-19: a missing
+    // price is a gap, never a guess). A rate that states NO duration (most
+    // transfers) keys at duration '' above, and still answers any ask.
 
     // For intercity rows (both 'intercity' and 'intercity_with_sightseeing'),
     // also cache by service_type|origin|destination so a flight/ground city
@@ -2640,12 +2633,13 @@ export function findTransportRateExplained(
     debugLog(`✅ Transport exact match: ${exactKey}`)
   }
 
-  // Priority 2: Match without duration
+  // Priority 2: a rate that states no duration (a transfer priced the same
+  // whatever the length). Never a rate OF another duration.
   if (!record) {
     const noDurationKey = [serviceType, cityLower, '', zone].join('|')
     if (cache.has(noDurationKey)) {
       record = cache.get(noDurationKey)!
-      debugLog(`⚠️ Transport fallback (no duration): ${noDurationKey}`)
+      debugLog(`✅ Transport match (rate with no duration): ${noDurationKey}`)
     }
   }
 

@@ -421,6 +421,7 @@ export default function ToursRatesPage() {
         <ul className="list-disc list-inside space-y-1 text-gray-700 mb-6">
           <li>Only rates valid on that day count (Valid From / Valid To). An expired rate does not price.</li>
           <li>The rate whose service type and city match the day. A road transfer is found by departure, destination and trip shape.</li>
+          <li>The length must match too: a half-day rate never prices a full day, nor the other way round; the day is listed as missing instead. A rate with no duration (most transfers) serves any length.</li>
           <li>One rate entered in several contract periods (an open-ended rate and a newer one for the same supplier and route name) is one rate: the period that started most recently wins.</li>
           <li>When several different rates match:
             <ul className="list-disc list-inside ml-6 mt-1 space-y-1">
