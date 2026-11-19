@@ -60,6 +60,7 @@ export default function CommunicationPage() {
           yellow notice under the conversation says why.
         </p>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li><strong>Polish</strong> (WhatsApp, when WhatsApp AI is on in Settings) &mdash; type what you want to say your own way, in any language, pick a style (Professional &amp; friendly, Short, Detailed or Formal) and press <strong>Polish</strong>. The box&apos;s text is replaced by a finished message in the language of the customer&apos;s last message. Nothing is sent: read it, edit it if needed, then send. <strong>Undo</strong> brings your notes back, and polishing again in another style starts from your notes. The AI must not add prices, times or dates; any number that is in neither your notes nor the chat is flagged (&ldquo;Check 350&rdquo;). The last style you used is remembered in this browser.</li>
           <li><strong>Long WhatsApp messages</strong> &mdash; WhatsApp allows 1,600 characters in one message. A longer reply is sent as several messages, in order, cut at a paragraph, line or sentence break, and a notice says how many it took. If one part fails, the notice says how many went.</li>
           <li><strong>Translation</strong> &mdash; translate incoming messages to English and write in English to send in the customer&apos;s language.</li>
           <li><strong>Generate Itinerary</strong> &mdash; opens the Pricing Grid with the conversation, the client and their contact details filled in.</li>
