@@ -13636,6 +13636,7 @@ export interface Database {
           media_type: string | null
           media_storage_path: string | null
           media_filename: string | null
+          metadata: Json
           status: string | null
           error_message: string | null
           sent_at: string | null
@@ -13651,6 +13652,7 @@ export interface Database {
           media_type?: string | null
           media_storage_path?: string | null
           media_filename?: string | null
+          metadata?: Json
           status?: string | null
           error_message?: string | null
           sent_at?: string | null
@@ -13666,6 +13668,7 @@ export interface Database {
           media_type?: string | null
           media_storage_path?: string | null
           media_filename?: string | null
+          metadata?: Json
           status?: string | null
           error_message?: string | null
           sent_at?: string | null

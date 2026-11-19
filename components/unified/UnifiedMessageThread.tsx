@@ -16,6 +16,7 @@ import {
   ExternalLink, Languages, Sparkles, Trash2, Archive, MailOpen, X, Plane, Route, RotateCcw, Ban
 } from 'lucide-react'
 import MessageMedia from '@/components/whatsapp/MessageMedia'
+import VoiceRecorder from '@/components/whatsapp/VoiceRecorder'
 import { SENDABLE_ACCEPT, checkSendable } from '@/lib/whatsapp/attachments'
 import { useRole } from '@/hooks/useRole'
 import { useBlockedNumbers } from '@/components/whatsapp/useBlockedNumbers'
@@ -269,6 +270,8 @@ export function UnifiedMessageThread({
   const [sending, setSending] = useState(false)
   // A WhatsApp file chosen with the attach button; the typed text is its caption.
   const [attachedFile, setAttachedFile] = useState<File | null>(null)
+  // A voice note being recorded or reviewed takes the message box's place.
+  const [voiceActive, setVoiceActive] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
   // One key per email reply (lib/email/send-with-guard): kept until it is sent.
   const replyKeyRef = useRef<string>(newRequestKey())
@@ -380,6 +383,7 @@ export function UnifiedMessageThread({
           media_type: msg.media_type,
           media_storage_path: msg.media_storage_path,
           media_filename: msg.media_filename,
+          metadata: msg.metadata,
           attachments: msg.attachments,
           status: msg.status || (msg.is_read ? 'read' : 'delivered'),
           is_read: msg.is_read,
@@ -1563,7 +1567,7 @@ export function UnifiedMessageThread({
           </div>
         )}
         <div className="flex items-end gap-3">
-          {conversation.channel === 'whatsapp' && (
+          {conversation.channel === 'whatsapp' && !voiceActive && (
             <>
               <input
                 ref={fileInputRef}
@@ -1585,30 +1589,44 @@ export function UnifiedMessageThread({
               </button>
             </>
           )}
-          <MessageBox
-            value={newMessage}
-            onChange={setNewMessage}
-            onSend={() => composerFormRef.current?.requestSubmit()}
-            placeholder={
-              translationEnabled
-                ? t('typeInEnglish', { language: getLanguageInfo(customerLanguage).name })
-                : conversation.channel === 'whatsapp' ? t('typeMessageViaWhatsApp') : t('typeMessageViaEmail')
-            }
-            className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-2xl focus:outline-none focus:ring-2"
-            style={{ '--tw-ring-color': colors.accent } as React.CSSProperties}
-          />
-          <button
-            type="submit"
-            disabled={(!newMessage.trim() && !(conversation.channel === 'whatsapp' && attachedFile)) || sending || (translationEnabled && isTranslating)}
-            className="p-2.5 text-white rounded-full hover:opacity-90 disabled:opacity-50"
-            style={{ backgroundColor: colors.accent }}
-          >
-            {sending ? (
-              <Loader2 className="w-5 h-5 animate-spin" />
-            ) : (
-              <Send className="w-5 h-5" />
-            )}
-          </button>
+          {!voiceActive && (
+            <MessageBox
+              value={newMessage}
+              onChange={setNewMessage}
+              onSend={() => composerFormRef.current?.requestSubmit()}
+              placeholder={
+                translationEnabled
+                  ? t('typeInEnglish', { language: getLanguageInfo(customerLanguage).name })
+                  : conversation.channel === 'whatsapp' ? t('typeMessageViaWhatsApp') : t('typeMessageViaEmail')
+              }
+              className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-2xl focus:outline-none focus:ring-2"
+              style={{ '--tw-ring-color': colors.accent } as React.CSSProperties}
+            />
+          )}
+          {/* WhatsApp with nothing typed: the microphone takes the Send button's place. */}
+          {!voiceActive && !(conversation.channel === 'whatsapp' && !newMessage.trim() && !attachedFile) && (
+            <button
+              type="submit"
+              disabled={(!newMessage.trim() && !(conversation.channel === 'whatsapp' && attachedFile)) || sending || (translationEnabled && isTranslating)}
+              className="p-2.5 text-white rounded-full hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: colors.accent }}
+            >
+              {sending ? (
+                <Loader2 className="w-5 h-5 animate-spin" />
+              ) : (
+                <Send className="w-5 h-5" />
+              )}
+            </button>
+          )}
+          {conversation.channel === 'whatsapp' && (
+            <VoiceRecorder
+              conversationId={conversation.id}
+              showIdleButton={!newMessage.trim() && !attachedFile}
+              onActiveChange={setVoiceActive}
+              onError={msg => setSendNotice(msg)}
+              onSent={() => fetchMessages(false)}
+            />
+          )}
         </div>
       </form>
 
