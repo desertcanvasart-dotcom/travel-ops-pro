@@ -7,6 +7,7 @@ import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-suppl
 import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
 import { OWN_SUPPLIER_EMBED, ownSupplierOnRow, ownSupplierOnRows } from '@/lib/rates/own-supplier-embed'
 import { duplicateTransportRateMessage, findSameTransportRate, freeServiceCode } from '@/lib/rates/transport-natural-key'
+import { cardZoneWrite } from '@/lib/rates/transport-card-zone'
 import { validateRatePayload } from '@/lib/rate-validation'
 
 // Actor-attributed service-role client (lib/supabase-actor): rate-table
@@ -113,6 +114,10 @@ export async function POST(request: NextRequest) {
     const tripShapeWrite = resolveTripShapeWrite({ ...body, service_code: serviceCode })
     if (!tripShapeWrite.ok) return NextResponse.json({ error: tripShapeWrite.error }, { status: 400 })
 
+    // The pickup area and the sights covered (20270125, lib/rates/transport-card-zone).
+    const zoneWrite = await cardZoneWrite(supabaseAdmin, orgId, body, null)
+    if (!zoneWrite.ok) return NextResponse.json({ error: zoneWrite.error }, { status: zoneWrite.status })
+
     const newRate: Record<string, any> = {
       service_code: serviceCode,
       service_type: body.service_type,
@@ -123,6 +128,7 @@ export async function POST(request: NextRequest) {
       trip_shape: tripShapeWrite.value,
       duration: body.duration || null,
       area: body.area || null,
+      ...zoneWrite.patch,
       // The form's Route Name — it was sent and dropped.
       route_name: body.route_name || null,
       includes: body.includes || null,

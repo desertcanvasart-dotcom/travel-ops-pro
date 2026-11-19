@@ -5,6 +5,8 @@ import { useSearchParams } from 'next/navigation'
 import { todayLocal } from '@/lib/today'
 import { useState, useEffect, useCallback, useRef } from 'react'
 import CityOptions from '@/app/components/CityOptions'
+import { cityMatch, zoneLabel, zonesOfCity, type CityZone } from '@/lib/rates/city-zones'
+import { isRoadTransfer, isSightseeing } from '@/lib/pricing/transport-lines'
 import { useTranslations } from 'next-intl'
 import { vehicleBands, type VehicleBandRate } from '@/lib/rates/vehicle-bands'
 import VehicleRatesTable, { useVehicleOptions, vehicleListFromRows, vehicleRowsFor, type VehicleFormRows } from '@/components/rates/VehicleRatesTable'
@@ -54,6 +56,10 @@ interface TransportationRate {
   destination_city?: string | null
   duration?: string | null
   area?: string | null
+  /** The pickup area in its city: a Settings → Zones key (20270125). */
+  zone?: string | null
+  /** Sightseeing rates: the entrance-fee names of the sights it covers. */
+  covers_sights?: string[] | null
   route_name?: string | null
   /** Road transfers: one_way / same_day_return / overnight_return. */
   trip_shape?: string | null
@@ -96,6 +102,10 @@ interface FormData {
   route_name: string
   service_type: string
   city: string
+  /** The pickup area (Settings → Zones key); '' = the city's default. */
+  zone: string
+  /** Sightseeing rates: the sights covered, by their entrance-fee names. */
+  covers_sights: string[]
   destination_city: string
   trip_shape: string
   includes: string
@@ -116,11 +126,16 @@ interface FormData {
   vehicles: VehicleFormRows
 }
 
+/** Sightseeing rates (not road transfers) say which sights they cover. */
+const sightsApply = (serviceType: string) => isSightseeing(serviceType) && !isRoadTransfer(serviceType)
+
 const initialFormData: FormData = {
   service_code: '',
   route_name: '',
   service_type: 'airport_transfer',
   city: '',
+  zone: '',
+  covers_sights: [],
   destination_city: '',
   trip_shape: 'one_way',
   includes: '',
@@ -305,6 +320,26 @@ export default function TransportationContent() {
     fetchSuppliers()
   }, [fetchRates, fetchSuppliers])
 
+  // The company's zones (Settings → Zones): the Pickup area choices.
+  const [zones, setZones] = useState<CityZone[]>([])
+  useEffect(() => {
+    fetch('/api/settings/zones')
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (j?.success) setZones(j.data?.zones ?? []) })
+      .catch(() => {})
+  }, [])
+  // The form city's entrance-fee names: the Sights covered choices.
+  const [cityFeeNames, setCityFeeNames] = useState<string[]>([])
+  useEffect(() => {
+    if (!isModalOpen || !formData.city || !sightsApply(formData.service_type)) { setCityFeeNames([]); return }
+    let alive = true
+    fetch(`/api/rates?type=entrance&city=${encodeURIComponent(formData.city)}`)
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (alive) setCityFeeNames([...new Set(((j?.data ?? []) as Array<{ attraction_name?: string | null }>).map(f => (f.attraction_name ?? '').trim()).filter(Boolean))].sort()) })
+      .catch(() => {})
+    return () => { alive = false }
+  }, [isModalOpen, formData.city, formData.service_type])
+
   useEffect(() => {
     setCurrentPage(1)
     setSelectedIds(new Set())
@@ -340,6 +375,8 @@ export default function TransportationContent() {
     setFormData(prev => ({
       ...prev,
       city,
+      // Another city's area and sights never carry over.
+      ...(cityMatch(prev.city) === cityMatch(city) ? {} : { zone: '', covers_sights: [] }),
       service_code: generateServiceCode(city, prev.service_type, prev.destination_city)
     }))
   }
@@ -439,6 +476,8 @@ export default function TransportationContent() {
       route_name: rate.route_name || '',
       service_type: rate.service_type,
       city: rate.city,
+      zone: rate.zone || '',
+      covers_sights: rate.covers_sights ?? [],
       destination_city: rate.destination_city || '',
       // A row from before trip shapes reads its shape from its name.
       trip_shape: sanitizeTripShape(rate.trip_shape) ?? tripShapeFromName(rate.service_code, rate.route_name),
@@ -508,6 +547,11 @@ export default function TransportationContent() {
         route_name: formData.route_name || null,
         service_type: formData.service_type,
         city: formData.city,
+        // The pickup area and the sights covered (20270125). Sent only when the
+        // company has zones / the rate is sightseeing, so nothing changes for a
+        // company that does not use them.
+        ...(zones.length > 0 ? { zone: formData.zone } : {}),
+        ...(sightsApply(formData.service_type) ? { covers_sights: formData.covers_sights } : {}),
         destination_city: formData.destination_city || null,
         trip_shape: isRoadTransferType(formData.service_type) ? formData.trip_shape : null,
         includes: formData.includes || null,
@@ -1109,6 +1153,8 @@ export default function TransportationContent() {
               const cityDisplay = (isIntercity && rate.destination_city
                 ? `${translateCity(rate.city)} → ${translateCity(rate.destination_city)}`
                 : translateCity(rate.city)) + (isRoadTransferType(rate.service_type) ? ` · ${t(`tripShape.${rateTripShape(rate)}`)}` : '')
+                + (rate.zone ? ` · ${zoneLabel(zones, rate.city, rate.zone)}` : '')
+                + (rate.covers_sights?.length ? ` · ${rate.covers_sights.length} sight${rate.covers_sights.length === 1 ? '' : 's'}` : '')
 
               return (
                 <div
@@ -1554,6 +1600,45 @@ export default function TransportationContent() {
                 </Field>
               )}
             </div>
+
+            {/* The pickup area and the sights covered (Settings → Zones; 20270125).
+                Pricing uses them from the next step; until then a rate in a
+                non-default area is not used by automatic pricing. */}
+            {(zonesOfCity(zones, formData.city).length > 0 || sightsApply(formData.service_type)) && formData.city && (
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                {zonesOfCity(zones, formData.city).length > 0 && (
+                  <Field label="Pickup area" htmlFor="tr-zone" hint="The hotels' area this rate is for. Empty = the city's default area.">
+                    <select id="tr-zone" value={formData.zone} onChange={e => setFormData(prev => ({ ...prev, zone: e.target.value }))} className={inputClass}>
+                      <option value="">{(zonesOfCity(zones, formData.city).find(z => z.is_default)?.label ?? 'Default')} (the city&apos;s default)</option>
+                      {zonesOfCity(zones, formData.city).filter(z => !z.is_default).map(z => (
+                        <option key={z.key} value={z.key}>{z.label}</option>
+                      ))}
+                    </select>
+                  </Field>
+                )}
+                {sightsApply(formData.service_type) && (
+                  <Field label="Sights covered" htmlFor="tr-sights" hint="The sights this price includes, from your entrance-fee sheet. Empty = not stated." className="sm:col-span-2">
+                    <div id="tr-sights" className="flex flex-wrap gap-1.5" role="group" aria-label="Sights covered">
+                      {cityFeeNames.length === 0 && <span className="text-xs text-gray-500">No entrance fees for this city yet.</span>}
+                      {[...new Set([...formData.covers_sights, ...cityFeeNames])].map(name => {
+                        const on = formData.covers_sights.includes(name)
+                        return (
+                          <button
+                            key={name}
+                            type="button"
+                            aria-pressed={on}
+                            onClick={() => setFormData(prev => ({ ...prev, covers_sights: on ? prev.covers_sights.filter(n => n !== name) : [...prev.covers_sights, name] }))}
+                            className={`px-2.5 py-1 rounded-full text-xs border ${on ? 'bg-primary-50 border-primary-300 text-primary-800' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                          >
+                            {name}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </Field>
+                )}
+              </div>
+            )}
 
             {/* Road transfers: one way, back the same day, or back the next day —
                 each a different price for the same route (lib/pricing/road-trips). */}

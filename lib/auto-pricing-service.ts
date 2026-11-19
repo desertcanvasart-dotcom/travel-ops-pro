@@ -70,6 +70,7 @@ import { PRESET_TIERS, presetTierFor } from '@/lib/vocabulary'
 import { hotelServiceCategories, pickHotelServiceRow } from '@/lib/pricing/hotel-service-pick'
 import { cruiseSailings, packageForDuration, sailingRoute, type Sailing } from '@/lib/pricing/cruise-package'
 import { vehicleKeyLabel, vehicleRateForPax } from '@/lib/rates/vehicle-bands'
+import { isNonDefaultZone, type CityZone } from '@/lib/rates/city-zones'
 import { isHalfDayGuiding, mealCostForGroup, pickGuideRate, pickMealRate, rateValidOn, todayIso, type GuideAskDuration, type PickedMeal } from '@/lib/pricing/service-rates'
 
 const supabaseAdmin = createClient(
@@ -2426,7 +2427,21 @@ export async function fetchTransportRows(orgId: string | null | undefined, norma
     .eq('org_id', orgId ?? NO_ORG)
     .eq('is_active', true)
   if (normalizer && allRates) allRates = await normalizer.normalize('transportation_rates', allRates) as typeof allRates
-  return (allRates ?? []) as TransportRate[]
+  // A rate in a NON-default area of its city (20270125) is left out until the
+  // engine prices by the hotel's area (transport zones step 4): it would
+  // otherwise compete with the city's rate on the same lookup. Rates with no
+  // area, or the city's default area, price exactly as before.
+  const rows = (allRates ?? []) as TransportRate[]
+  if (!rows.some(r => (r as { zone?: string | null }).zone)) return rows
+  const zones = await loadEngineCityZones(orgId)
+  return zones ? rows.filter(r => !isNonDefaultZone(zones, r.city, (r as { zone?: string | null }).zone)) : rows
+}
+
+/** The company's zones for the engine; null when unreadable (then every rate prices as before). */
+async function loadEngineCityZones(orgId: string | null | undefined): Promise<Array<Pick<CityZone, 'city' | 'key' | 'is_default'>> | null> {
+  const { data, error } = await supabaseAdmin.from('city_zones').select('city, key, is_default').eq('org_id', orgId ?? NO_ORG)
+  if (error) { console.error('city zones read error:', error.message); return null }
+  return (data ?? []) as Array<Pick<CityZone, 'city' | 'key' | 'is_default'>>
 }
 
 /**

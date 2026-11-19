@@ -98,7 +98,12 @@ export async function DELETE(_request: NextRequest, { params }: Params) {
     const { data: hotels, error: hotelError } = await supabase.from('accommodation_rates')
       .select('property_name').eq('org_id', orgId).eq('zone', current.key).ilike('city', current.city.trim())
     if (hotelError && !['42703', 'PGRST204'].includes(hotelError.code ?? '')) throw hotelError
-    const used = zoneInUseError(current, (hotels ?? []).map(h => h.property_name || 'a hotel'))
+    // Transport rates that price the zone (20270125) stay too.
+    const { data: cards, error: cardError } = await supabase.from('transportation_rates')
+      .select('service_code, route_name').eq('org_id', orgId).eq('zone', current.key).ilike('city', current.city.trim())
+    if (cardError && !['42703', 'PGRST204'].includes(cardError.code ?? '')) throw cardError
+    const used = zoneInUseError(current, (hotels ?? []).map(h => h.property_name || 'a hotel'),
+      (cards ?? []).map(c => c.route_name || c.service_code || 'a rate'))
     if (used) return NextResponse.json({ success: false, error: used }, { status: 400 })
 
     const { data, error } = await supabase.from('city_zones').delete().eq('id', id).eq('org_id', orgId).select('id')

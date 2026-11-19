@@ -34,6 +34,8 @@ export function transportRateKey(r: Row): string {
     text(r.service_type),
     text(r.city), text(r.origin_city), text(r.destination_city),
     text(r.duration), text(r.area),
+    // The pickup area (20270125): the same route is priced once per area.
+    text(r.zone),
     text(r.supplier_id),
     text(r.route_name),
     text(r.rate_valid_from).slice(0, 10), text(r.rate_valid_to).slice(0, 10),

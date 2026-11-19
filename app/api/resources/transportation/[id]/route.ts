@@ -7,6 +7,7 @@ import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { OWN_SUPPLIER_EMBED, ownSupplierOnRow } from '@/lib/rates/own-supplier-embed'
 import { duplicateTransportRateMessage, editMakesDuplicate, findServiceCodeClash } from '@/lib/rates/transport-natural-key'
+import { cardZoneWrite } from '@/lib/rates/transport-card-zone'
 import { rateDeleteBlocked } from '@/lib/rates/rate-delete-guard'
 import { validateRatePayload } from '@/lib/rate-validation'
 
@@ -97,6 +98,10 @@ export async function PUT(
     const tripShapeWrite = resolveTripShapeWrite(body, currentRow ?? null)
     if (!tripShapeWrite.ok) return NextResponse.json({ error: tripShapeWrite.error }, { status: 400 })
 
+    // The pickup area and the sights covered (20270125, lib/rates/transport-card-zone).
+    const zoneWrite = await cardZoneWrite(supabaseAdmin, orgId, body, currentRow ?? null)
+    if (!zoneWrite.ok) return NextResponse.json({ error: zoneWrite.error }, { status: zoneWrite.status })
+
     // Build non-vehicle update fields
     const updateData: Record<string, any> = {
       service_code: body.service_code,
@@ -108,6 +113,7 @@ export async function PUT(
       trip_shape: tripShapeWrite.value,
       duration: body.duration || null,
       area: body.area || null,
+      ...zoneWrite.patch,
       // The form's Route Name — it was sent and dropped.
       ...('route_name' in body ? { route_name: body.route_name || null } : {}),
       includes: body.includes || null,
