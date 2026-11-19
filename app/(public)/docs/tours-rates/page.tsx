@@ -319,7 +319,7 @@ export default function ToursRatesPage() {
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Meals</h3>
         <p className="text-gray-600 mb-3">
-          Fields: Restaurant name, Meal type, Cuisine, Restaurant type, City, Tier, Meal category, Dietary
+          Fields: Restaurant name, Meal type, Also for (more meals), Cuisine, Restaurant type, City, Tier, Meal category, Dietary
           options, Rate, Rate currency, Per Person Rate, Season, Valid From, Valid To, Supplier,
           Notes, Active and Preferred (the star). Tiles: Total Rates, Active, Linked, Avg. rate, Cities.
         </p>
@@ -327,6 +327,7 @@ export default function ToursRatesPage() {
           <li>Automatic pricing prices each lunch or dinner the trip buys at <strong>one</strong> restaurant&apos;s rate of the trip&apos;s tier: the day&apos;s city first, a starred (Preferred) restaurant first, then by restaurant name. It does not average restaurants.</li>
           <li>With <strong>Per Person Rate</strong> unticked, the rate is one price for the whole group. Ticked, it is per traveller. A restaurant has no minimum group.</li>
           <li>A supplier voucher and the Pricing Grid charge a per-group meal once and a per-person meal for the party.</li>
+          <li><strong>One price for several meals.</strong> When a restaurant charges the same for lunch and dinner, enter it once: pick the first meal in <strong>Meal type</strong> and tick the others under <strong>Also for</strong>. Pricing uses the price for every meal it lists. The Pricing Grid shows it once per meal, so a day can take lunch and dinner from it. In the CSV, the further meals go in <strong>Other Meal Types</strong> (for example <code>dinner</code>, or <code>dinner; breakfast</code>). A blank cell leaves the stored list as it is.</li>
         </ul>
 
         <h3 className="text-lg font-medium text-gray-900 mt-6 mb-3">Attractions</h3>

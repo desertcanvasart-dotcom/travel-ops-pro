@@ -40,6 +40,7 @@ import { Copy, Utensils,
 } from 'lucide-react'
 import { useCurrency } from '@/app/contexts/PreferencesContext'
 import { averageRatesByCurrency, formatMoney, formatRateAverages } from '@/lib/currency-totals'
+import { mealTypesOf } from '@/lib/meals/meal-rate-meals'
 
 // Egyptian cities
 
@@ -117,6 +118,8 @@ interface MealRate {
   service_code: string
   restaurant_name: string
   meal_type?: string
+  /** Further meals the same price covers (20270119). */
+  other_meal_types?: string[] | null
   cuisine_type?: string
   restaurant_type?: string
   city?: string
@@ -221,6 +224,7 @@ export default function MealRatesContent() {
     service_code: '',
     restaurant_name: '',
     meal_type: '',
+    other_meal_types: [] as string[],
     cuisine_type: '',
     restaurant_type: '',
     city: '',
@@ -319,6 +323,7 @@ export default function MealRatesContent() {
       service_code: generateServiceCode(),
       restaurant_name: '',
       meal_type: '',
+      other_meal_types: [],
       cuisine_type: '',
       restaurant_type: '',
       city: '',
@@ -360,6 +365,7 @@ export default function MealRatesContent() {
       // Stored as keys since 2026-09; a row that still holds the word opens
       // under the matching key.
       meal_type: slugifyKey(rate.meal_type || ''),
+      other_meal_types: (rate.other_meal_types || []).map((m: string) => slugifyKey(m)),
       cuisine_type: slugifyKey(rate.cuisine_type || ''),
       restaurant_type: slugifyKey(rate.restaurant_type || ''),
       city: rate.city || '',
@@ -410,6 +416,8 @@ export default function MealRatesContent() {
         service_code: formData.service_code,
         restaurant_name: formData.restaurant_name,
         meal_type: formData.meal_type || null,
+        // The first meal is meal_type; a price with none lists no others.
+        other_meal_types: formData.meal_type ? formData.other_meal_types.filter(m => m && m !== formData.meal_type) : [],
         cuisine_type: formData.cuisine_type || null,
         restaurant_type: formData.restaurant_type || null,
         city: formData.city || null,
@@ -502,7 +510,7 @@ export default function MealRatesContent() {
       rate.city?.toLowerCase().includes(searchTerm.toLowerCase())
 
     const matchesCity = selectedCity === '' || rate.city === selectedCity
-    const matchesMealType = selectedMealType === '' || slugifyKey(rate.meal_type || '') === selectedMealType
+    const matchesMealType = selectedMealType === '' || mealTypesOf(rate).some(m => slugifyKey(m) === selectedMealType)
     const matchesCuisine = selectedCuisine === '' || slugifyKey(rate.cuisine_type || '') === selectedCuisine
     const matchesTier = selectedTier === '' || (rate.tier || '').toLowerCase() === selectedTier.toLowerCase()
     const matchesSupplier = selectedSupplier === '' || rate.supplier_id === selectedSupplier
@@ -887,8 +895,12 @@ export default function MealRatesContent() {
                     </td>
                     <td className="px-4 py-3">
                       {rate.meal_type ? (
-                        <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
-                          {mealTypeLabel(rate.meal_type, rate.meal_type)}
+                        <span className="inline-flex flex-wrap gap-1">
+                          {mealTypesOf(rate).map(m => (
+                            <span key={m} className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs font-medium">
+                              {mealTypeLabel(m, m)}
+                            </span>
+                          ))}
                         </span>
                       ) : (
                         <span className="text-xs text-gray-400">—</span>
@@ -954,11 +966,11 @@ export default function MealRatesContent() {
                 </div>
 
                 <div className="flex items-center gap-2 mb-2">
-                  {rate.meal_type && (
-                    <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
-                      {mealTypeLabel(rate.meal_type, rate.meal_type)}
+                  {mealTypesOf(rate).map(m => (
+                    <span key={m} className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
+                      {mealTypeLabel(m, m)}
                     </span>
-                  )}
+                  ))}
                   {getTierBadge(rate.tier)}
                 </div>
 
@@ -1002,11 +1014,11 @@ export default function MealRatesContent() {
                   <span className="font-medium text-gray-900">{rate.restaurant_name}</span>
                   {rate.is_preferred && <Star className="w-3.5 h-3.5 text-amber-500 fill-amber-500" />}
                   <span className="text-sm text-gray-500">{rate.city || '—'}</span>
-                  {rate.meal_type && (
-                    <span className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
-                      {mealTypeLabel(rate.meal_type, rate.meal_type)}
+                  {mealTypesOf(rate).map(m => (
+                    <span key={m} className="px-2 py-0.5 bg-orange-100 text-orange-700 rounded text-xs">
+                      {mealTypeLabel(m, m)}
                     </span>
-                  )}
+                  ))}
                   {getTierBadge(rate.tier)}
                 </div>
                 <div className="flex items-center gap-4">
@@ -1121,7 +1133,7 @@ export default function MealRatesContent() {
           after={editingRate ? <RateAuditLog tableName="meal_rates" recordId={editingRate.id} /> : undefined}
           summary={[
             formData.restaurant_name || null,
-            mealTypeOptions.find(o => o.value === formData.meal_type)?.label,
+            [formData.meal_type, ...formData.other_meal_types].filter(Boolean).map(m => mealTypeOptions.find(o => o.value === m)?.label ?? m).join(' + ') || null,
             Number(formData.base_rate_eur) > 0
               ? `${formatMoney(Number(formData.base_rate_eur), formData.rate_currency || rateCurrency)}${formData.per_person_rate ? ` ${tCommon('perPerson')}` : ''}`
               : null,
@@ -1164,6 +1176,29 @@ export default function MealRatesContent() {
                   {mealTypeOptions.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </Field>
+              {formData.meal_type && mealTypeOptions.some(o => o.value !== formData.meal_type) && (
+                <Field label={t('alsoForMeals')} hint={t('alsoForMealsHint')} htmlFor="ml-other-meals" className="sm:col-span-2">
+                  <div id="ml-other-meals" className="flex flex-wrap gap-2" role="group" aria-label={t('alsoForMeals')}>
+                    {mealTypeOptions.filter(o => o.value !== formData.meal_type).map(o => {
+                      const on = formData.other_meal_types.includes(o.value)
+                      return (
+                        <button
+                          key={o.value}
+                          type="button"
+                          aria-pressed={on}
+                          onClick={() => setFormData(prev => ({
+                            ...prev,
+                            other_meal_types: on ? prev.other_meal_types.filter(m => m !== o.value) : [...prev.other_meal_types, o.value],
+                          }))}
+                          className={`px-2.5 py-1 rounded-full text-xs border ${on ? 'bg-orange-100 border-orange-300 text-orange-800' : 'bg-white border-gray-300 text-gray-600 hover:bg-gray-50'}`}
+                        >
+                          {o.label}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </Field>
+              )}
               <Field label={t('cuisineType')} htmlFor="ml-cuisine">
                 <select id="ml-cuisine" name="cuisine_type" value={formData.cuisine_type} onChange={handleChange} className={inputClass}>
                   <option value="">{t('selectCuisine')}</option>

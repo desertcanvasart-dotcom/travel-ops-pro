@@ -575,7 +575,7 @@ Manage all your pricing in one place. Go to **Rates** in the sidebar.
 | **Transportation** | Vehicle rates by type (sedan, minivan, bus), service type (day tour, airport transfer, intercity), and group size |
 | **Guides** | Daily and hourly rates, by language and specialty |
 | **Entrance Fees** | Attraction tickets with separate prices for EU and non-EU passport holders |
-| **Meals** | Lunch and dinner rates by quality tier |
+| **Meals** | Lunch and dinner rates by quality tier. One price can cover several meals (Meal type + Also for) |
 | **Activities** | Optional activities and excursions |
 | **Cruises** | Nile cruise rates by ship, cabin type |
 | **Airport Services** | Meet & greet, VIP lounge, etc. |

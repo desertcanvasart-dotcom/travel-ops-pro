@@ -18,6 +18,7 @@ import { quoteRefsInOrg, quoteRefNotFound, partnerIsInactive, inactivePartnerRes
 import { getExchangeRate, type ExchangeRates } from '@/lib/currency-service'
 import { parseFrozenFx, frozenToExchangeRates } from '@/lib/itinerary-fx'
 import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
+import { rateServesMeal } from '@/lib/meals/meal-rate-meals'
 
 // ============================================
 // B2B QUOTE FROM ITINERARY API
@@ -309,7 +310,7 @@ export async function POST(request: NextRequest) {
       .eq('is_active', true)
     const mealRateFor = (mealType: 'lunch' | 'dinner'): number => {
       const typed = (allMealRates || []).filter(
-        (r: any) => r.meal_type?.toLowerCase() === mealType && (r.base_rate_eur || 0) > 0
+        (r: any) => rateServesMeal(r, mealType) && (r.base_rate_eur || 0) > 0
       )
       if (typed.length > 0) {
         return typed.reduce((sum: number, r: any) => sum + (r.base_rate_eur || 0), 0) / typed.length

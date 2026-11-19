@@ -8040,6 +8040,7 @@ export interface Database {
           service_code: string
           restaurant_name: string
           meal_type: string | null
+          other_meal_types: string[]
           cuisine_type: string | null
           restaurant_type: string | null
           city: string | null
@@ -8068,6 +8069,7 @@ export interface Database {
           service_code: string
           restaurant_name: string
           meal_type?: string | null
+          other_meal_types?: string[]
           cuisine_type?: string | null
           restaurant_type?: string | null
           city?: string | null
@@ -8096,6 +8098,7 @@ export interface Database {
           service_code?: string
           restaurant_name?: string
           meal_type?: string | null
+          other_meal_types?: string[]
           cuisine_type?: string | null
           restaurant_type?: string | null
           city?: string | null

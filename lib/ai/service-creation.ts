@@ -27,6 +27,7 @@ import {
   formatTipNotes,
   type ItemizedTippingRates,
 } from '@/lib/tipping-utils'
+import { rateServesMeal } from '@/lib/meals/meal-rate-meals'
 
 // ============================================
 // ALIAS RESOLUTION: DB-backed + hardcoded fallback
@@ -204,6 +205,8 @@ export interface MealRateRecord {
   id: string
   restaurant_name: string
   meal_type?: string
+  /** Further meals the same price covers (20270119). */
+  other_meal_types?: string[] | null
   city?: string
   base_rate_eur: number
   base_rate_non_eur: number
@@ -421,8 +424,8 @@ export async function fetchAllPricingRates(
   if (!guidePerDay) console.warn(`⚠️ No guide rate found at all — guide will be €0`)
 
   // Meal rates (fetched in the batch above) — per-city lookup uses all rows
-  const lunchRates = (allMealRates || []).filter((r: any) => r.meal_type?.toLowerCase() === 'lunch')
-  const dinnerRates = (allMealRates || []).filter((r: any) => r.meal_type?.toLowerCase() === 'dinner')
+  const lunchRates = (allMealRates || []).filter((r: any) => rateServesMeal(r, 'lunch'))
+  const dinnerRates = (allMealRates || []).filter((r: any) => rateServesMeal(r, 'dinner'))
   // Flat fallback rate: average of all lunch/dinner rates, or hardcoded if none
   const lunchRate = lunchRates.length > 0
     ? lunchRates.reduce((sum: number, r: any) => sum + toNumber(r.base_rate_eur, 0), 0) / lunchRates.length
@@ -896,7 +899,7 @@ export async function createLandItineraryServices(
   const findMealRate = (city: string, mealType: 'lunch' | 'dinner'): { rate: number; name: string; code: string; supplierName: string | null; warning: string | null; rate_currency?: string | null } => {
     const mealLabel = mealType.charAt(0).toUpperCase() + mealType.slice(1)
     const allMeals = rates.allMealRates || []
-    const typeMatches = allMeals.filter(r => r.meal_type?.toLowerCase() === mealType)
+    const typeMatches = allMeals.filter(r => rateServesMeal(r, mealType))
 
     // Helper: from a list of candidates, pick preferred first, then any
     const pickBest = (candidates: MealRateRecord[]): MealRateRecord | undefined => {

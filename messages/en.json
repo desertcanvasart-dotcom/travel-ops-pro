@@ -4058,6 +4058,8 @@
       "allTiers": "All Tiers",
       "restaurant": "Restaurant",
       "mealType": "Meal Type",
+      "alsoForMeals": "Also for",
+      "alsoForMealsHint": "The same price also covers these meals. The pricing grid lists it once per meal.",
       "cuisineType": "Cuisine Type",
       "noRatesFound": "No Rates Found",
       "getStarted": "Get started by adding your first meal rate",

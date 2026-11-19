@@ -6,6 +6,7 @@ import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { rateInUse, rateInUseMessage } from '@/lib/rates/service-rate-in-use'
+import { mealRateLists } from '@/lib/meals/meal-rate-meals'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
@@ -126,6 +127,18 @@ export async function PUT(
     if (supplierFieldPresent) {
       if (existingColumns.has('supplier_id')) updateData.supplier_id = resolvedSupplierId ?? null
       if (existingColumns.has('supplier_name')) updateData.supplier_name = resolvedSupplierName ?? null
+    }
+
+    // The meals this price covers, said together: the first in meal_type, the
+    // rest in other_meal_types (lib/meals/meal-rate-meals, 20270119). A body
+    // that names no meal leaves both as they are.
+    if (('meal_type' in body || 'other_meal_types' in body) && existingColumns.has('other_meal_types')) {
+      const meals = mealRateLists({
+        meal_type: 'meal_type' in body ? body.meal_type : existing.meal_type,
+        other_meal_types: 'other_meal_types' in body ? body.other_meal_types : existing.other_meal_types,
+      })
+      updateData.meal_type = meals.meal_type
+      updateData.other_meal_types = meals.other_meal_types
     }
 
     // Always set updated_at if the column exists

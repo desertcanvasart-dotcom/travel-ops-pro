@@ -40,7 +40,8 @@ function soldSlotItems(slot: any, pax: number, withGuide: boolean): any[] {
 /** Add-ons under a hotel / cruise pick (see app/pricing-grid/types). */
 const isAddOnItem = (item: { rateId?: string }) =>
   Boolean(item.rateId && (item.rateId.endsWith('_supp') || item.rateId.includes('#supp:')))
-const baseRateId = (rateId: string) => rateId.replace(/_supp$/, '').replace(/#supp:.*$/, '')
+// A further meal of one meal price is `<id>~<meal>` (lib/meals/meal-rate-meals).
+const baseRateId = (rateId: string) => rateId.replace(/_supp$/, '').replace(/#supp:.*$/, '').replace(/~.*$/, '')
 
 // Every table a grid line can name a rate of (lib/pricing-grid rates route).
 const GRID_RATE_TABLES = [
@@ -399,7 +400,7 @@ export async function POST(request: NextRequest) {
           // (`<id>#supp:<key>`) — are not rows, and one non-uuid in the IN
           // list fails the whole lookup, dropping supplier_id for every
           // item in that table on this save.
-          if (item.rateId && !isAddOnItem(item)) rateIdsByTable[tbl].add(item.rateId)
+          if (item.rateId && !isAddOnItem(item)) rateIdsByTable[tbl].add(baseRateId(item.rateId))
         }
       }
     }

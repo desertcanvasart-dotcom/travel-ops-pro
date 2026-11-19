@@ -8,6 +8,7 @@ import { whereNullable } from '@/lib/rates/natural-key'
 import { selectAllRows } from '@/lib/db/select-all-rows'
 import { rowsInRateCurrency } from '@/lib/rates/rows-in-rate-currency'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
+import { mealRateLists } from '@/lib/meals/meal-rate-meals'
 
 // Service-role client that names the signed-in user to the audit trigger (rate_audit_log.changed_by)
 const supabaseAdmin = createActorAdminClient()
@@ -81,10 +82,16 @@ export async function POST(request: NextRequest) {
     // meal_category, dietary_options, per_person_rate, minimum_pax and
     // is_preferred: a company's first meal "Lunch 600, Rate currency EGP, per
     // group" was saved as 600 in the default currency, per person.
+    // The meals this price covers: the first in meal_type, the rest in
+    // other_meal_types (lib/meals/meal-rate-meals, 20270119).
+    const meals = mealRateLists(body)
     const newRate: Record<string, any> = {
       service_code: body.service_code || `MEAL-${Date.now().toString(36).toUpperCase()}`,
       restaurant_name: body.restaurant_name,
-      meal_type: body.meal_type || null,
+      meal_type: meals.meal_type,
+      // Only when there are further meals: a single-meal price saves exactly
+      // as before, also on a database the migration has not reached yet.
+      ...(meals.other_meal_types.length ? { other_meal_types: meals.other_meal_types } : {}),
       cuisine_type: body.cuisine_type || null,
       restaurant_type: body.restaurant_type || null,
       city: body.city || null,

@@ -17,6 +17,7 @@
 // the arithmetic is tested without a database.
 
 import { mealCostForGroup, pickMealRate, rateValidOn } from '@/lib/pricing/service-rates'
+import { mealRateRowId } from '@/lib/meals/meal-rate-meals'
 import { rateFor } from '@/lib/pricing/attractions'
 
 export interface LinePrice {
@@ -44,7 +45,7 @@ export function priceMealLine(
   line: { serviceName?: string | null; rateId?: string | null; tier: string; date?: string | null; numPax: number; rateSym: string },
 ): LinePrice | null {
   const mealType = mealTypeOfLine(line.serviceName)
-  const chosen = line.rateId ? rows.find(r => r.id === line.rateId) : undefined
+  const chosen = line.rateId ? rows.find(r => r.id === mealRateRowId(line.rateId!)) : undefined
   const picked = chosen
     ? pickMealRate([chosen], { mealType, rateId: chosen.id })
     : pickMealRate(rows.filter(r => r.tier === line.tier), { mealType, date: line.date })
