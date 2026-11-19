@@ -38,11 +38,14 @@ export default function ZonesDocPage() {
         <h2 className="text-xl font-semibold text-gray-900 mb-4">What zones do today</h2>
         <ul className="list-disc list-inside space-y-1 text-gray-700 mb-3">
           <li><strong>Hotels</strong> &mdash; in <strong>Rates &rsaquo; Hotels</strong>, a hotel in a city with zones has an <strong>Area</strong>, and must be given one when it is saved. Changing the city clears it. The list shows each hotel&apos;s area under its city, and <strong>No area yet</strong> in amber (with a filter of that name) for hotels still to do. When a hotel has several rates in the same city, saving one moves the others to the same area. The hotel spreadsheet has a <strong>Zone</strong> column (the area&apos;s name or key; a blank cell keeps what is stored; another city&apos;s area is refused with the row number).</li>
-          <li>A zone hotels are in cannot be deleted: the message names the hotels to move first.</li>
+          <li><strong>Transport rates</strong> &mdash; in <strong>Rates &rsaquo; Transportation</strong>, a rate in a city with zones has a <strong>Pickup area</strong> (empty = the city&apos;s default), and a sightseeing rate (not a road transfer) lists the <strong>Sights covered</strong>, chosen from your entrance-fee sheet for that city. Changing the city clears both. The list shows the area and how many sights a rate covers. The transport spreadsheet has <strong>Zone</strong> and <strong>Covers Sights</strong> columns (sights separated by <code>;</code>), checked the same way. The same route may be priced once per area.</li>
+          <li>A zone hotels are in, or transport rates price, cannot be deleted: the message names them.</li>
         </ul>
         <p className="text-gray-600">
-          Nothing changes a price yet. Next, transport rates get a pickup zone, and then automatic pricing uses the
-          hotel&apos;s zone to choose the transport rate.
+          Until the next step, automatic pricing leaves out a transport rate in a <strong>non-default</strong> area, so
+          it never competes with the city&apos;s rate; rates with no area, or the default area, price exactly as
+          before. The Pricing Grid still lists every rate. Next, automatic pricing uses the hotel&apos;s area and the
+          day&apos;s sights to choose the transport rate.
         </p>
       </section>
     </div>

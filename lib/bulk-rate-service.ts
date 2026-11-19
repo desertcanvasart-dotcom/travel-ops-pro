@@ -301,6 +301,11 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       col('route_name', 'Route Name', 'text', false),
       col('duration', 'Duration', 'text', false),
       col('area', 'Area', 'text', false),
+      // The pickup area (20270125): one of the city's zones, by name or key;
+      // and the sights a sightseeing rate covers, by their entrance-fee
+      // names ("Karnak Temple; Luxor Temple"). Blank keeps what is stored.
+      col('zone', 'Zone', 'text', false),
+      { name: 'covers_sights', label: 'Covers Sights', type: 'list', required: false },
       col('includes', 'Includes', 'text', false),
       // Vehicle rates — the presets here; transportationConfigFor() swaps in
       // the agency's own vehicle list for the sheet it downloads and imports.

@@ -109,7 +109,7 @@ describe('wiring', () => {
   })
   it('the hotel sheet carries a Zone column, resolved per row on import', () => {
     expect(RATE_TABLE_CONFIGS.accommodation_rates.columns.map(c => c.name)).toContain('zone')
-    expect(read('app/api/rates/bulk/import/route.ts')).toContain('resolveZoneChoice(hotelZones, row.city, row.zone)')
+    expect(read('app/api/rates/bulk/import/route.ts')).toContain('resolveZoneChoice(hotelZones, row.city, row.zone,')
   })
   it('deleting a zone hotels are in is refused', () => {
     expect(read('app/api/settings/zones/[id]/route.ts')).toContain('zoneInUseError(current,')

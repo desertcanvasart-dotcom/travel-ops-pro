@@ -12545,6 +12545,8 @@ export interface Database {
           supplier_id: string | null
           duration: string | null
           area: string | null
+          zone: string | null
+          covers_sights: string[]
           route_name: string | null
           includes: string | null
           rate_currency: string | null
@@ -12576,6 +12578,8 @@ export interface Database {
           supplier_id?: string | null
           duration?: string | null
           area?: string | null
+          zone?: string | null
+          covers_sights?: string[]
           route_name?: string | null
           includes?: string | null
           rate_currency?: string | null
@@ -12607,6 +12611,8 @@ export interface Database {
           supplier_id?: string | null
           duration?: string | null
           area?: string | null
+          zone?: string | null
+          covers_sights?: string[]
           route_name?: string | null
           includes?: string | null
           rate_currency?: string | null
