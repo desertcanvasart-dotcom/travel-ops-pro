@@ -15,6 +15,8 @@ import {
   MessageSquare, Mail, UserPlus, UserX, ChevronDown,
   ExternalLink, Languages, Sparkles, Trash2, Archive, MailOpen, X, Plane, Route, RotateCcw, Ban
 } from 'lucide-react'
+import MessageMedia from '@/components/whatsapp/MessageMedia'
+import { SENDABLE_ACCEPT, checkSendable } from '@/lib/whatsapp/attachments'
 import { useRole } from '@/hooks/useRole'
 import { useBlockedNumbers } from '@/components/whatsapp/useBlockedNumbers'
 import { findBlocked, BLOCK_ROLES } from '@/lib/whatsapp-blocked'
@@ -265,6 +267,9 @@ export function UnifiedMessageThread({
   const [newMessage, setNewMessage] = useState('')
   const [loading, setLoading] = useState(false)
   const [sending, setSending] = useState(false)
+  // A WhatsApp file chosen with the attach button; the typed text is its caption.
+  const [attachedFile, setAttachedFile] = useState<File | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   // One key per email reply (lib/email/send-with-guard): kept until it is sent.
   const replyKeyRef = useRef<string>(newRequestKey())
   const confirmSendConflict = useSendConflictConfirm()
@@ -373,6 +378,8 @@ export function UnifiedMessageThread({
           rule_applied: msg.rule_applied ?? null,
           media_url: msg.media_url,
           media_type: msg.media_type,
+          media_storage_path: msg.media_storage_path,
+          media_filename: msg.media_filename,
           attachments: msg.attachments,
           status: msg.status || (msg.is_read ? 'read' : 'delivered'),
           is_read: msg.is_read,
@@ -424,6 +431,7 @@ export function UnifiedMessageThread({
       setShowOriginalMap({})
       setNewMessage('')
       setTranslatedMessage('')
+      setAttachedFile(null)
     } else {
       setMessages([])
     }
@@ -509,7 +517,8 @@ export function UnifiedMessageThread({
   // Send message
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newMessage.trim() || !conversation || sending) return
+    const withFile = conversation?.channel === 'whatsapp' && attachedFile
+    if ((!newMessage.trim() && !withFile) || !conversation || sending) return
     setSending(true)
     setSendNotice(null)
     try {
@@ -520,6 +529,26 @@ export function UnifiedMessageThread({
       // Use translated message if translation is enabled
       if (translationEnabled && translatedMessage) {
         messageToSend = translatedMessage
+      }
+
+      // A WhatsApp file: sent with the typed text as its caption.
+      if (withFile) {
+        const form = new FormData()
+        form.append('conversation_id', conversation.id)
+        form.append('file', withFile)
+        if (messageToSend) form.append('caption', messageToSend)
+        const res = await fetch('/api/whatsapp/attachment', { method: 'POST', body: form })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || !data.success) {
+          setSendNotice(data.error || 'The file could not be sent.')
+          return
+        }
+        setAttachedFile(null)
+        setNewMessage('')
+        setTranslatedMessage('')
+        if (data.warning) setSendNotice(data.warning)
+        fetchMessages(false)
+        return
       }
 
       if (conversation.channel === 'whatsapp') {
@@ -1355,6 +1384,9 @@ export function UnifiedMessageThread({
                             </div>
                           ) : null}
 
+                          {/* A WhatsApp photo, video, voice note or document */}
+                          {msg.channel === 'whatsapp' && <MessageMedia message={msg} />}
+
                           {/* Message content */}
                           {msg.isHtml ? (
                             <div
@@ -1522,7 +1554,37 @@ export function UnifiedMessageThread({
         {conversation.channel === 'whatsapp' && (
           <PolishBar conversationId={conversation.id} text={newMessage} setText={setNewMessage} disabled={sending} />
         )}
+        {conversation.channel === 'whatsapp' && attachedFile && (
+          <div className="mb-2 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+            <Paperclip className="w-4 h-4 shrink-0 text-gray-500" aria-hidden />
+            <span className="min-w-0 flex-1 truncate text-gray-800">{attachedFile.name}</span>
+            <span className="shrink-0 text-xs text-gray-500">{attachedFile.size < 1024 * 1024 ? `${Math.max(1, Math.round(attachedFile.size / 1024))} KB` : `${(attachedFile.size / (1024 * 1024)).toFixed(1)} MB`}</span>
+            <button type="button" onClick={() => setAttachedFile(null)} className="shrink-0 rounded p-0.5 text-gray-400 hover:text-gray-700" aria-label="Remove the file"><X className="w-4 h-4" /></button>
+          </div>
+        )}
         <div className="flex items-end gap-3">
+          {conversation.channel === 'whatsapp' && (
+            <>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept={SENDABLE_ACCEPT}
+                className="hidden"
+                onChange={e => {
+                  const f = e.target.files?.[0]
+                  e.target.value = ''
+                  if (!f) return
+                  const check = checkSendable({ name: f.name, type: f.type, size: f.size })
+                  if (!check.ok) { setSendNotice(check.error); return }
+                  setSendNotice(null)
+                  setAttachedFile(f)
+                }}
+              />
+              <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="p-2.5 text-gray-500 hover:text-gray-800 rounded-full hover:bg-gray-100 disabled:opacity-50" title="Attach a photo, video or document" aria-label="Attach a file">
+                <Paperclip className="w-5 h-5" />
+              </button>
+            </>
+          )}
           <MessageBox
             value={newMessage}
             onChange={setNewMessage}
@@ -1537,7 +1599,7 @@ export function UnifiedMessageThread({
           />
           <button
             type="submit"
-            disabled={!newMessage.trim() || sending || (translationEnabled && isTranslating)}
+            disabled={(!newMessage.trim() && !(conversation.channel === 'whatsapp' && attachedFile)) || sending || (translationEnabled && isTranslating)}
             className="p-2.5 text-white rounded-full hover:opacity-90 disabled:opacity-50"
             style={{ backgroundColor: colors.accent }}
           >

@@ -6,11 +6,12 @@
 // Stores in conversation-based structure for chat UI
 // ============================================
 
-import { NextRequest, NextResponse } from 'next/server'
+import { NextRequest, NextResponse, after } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
 import { orgForWhatsAppNumber, whatsappRevival } from '@/lib/whatsapp-org'
 import { inboundIsBlocked, type BlockedReader } from '@/lib/whatsapp-blocked'
+import { keepTwilioMedia } from '@/lib/whatsapp/keep-inbound-media'
 import { verifyTwilioSignature, formDataToParams } from '@/lib/twilio-signature'
 
 // Use service role key to bypass RLS — webhooks have no user session
@@ -221,6 +222,16 @@ export async function POST(request: NextRequest) {
     }
 
     console.log('✅ Message stored successfully')
+
+    // Our own copy of the customer's file (lib/whatsapp/keep-inbound-media):
+    // made after Twilio has its answer, so a slow download never delays it.
+    // A failed copy leaves Twilio's link, which the inbox still opens.
+    if (mediaUrl && messageSid) {
+      after(async () => {
+        const kept = await keepTwilioMedia(supabase, { org_id: inboxOrgId, message_sid: messageSid, media_url: mediaUrl, media_type: mediaType })
+        if (!kept.ok) console.warn('WhatsApp file not copied:', messageSid, kept.reason)
+      })
+    }
 
     // Update conversation metadata (last_message, last_message_at, unread_count)
     // so the Unified Inbox shows the latest snippet and an accurate badge.
