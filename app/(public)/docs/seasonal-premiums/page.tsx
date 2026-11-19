@@ -88,6 +88,7 @@ export default function SeasonalPremiumsPage() {
           <li>B2C quotes</li>
           <li>The Pricing Grid, both the total on screen and the saved trip</li>
           <li>Automatic pricing: tour template auto-pricing, the departures grid and order intake</li>
+          <li>Partners and your website can read the calendar (<code>GET /api/public/v1/seasons</code>, with a partner API key from <Link href="/docs/integrations" className="text-primary-600 hover:underline">Integrations</Link>) to price a peak date the same way</li>
         </ul>
         <p className="text-gray-600 mt-3">
           This is different from a{' '}

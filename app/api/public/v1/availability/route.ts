@@ -17,7 +17,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { bearerToken, hashApiKey } from '@/lib/integrations/credentials'
+import { partnerFromRequest, stampOutbound } from '@/lib/integrations/partner-key'
 import type { AvailabilityDay } from '@/lib/integrations/types'
 import { businessToday } from '@/lib/today'
 import { loadDayLoads } from '@/lib/capacity-load'
@@ -35,37 +35,11 @@ const MAX_RANGE_DAYS = 400
 const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/
 
 export async function GET(request: NextRequest) {
-  const key = bearerToken(request.headers.get('authorization'))
-  if (!key) {
-    return unauthorized('Missing API key. Send: Authorization: Bearer <key>')
-  }
-
-  // Look the key up BY HASH. The plaintext is never stored, so a dump of this
-  // table yields nothing that can be replayed against this endpoint.
-  const { data: integration, error } = await supabaseAdmin
-    .from('integrations')
-    .select('id, org_id, direction, is_active')
-    .eq('outbound_key_hash', hashApiKey(key))
-    .maybeSingle()
-
-  if (error) {
-    // PGRST205 / 42P01 = the integrations table is not there, i.e. this deploy
-    // landed before migration 20260812_integrations_and_capacity. No table
-    // means no key can be valid, so the honest answer is 401 — and a partner
-    // retrying against a 401 backs off, where a 500 makes them hammer us.
-    if (error.code === 'PGRST205' || error.code === '42P01') {
-      console.warn('Partner availability API called before the integrations migration was applied')
-      return unauthorized('Invalid API key')
-    }
-    console.error('Integration key lookup failed:', error)
-    return NextResponse.json({ success: false, error: 'Internal server error' }, { status: 500 })
-  }
-
-  // One answer for unknown / disabled / inbound-only. Distinguishing them would
-  // tell a probe whether a key exists at all.
-  if (!integration || !integration.is_active || integration.direction === 'inbound') {
-    return unauthorized('Invalid API key')
-  }
+  // The key we issued, matched by its hash; unknown, disabled and
+  // inbound-only keys get one answer (lib/integrations/partner-key).
+  const auth = await partnerFromRequest(supabaseAdmin, request.headers.get('authorization'), 'availability')
+  if (!auth.ok) return auth.response
+  const { integration } = auth
 
   const { searchParams } = new URL(request.url)
   const from = searchParams.get('from') || businessToday()
@@ -133,11 +107,7 @@ export async function GET(request: NextRequest) {
   })
 
   // Fire-and-forget: a failed bookkeeping write must not fail the partner's read.
-  supabaseAdmin
-    .from('integrations')
-    .update({ last_outbound_at: new Date().toISOString() })
-    .eq('id', integration.id)
-    .then(undefined, err => console.error('Could not stamp last_outbound_at:', err))
+  stampOutbound(supabaseAdmin, integration.id)
 
   return NextResponse.json(
     {
@@ -157,13 +127,6 @@ export async function GET(request: NextRequest) {
         'Cache-Control': 'private, max-age=60',
       },
     }
-  )
-}
-
-function unauthorized(message: string) {
-  return NextResponse.json(
-    { success: false, error: message },
-    { status: 401, headers: { 'WWW-Authenticate': 'Bearer realm="travel-ops-pro"' } }
   )
 }
 
