@@ -100,6 +100,7 @@ export default function IntegrationsPage() {
           <li><strong>Pause</strong> / <strong>Resume</strong>, and <strong>Rotate API key</strong>, <strong>Rotate signing secret</strong>, <strong>Rotate webhook URL</strong>. A rotation takes effect at once: the old value stops working.</li>
           <li><strong>Recent deliveries</strong> shows what each delivery did: processed or failed, how many departures were created, updated or unchanged, and how many were rejected or conflicted.</li>
           <li><strong>Disconnect</strong> stops the partner&apos;s key and webhook at once. Departures already mirrored are kept, but no longer updated.</li>
+          <li><strong>Seasons</strong> &mdash; with the same API key, a partner or your website can read your <Link href="/docs/seasonal-premiums" className="text-primary-600 hover:underline">Seasonal Premiums</Link> calendar (<code>GET /api/public/v1/seasons</code>, optionally <code>?date=YYYY-MM-DD</code>): each season&apos;s name, premium and date ranges, and which season a departure date falls in. It applies the same rules as your quotes: the departure date decides, the highest premium wins where windows overlap, and the premium is on the whole per-person price. Switched-off seasons, 0% seasons and past windows are left out. No prices, costs or bookings are shared.</li>
         </ul>
       </section>
 
