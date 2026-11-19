@@ -18,6 +18,7 @@ import {
   whatsappTestOutcome,
   type WhatsAppStatus,
 } from '@/lib/settings/whatsapp-status'
+import BlockedNumbersCard from '@/components/whatsapp/BlockedNumbersCard'
 
 export default function WhatsAppSettingsPage() {
   const [status, setStatus] = useState<WhatsAppStatus | null>(null)
@@ -217,6 +218,8 @@ export default function WhatsAppSettingsPage() {
             )}
           </div>
         </div>
+
+        <BlockedNumbersCard />
 
       </div>
     </div>

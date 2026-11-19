@@ -69,6 +69,7 @@ export default function CommunicationPage() {
           <li><strong>Mark as read / Mark as unread</strong> &mdash; changes the unread count in this list; for email it also changes the thread in Gmail.</li>
           <li><strong>Archive</strong> (email) &mdash; moves the conversation to Archived here and archives the thread in Gmail. Open it under Status &rsaquo; Archived and use <strong>Move to inbox</strong> to bring it back. A new message in the thread brings it back on its own.</li>
           <li><strong>Delete</strong> &mdash; a WhatsApp conversation is hidden and comes back when the customer writes again. An email conversation goes to the Trash here and in Gmail.</li>
+          <li><strong>Block number</strong> (WhatsApp, owners, admins and managers) &mdash; new messages from the number are ignored: they are not stored or shown, not counted as unread and get no AI draft. Only a count of ignored messages is kept, never what they said. The header then shows a red <strong>Blocked</strong> tag, and the same button unblocks. It blocks inside the app only: the sender can still send to your WhatsApp number. The full list, with how many messages each block has ignored, is in <strong>Settings &rsaquo; WhatsApp &rsaquo; Blocked numbers</strong>, where you can also block a number by typing it. Everyone can see the list. A block belongs to your company only.</li>
         </ul>
         <p className="text-gray-600 mt-3">
           The compose button at the bottom of the list writes a new email.

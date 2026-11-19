@@ -10,6 +10,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { createCopilotInboxEntry } from '@/lib/copilot-intake'
 import { orgForWhatsAppNumber, whatsappRevival } from '@/lib/whatsapp-org'
+import { inboundIsBlocked, type BlockedReader } from '@/lib/whatsapp-blocked'
 import { verifyTwilioSignature, formDataToParams } from '@/lib/twilio-signature'
 
 // Use service role key to bypass RLS — webhooks have no user session
@@ -67,6 +68,17 @@ export async function POST(request: NextRequest) {
     const inboxOrgId = await orgForWhatsAppNumber(supabase, to)
     if (!inboxOrgId) {
       console.warn('⚠️ WhatsApp message to a number no organization owns — not stored:', { to, messageSid })
+      return twilioAck()
+    }
+
+    // ============================================
+    // STEP 0b: A number this company blocked (lib/whatsapp-blocked)
+    // ============================================
+    // Before anything is created: no client link, no conversation, no message,
+    // no unread count, no Copilot draft. Only the block row's count moves.
+    // A failed lookup throws to the catch below and Twilio retries.
+    if (await inboundIsBlocked(supabase as unknown as BlockedReader, inboxOrgId, phoneNumber)) {
+      console.log('🚫 WhatsApp message from a blocked number — not stored:', { messageSid })
       return twilioAck()
     }
 

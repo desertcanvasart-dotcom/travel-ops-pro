@@ -13491,6 +13491,47 @@ export interface Database {
           },
         ]
       }
+      whatsapp_blocked_numbers: {
+        Row: {
+          id: string
+          org_id: string
+          phone_number: string
+          reason: string | null
+          blocked_by: string | null
+          blocked_message_count: number
+          last_blocked_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          phone_number: string
+          reason?: string | null
+          blocked_by?: string | null
+          blocked_message_count?: number
+          last_blocked_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          phone_number?: string
+          reason?: string | null
+          blocked_by?: string | null
+          blocked_message_count?: number
+          last_blocked_at?: string | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "whatsapp_blocked_numbers_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       whatsapp_conversations: {
         Row: {
           id: string
