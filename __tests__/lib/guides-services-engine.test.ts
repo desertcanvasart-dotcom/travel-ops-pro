@@ -52,6 +52,17 @@ describe('guides: the day\'s city and date (#5, #6)', () => {
     expect(line(r, 'day1-guide').unitCost).toBe(75)
   })
 
+  it("a guide who works only in another city never prices the day: a gap naming the city (owner 2026-11-19)", async () => {
+    // OLD: no Cairo guide → the trip-wide guide (here a Luxor-only one) priced the Cairo day.
+    const r = await price(t => {
+      t.guide_rates = [guide({ id: 'g-lxr', supplier_id: 'sup-lxr', base_rate_eur: 200 })]
+      t.supplier_cities = [{ id: 'sc-1', org_id: 'org-1', supplier_id: 'sup-lxr', city: 'Luxor' }]
+    })
+    const day1 = line(r, 'day1-guide')
+    expect(day1).toMatchObject({ unpriced: true, lineTotal: 0 })
+    expect(day1.issue ?? day1.notes ?? '').toMatch(/No English guide rate for Cairo/)
+  })
+
   it('a rate whose validity ended before the trip is not used; the one covering it is', async () => {
     const r = await price(t => {
       t.guide_rates = [
