@@ -42,6 +42,15 @@ export async function uploadWhatsAppMedia(
 const SAFE = /[^a-zA-Z0-9_-]/g
 const seg = (s: string) => s.replace(SAFE, '_')
 
+/** A browser voice note is ~10–30 KB a minute; this is generous. */
+export const MAX_VOICE_NOTE_BYTES = 10 * 1024 * 1024
+export const MAX_VOICE_NOTE_SECONDS = 5 * 60
+
+/** outbound/<org>/<id>.ogg: a voice note recorded in the inbox. */
+export function outboundVoicePath(orgId: string, id: string): string {
+  return `outbound/${seg(orgId)}/${seg(id)}.ogg`
+}
+
 /**
  * outbound/<org>/<id>/<file-name>: a file sent from the inbox. The file's own
  * (safe) name ends the path, so the link Twilio fetches carries it and the
@@ -59,14 +68,15 @@ export function inboundFilePath(orgId: string, messageSid: string, ext: string):
 /**
  * May this message's media_storage_path be signed? The service role signs
  * whatever it is given, so the path must be one written for THIS message of
- * THIS company: inbound/<its org>/<its sid>.<ext>, or an outbound file under
- * its org.
+ * THIS company: inbound/<its org>/<its sid>.<ext>, or an outbound file or
+ * voice note under its org.
  */
 export function storagePathBelongsTo(path: string, row: { message_sid: string | null; org_id: string }): boolean {
   const org = seg(row.org_id)
   const sid = seg(String(row.message_sid ?? ''))
   if (sid && new RegExp(`^inbound/${org}/${sid}\\.[a-z0-9]+$`).test(path)) return true
-  return new RegExp(`^outbound/${org}/[a-zA-Z0-9_-]+/[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$`).test(path)
+  return new RegExp(`^outbound/${org}/[a-zA-Z0-9_-]+\\.ogg$`).test(path) ||
+    new RegExp(`^outbound/${org}/[a-zA-Z0-9_-]+/[a-zA-Z0-9][a-zA-Z0-9._-]{0,99}$`).test(path)
 }
 
 /**

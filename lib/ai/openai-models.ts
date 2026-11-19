@@ -52,6 +52,13 @@ export const OPENAI_TRANSLATION_MODEL = pin('OPENAI_MODEL_TRANSLATION', GPT_4O)
 // option in the content-library prompt model picker.
 export const OPENAI_MINI_MODEL = pin('OPENAI_MODEL_MINI', GPT_4O_MINI)
 
+// TRANSCRIBE — customers' WhatsApp voice notes into text
+// (lib/whatsapp/transcribe.ts). A speech-to-text model, so it is NOT in the
+// health-check list below: that probe is a chat completion, which this model
+// does not answer.
+export const GPT_4O_MINI_TRANSCRIBE = 'gpt-4o-mini-transcribe'
+export const OPENAI_TRANSCRIBE_MODEL = pin('OPENAI_MODEL_TRANSCRIBE', GPT_4O_MINI_TRANSCRIBE)
+
 // ============================================
 // HEALTH-CHECK REGISTRY
 // ============================================
