@@ -24,6 +24,7 @@
 import { guideLanguageRank } from '@/lib/guides/guide-language'
 import { rateGuideMode } from '@/lib/guides/guide-mode'
 import { guideCityRank } from '@/lib/guides/guide-cities'
+import { mealRateRowId, rateServesMeal } from '@/lib/meals/meal-rate-meals'
 
 type Dated = { rate_valid_from?: string | null; rate_valid_to?: string | null }
 
@@ -174,13 +175,16 @@ function asPicked(row: Record<string, any>, rate: number): PickedMeal {
 export function pickMealRate(rows: Record<string, any>[], ask: MealAsk): PickedMeal | null {
   const mealType = lc(ask.mealType)
   if (ask.rateId) {
-    const chosen = rows.find(r => r.id === ask.rateId)
+    // A grid entry for a further meal of one price is `<row id>~<meal>`.
+    const rowId = mealRateRowId(ask.rateId)
+    const chosen = rows.find(r => r.id === rowId)
     const rate = Number(chosen?.base_rate_eur) || 0
     return chosen && rate > 0 ? asPicked(chosen, rate) : null
   }
   const valid = rows.filter(r => r.is_active !== false && rateValidOn(r, ask.date))
   const typed = valid
-    .filter(r => lc(r.meal_type) === mealType && (Number(r.base_rate_eur) || 0) > 0)
+    // A price may cover several meals (meal_type + other_meal_types).
+    .filter(r => rateServesMeal(r, mealType) && (Number(r.base_rate_eur) || 0) > 0)
     .sort((a, b) =>
       cityRank(a, ask.city) - cityRank(b, ask.city) ||
       Number(b.is_preferred === true) - Number(a.is_preferred === true) ||

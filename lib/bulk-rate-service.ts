@@ -54,7 +54,8 @@ export interface PropertyLink {
 export interface ColumnDef {
   name: string
   label: string
-  type: 'text' | 'number' | 'boolean' | 'date'
+  /** list: several keys in one cell ("lunch, dinner"), stored as text[]. */
+  type: 'text' | 'number' | 'boolean' | 'date' | 'list'
   required: boolean
   exportOnly?: boolean         // e.g., id, created_at — included in export but not required for import
   allowedValues?: readonly string[]  // when set, the cell must match (case-insensitive)
@@ -340,6 +341,9 @@ export const RATE_TABLE_CONFIGS: Record<string, RateTableConfig> = {
       id(), serviceCode(),
       col('restaurant_name', 'Restaurant Name', 'text', true),
       col('meal_type', 'Meal Type', 'text', false),
+      // The further meals the SAME price covers (20270119): "dinner" on a
+      // lunch row. A blank cell leaves the stored list as it is.
+      { name: 'other_meal_types', label: 'Other Meal Types', type: 'list', required: false, slugify: true },
       col('cuisine_type', 'Cuisine Type', 'text', false),
       col('restaurant_type', 'Restaurant Type', 'text', false),
       col('city', 'City', 'text', false),
@@ -694,6 +698,11 @@ function parseCell(value: string | undefined | null, colDef: ColumnDef): { parse
         return { parsed: iso, error: null }
       }
       return { parsed: raw, error: null } // Be lenient with other date formats
+    }
+    case 'list': {
+      // "lunch, dinner" or "lunch; dinner"; keys, repeats dropped.
+      const items = [...new Set(raw.split(/[,;]/).map(v => colDef.slugify ? slugifyKey(v.trim()) : v.trim()).filter(Boolean))]
+      return { parsed: items, error: null }
     }
     case 'text':
     default: {

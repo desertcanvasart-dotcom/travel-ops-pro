@@ -28,6 +28,7 @@ import { vehicleBands, vehicleKeyLabel } from '@/lib/rates/vehicle-bands'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
 import { tipGridOption } from '@/lib/tipping-utils'
 import type { AllRates, GridFixedCosts, RateOption } from '@/app/pricing-grid/types'
+import { perMealEntries } from '@/lib/meals/meal-rate-meals'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Db = { from: (table: string) => any }
@@ -369,7 +370,9 @@ export async function loadGridRateOptions(
         ...basisOf(r),
       })),
 
-    meals: (nMeals || []).map((r: any) => ({
+    // A price covering several meals is listed once per meal, so a day can
+    // take lunch AND dinner from it (lib/meals/meal-rate-meals).
+    meals: ((nMeals || []) as Array<{ id: string }>).flatMap(m => perMealEntries(m)).map((r: any) => ({
       id: r.id,
       name: `${r.meal_type} - ${r.restaurant_name || 'Restaurant'} (${r.city})`,
       rateEur: toNum(r.base_rate_eur || r.rate_eur),

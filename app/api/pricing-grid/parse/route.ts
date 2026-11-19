@@ -24,6 +24,7 @@ import { hotelsMentioned, namedHotelFor } from '@/lib/pricing/hotel-mentions'
 import { isLayoverRoute, plainTransferFor, LAYOVER_TEXT } from '@/lib/rates/layover-route'
 import { getOrgRateCurrency } from '@/lib/org-rate-currency'
 import { currencySymbol } from '@/lib/currency-totals'
+import { perMealEntries } from '@/lib/meals/meal-rate-meals'
 
 // ============================================
 // RATE CATALOG BUILDER
@@ -90,7 +91,9 @@ async function buildRateCatalog(supabase: any, orgId: string, tier: string, sym:
     normalizer.normalize('activity_rates', rawActivityRates),
     normalizer.normalize('accommodation_rates', rawAccommodationRates),
     normalizer.normalize('entrance_fees', rawEntranceFees),
-    normalizer.normalize('meal_rates', rawMealRates),
+    // One entry per meal a price covers, as the grid lists them
+    // (rate-options.ts): a lunch-and-dinner price answers both slots.
+    normalizer.normalize('meal_rates', rawMealRates).then(rows => ((rows ?? []) as Array<{ id: string }>).flatMap(r => perMealEntries(r))),
     normalizer.normalize('nile_cruises', rawCruiseRates),
     normalizer.normalize('b2b_transport_packages', rawCruiseTransportPkgs),
     normalizer.normalize('flight_rates', rawFlightRates),

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createServerClient } from '@/lib/supabase-server'
 import { clientMessage } from '@/lib/api-errors'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
+import { rateServesMeal } from '@/lib/meals/meal-rate-meals'
 
 // Actor-attributed service-role client (lib/supabase-actor): rate-table
 // writes from here reach fn_rate_audit_trigger, and without the actor
@@ -36,7 +37,6 @@ export async function GET(request: NextRequest) {
     // filter failed the whole request.
     if (city) query = query.eq('city', city)
     if (cuisineType) query = query.eq('cuisine_type', cuisineType)
-    if (mealType) query = query.eq('meal_type', mealType)
     if (activeOnly) query = query.eq('is_active', true)
 
     const { data, error } = await query
@@ -45,7 +45,10 @@ export async function GET(request: NextRequest) {
 
     // Map meal_rates fields to Resource interface expected by ResourceAssignmentV2
     // The component expects 'name' and 'city' but the table uses 'restaurant_name' and 'restaurant_city'
-    const mappedData = (data || []).map((restaurant: any) => ({
+    // A meal filter matches any meal a price covers (meal_type +
+    // other_meal_types, lib/meals/meal-rate-meals), so it is applied here.
+    const rows = mealType ? (data || []).filter((r: { meal_type?: string | null; other_meal_types?: string[] | null }) => rateServesMeal(r, mealType)) : (data || [])
+    const mappedData = rows.map((restaurant: any) => ({
       ...restaurant,
       name: restaurant.restaurant_name || restaurant.name || 'Unknown Restaurant',
       city: restaurant.restaurant_city || restaurant.city || null,

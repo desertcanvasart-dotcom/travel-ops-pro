@@ -5044,6 +5044,8 @@
       "restaurant": "レストラン",
       "restaurantName": "レストラン名",
       "mealType": "食事タイプ",
+      "alsoForMeals": "ほかの食事にも",
+      "alsoForMealsHint": "同じ料金でこれらの食事にも使えます。料金グリッドでは食事ごとに表示されます。",
       "cuisineType": "料理タイプ",
       "cuisine": "料理タイプ",
       "restaurantType": "レストランタイプ",
