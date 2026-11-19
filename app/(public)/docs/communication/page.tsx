@@ -60,6 +60,7 @@ export default function CommunicationPage() {
           yellow notice under the conversation says why.
         </p>
         <ul className="list-disc list-inside space-y-2 text-gray-700">
+          <li><strong>Files on WhatsApp</strong> &mdash; a customer&apos;s photos, videos, voice notes and documents show in the conversation, each with a <strong>Download</strong> link that saves it under its own name (or <em>WhatsApp-&lt;date&gt;-&lt;type&gt;</em>). The app keeps its own private copy of every file a customer sends, so it still opens if Twilio removes it. To send a file, press the paperclip beside the message box: a photo (JPG, PNG, up to 5 MB), a video (MP4) or a document (PDF, Word, Excel, PowerPoint, text, CSV), up to 16 MB. Anything typed goes with it as the caption. The customer receives the file under its own name.</li>
           <li><strong>Long WhatsApp messages</strong> &mdash; WhatsApp allows 1,600 characters in one message. A longer reply is sent as several messages, in order, cut at a paragraph, line or sentence break, and a notice says how many it took. If one part fails, the notice says how many went.</li>
           <li><strong>Translation</strong> &mdash; translate incoming messages to English and write in English to send in the customer&apos;s language.</li>
           <li><strong>Generate Itinerary</strong> &mdash; opens the Pricing Grid with the conversation, the client and their contact details filled in.</li>

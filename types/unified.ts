@@ -210,6 +210,8 @@ export interface UnifiedMessage {
   // Media/Attachments
   media_url?: string | null // WhatsApp
   media_type?: string | null // WhatsApp
+  media_storage_path?: string | null // WhatsApp: our copy (20270121)
+  media_filename?: string | null // WhatsApp: the file's own name
   attachments?: EmailAttachment[] // Email
 
   // Status

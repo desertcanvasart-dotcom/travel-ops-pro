@@ -13634,6 +13634,8 @@ export interface Database {
           message_body: string | null
           media_url: string | null
           media_type: string | null
+          media_storage_path: string | null
+          media_filename: string | null
           status: string | null
           error_message: string | null
           sent_at: string | null
@@ -13647,6 +13649,8 @@ export interface Database {
           message_body?: string | null
           media_url?: string | null
           media_type?: string | null
+          media_storage_path?: string | null
+          media_filename?: string | null
           status?: string | null
           error_message?: string | null
           sent_at?: string | null
@@ -13660,6 +13664,8 @@ export interface Database {
           message_body?: string | null
           media_url?: string | null
           media_type?: string | null
+          media_storage_path?: string | null
+          media_filename?: string | null
           status?: string | null
           error_message?: string | null
           sent_at?: string | null

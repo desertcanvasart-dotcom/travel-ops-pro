@@ -10,8 +10,10 @@ import {
   Sparkles, RefreshCw, Plus, CheckCheck, Check,
   AlertCircle, X, Languages, ChevronDown, Loader2,
   Trash2, UserPlus, Users, History, ArrowRight,
-  Settings, Filter, UserCheck, UserX, Ban
+  Settings, Filter, UserCheck, UserX, Ban, Paperclip
 } from 'lucide-react'
+import MessageMedia from '@/components/whatsapp/MessageMedia'
+import { SENDABLE_ACCEPT, checkSendable } from '@/lib/whatsapp/attachments'
 import { useRole } from '@/hooks/useRole'
 import { useBlockedNumbers } from '@/components/whatsapp/useBlockedNumbers'
 import { findBlocked, BLOCK_ROLES } from '@/lib/whatsapp-blocked'
@@ -73,6 +75,9 @@ interface Message {
   direction: 'inbound' | 'outbound'
   message_body: string
   media_url: string | null
+  media_type?: string | null
+  media_storage_path?: string | null
+  media_filename?: string | null
   status: string
   sent_at: string
 }
@@ -569,6 +574,9 @@ export default function WhatsAppInboxPage() {
   const [loading, setLoading] = useState(true)
   const [messagesLoading, setMessagesLoading] = useState(false)
   const [sending, setSending] = useState(false)
+  // A file chosen with the attach button; the typed text goes with it as the caption.
+  const [attachedFile, setAttachedFile] = useState<File | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const [showNewChat, setShowNewChat] = useState(false)
   const [newPhoneNumber, setNewPhoneNumber] = useState('')
 
@@ -806,11 +814,34 @@ export default function WhatsAppInboxPage() {
   // Send message
   const sendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!newMessage.trim() || !selectedConversation || sending) return
+    if ((!newMessage.trim() && !attachedFile) || !selectedConversation || sending) return
     setSending(true)
     try {
       let messageToSend = newMessage.trim()
       if (translationEnabled && translatedMessage) messageToSend = translatedMessage
+      // A file: sent with the typed text as its caption (/api/whatsapp/attachment).
+      if (attachedFile) {
+        const form = new FormData()
+        form.append('conversation_id', selectedConversation.id)
+        form.append('file', attachedFile)
+        if (messageToSend) form.append('caption', messageToSend)
+        const res = await fetch('/api/whatsapp/attachment', { method: 'POST', body: form })
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok || !data.success) {
+          dialog.alert('File not sent', data.error || 'The file could not be sent.', 'warning')
+          return
+        }
+        setMessages(prev => [...prev, data.message])
+        if (data.warning) dialog.alert('Sent', data.warning, 'info')
+        const name = attachedFile.name
+        setAttachedFile(null)
+        setNewMessage('')
+        setTranslatedMessage('')
+        setConversations(prev => prev.map(c =>
+          c.id === selectedConversation.id ? { ...c, last_message: messageToSend || `📎 ${name}`, last_message_at: new Date().toISOString() } : c
+        ))
+        return
+      }
       const res = await fetch('/api/whatsapp/messages', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -913,6 +944,7 @@ export default function WhatsAppInboxPage() {
     fetchMessages(conv.id, true)
     fetchActivity(conv.id)
     if (conv.unread_count > 0) markAsRead(conv.id)
+    setAttachedFile(null)
     setNewMessage('')
     setTranslatedMessage('')
     setIncomingTranslations({})
@@ -1160,7 +1192,8 @@ export default function WhatsAppInboxPage() {
                                 : <button onClick={() => handleTranslateMessage(msg.id, msg.message_body)} className="text-xs text-blue-600 hover:text-blue-700">🌐 Translate</button>}
                             </div>
                           )}
-                          <p className="text-sm text-gray-900 whitespace-pre-wrap">{isInbound && hasTranslation && !showOriginal ? incomingTranslations[msg.id] : msg.message_body}</p>
+                          <MessageMedia message={msg} />
+                          {msg.message_body && <p className="text-sm text-gray-900 whitespace-pre-wrap">{isInbound && hasTranslation && !showOriginal ? incomingTranslations[msg.id] : msg.message_body}</p>}
                           {isInbound && hasTranslation && !showOriginal && <p className="text-xs text-gray-400 mt-1 italic">Original: {msg.message_body}</p>}
                           <div className="flex items-center justify-end gap-1 mt-1">
                             <span className="text-xs text-gray-500">{new Date(msg.sent_at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}</span>
@@ -1217,9 +1250,34 @@ export default function WhatsAppInboxPage() {
 
             {/* Message Input */}
             <form ref={composerFormRef} onSubmit={sendMessage} className="p-4 bg-white border-t border-gray-200">
+              {attachedFile && (
+                <div className="mb-2 flex items-center gap-2 rounded-lg border border-gray-200 bg-gray-50 px-3 py-2 text-sm">
+                  <Paperclip className="w-4 h-4 shrink-0 text-gray-500" aria-hidden />
+                  <span className="min-w-0 flex-1 truncate text-gray-800">{attachedFile.name}</span>
+                  <span className="shrink-0 text-xs text-gray-500">{attachedFile.size < 1024 * 1024 ? `${Math.max(1, Math.round(attachedFile.size / 1024))} KB` : `${(attachedFile.size / (1024 * 1024)).toFixed(1)} MB`}</span>
+                  <button type="button" onClick={() => setAttachedFile(null)} className="shrink-0 rounded p-0.5 text-gray-400 hover:text-gray-700" aria-label="Remove the file"><X className="w-4 h-4" /></button>
+                </div>
+              )}
               <div className="flex items-end gap-3">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={SENDABLE_ACCEPT}
+                  className="hidden"
+                  onChange={e => {
+                    const f = e.target.files?.[0]
+                    e.target.value = ''
+                    if (!f) return
+                    const check = checkSendable({ name: f.name, type: f.type, size: f.size })
+                    if (!check.ok) { dialog.alert('File not attached', check.error, 'warning'); return }
+                    setAttachedFile(f)
+                  }}
+                />
+                <button type="button" onClick={() => fileInputRef.current?.click()} disabled={sending} className="p-2.5 text-gray-500 hover:text-gray-800 rounded-full hover:bg-gray-100 disabled:opacity-50" title="Attach a photo, video or document" aria-label="Attach a file">
+                  <Paperclip className="w-5 h-5" />
+                </button>
                 <MessageBox value={newMessage} onChange={setNewMessage} onSend={() => composerFormRef.current?.requestSubmit()} placeholder={translationEnabled ? `Type in English → sends in ${getLanguageInfo(customerLanguage).name}` : "Type a message... (Shift+Enter for a new line)"} className="flex-1 px-4 py-2 text-sm border border-gray-200 rounded-2xl focus:outline-none focus:ring-2 focus:ring-[#25D366]" />
-                <button type="submit" disabled={!newMessage.trim() || sending || (translationEnabled && isTranslating)} className="p-2.5 bg-[#25D366] text-white rounded-full hover:bg-[#20bd5a] disabled:opacity-50">
+                <button type="submit" disabled={(!newMessage.trim() && !attachedFile) || sending || (translationEnabled && isTranslating)} className="p-2.5 bg-[#25D366] text-white rounded-full hover:bg-[#20bd5a] disabled:opacity-50">
                   {sending ? <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div> : <Send className="w-5 h-5" />}
                 </button>
               </div>
