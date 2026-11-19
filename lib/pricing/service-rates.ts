@@ -46,7 +46,7 @@ export function rateValidOn(row: Dated, date: string | null | undefined): boolea
 
 const lc = (v: unknown) => String(v ?? '').trim().toLowerCase()
 
-/** 0 = the asked city, 1 = no city on the rate, 2 = another city. */
+/** 0 = the asked city, 1 = no city on the rate, 2 = another city (never priced). */
 function cityRank(row: { city?: string | null }, city: string | null | undefined): number {
   if (!city) return row.city ? 1 : 0
   if (!row.city) return 1
@@ -96,11 +96,15 @@ export function pickGuideRate<T extends Record<string, any>>(rows: T[], ask: Gui
   // its guide speaks it (the guide's languages, attached as guide_languages
   // by lib/guides/guide-coverage): one rate per guide covers every language
   // they work in (owner, 2026-11-18).
+  // A guide who works only in OTHER cities never prices this city's day: a
+  // missing guide there is a gap, not another city's guide (owner,
+  // 2026-11-19, "a missing price is a gap, never a guess").
   const ofLanguage = rows.filter(r =>
     r.is_active !== false &&
     guideLanguageRank(r, ask.language) < 2 &&
     rateGuideMode(r) === ask.mode &&
-    rateValidOn(r, ask.date)
+    rateValidOn(r, ask.date) &&
+    guideCityRank(r, ask.city) < 2
   )
   // A guide rate covers a LIST of cities (lib/guides/guide-cities): a Cairo
   // guide who also works Alexandria matches an Alexandria day like a rate
@@ -181,7 +185,10 @@ export function pickMealRate(rows: Record<string, any>[], ask: MealAsk): PickedM
     const rate = Number(chosen?.base_rate_eur) || 0
     return chosen && rate > 0 ? asPicked(chosen, rate) : null
   }
-  const valid = rows.filter(r => r.is_active !== false && rateValidOn(r, ask.date))
+  // Another city's restaurant never prices this city's meal: a missing meal
+  // there is a gap, not a guess (owner, 2026-11-19). A rate with no city
+  // still serves every city.
+  const valid = rows.filter(r => r.is_active !== false && rateValidOn(r, ask.date) && cityRank(r, ask.city) < 2)
   const typed = valid
     // A price may cover several meals (meal_type + other_meal_types).
     .filter(r => rateServesMeal(r, mealType) && (Number(r.base_rate_eur) || 0) > 0)

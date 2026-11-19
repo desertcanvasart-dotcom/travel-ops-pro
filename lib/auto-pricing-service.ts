@@ -3174,10 +3174,11 @@ export async function calculateDayBasedPricing(
   const priceDateFor = (dayNumber?: number | null): string => dateForDay(dayNumber) ?? todayIso()
   const tourType = (template as { tour_type?: string }).tour_type ?? null
 
-  // The trip's guide rate — the hole check and the fallback for a day whose
-  // own city has none. Each day then prices from the rate of ITS city and
-  // date (dayGuideRate below); this took the first row of the language, any
-  // city, any period, for the whole trip.
+  // The trip's guide rate: the hole check only. Each day prices from the rate
+  // of ITS city and date (dayGuideRate below); a day whose city no guide
+  // works in is a gap for that day. It used to fall back to this trip-wide
+  // rate, which could be another city's guide (owner, 2026-11-19: a missing
+  // price is a gap, never a guess).
   const guideRate = await getGuideRate(orgId, language, tier, rateNormalizer, { grade: guideGrade, mode: guideMode, date: priceDateFor(1), rows: guideRows })
 
   // Throughout mode ("+1"): the guide is with the group every day, so the
@@ -3202,10 +3203,10 @@ export async function calculateDayBasedPricing(
     if (isHalfDayGuiding(day, tourType)) {
       const half = await dayGuideRate(day, 'half_day')
       if (half) return { rate: half, note: 'Half day' }
-      const full = (await dayGuideRate(day, 'full_day')) ?? guideRate
+      const full = await dayGuideRate(day, 'full_day')
       return { rate: full, note: full ? 'Half day — no half-day rate, priced at the full-day rate' : undefined }
     }
-    return { rate: (await dayGuideRate(day, 'full_day')) ?? guideRate }
+    return { rate: await dayGuideRate(day, 'full_day') }
   }
 
   // Flag missing rates that the itinerary actually needs (no fabrication).
@@ -3214,6 +3215,11 @@ export async function calculateDayBasedPricing(
     ? `No throughout ${language} guide rate (${guideGrade}). Add it in Rates → Guides with Guide mode "Throughout".`
     : `No ${language} guide rate (${tier}). Add it in Rates → Guides.`
   const noMeetGreetRateMessage = `No throughout ${language} meet/assist-day guide rate (${guideGrade}). A throughout guide bills arrival and departure days at it — add a Guides rate with Guide mode "Throughout" and duration "Meet & Assist day".`
+  /** A day whose city has no guide while the trip has one elsewhere: the city is named. */
+  const dayNoGuideMessage = (day: ItineraryDay, fallback: string) =>
+    guideRate && day.city
+      ? `No ${language} guide rate for ${day.city} (${guideGrade}${guideMode === 'throughout' ? ', throughout' : ''}). Add ${day.city} to a guide's cities, or a rate for a guide who works there, in Rates → Guides.`
+      : fallback
   if (needsGuide && !guideRate) {
     addHole({
       kind: 'guide',
@@ -3239,15 +3245,20 @@ export async function calculateDayBasedPricing(
   // One hole per meal TYPE the trip needs and cannot price — a tier with
   // lunch rates but no dinner rate used to price every dinner at 0 with no
   // hole at all (rateFor returns 0, and only a both-zero result was null).
-  const noMealRateMessage = (meal: 'lunch' | 'dinner') =>
-    `No ${tier} ${meal} rate. Add one in Rates → Meals.`
+  // Named by city: another city's restaurant never prices it (owner,
+  // 2026-11-19), so "no lunch in Aswan" is the thing to fix.
+  const noMealRateMessage = (meal: 'lunch' | 'dinner', cities: string[]) =>
+    cities.length
+      ? `No ${tier} ${meal} rate in ${cities.join(', ')}. Add one for ${cities.length === 1 ? 'that city' : 'those cities'} in Rates → Meals.`
+      : `No ${tier} ${meal} rate. Add one in Rates → Meals.`
   for (const meal of ['lunch', 'dinner'] as const) {
-    if (itinerary.some(d => d.meals[meal] === 'external' && !mealFor(d, meal))) {
+    const missing = itinerary.filter(d => d.meals[meal] === 'external' && !mealFor(d, meal))
+    if (missing.length) {
       addHole({
         kind: 'meal',
         reason: mealRows.length ? 'unpriced' : 'missing',
         lookupAttempted: `meal_rates meal_type=${meal} tier=${tier}`,
-        message: noMealRateMessage(meal),
+        message: noMealRateMessage(meal, [...new Set(missing.map(d => d.city).filter(Boolean))]),
       })
     }
   }
@@ -3331,7 +3342,7 @@ export async function calculateDayBasedPricing(
       // The "+1" travels day one to the end: a full guiding fee on
       // sightseeing days, the meet/assist rate on every other day (arrival,
       // departure, transit — he escorts either way).
-      const meetGreetToday = !hasSightseeing ? ((await dayGuideRate(day, 'meet_greet')) ?? meetGreetGuideRate) : null
+      const meetGreetToday = !hasSightseeing ? await dayGuideRate(day, 'meet_greet') : null
       if (hasSightseeing && todaysGuide) {
         fixedCosts += todaysGuide.dailyRate
         services.push({
@@ -3366,12 +3377,12 @@ export async function calculateDayBasedPricing(
           isOptional: false
         })
       } else if (hasSightseeing) {
-        listUnpricedLine({ id: `day${day.day}-guide`, dayNumber: day.day, serviceType: 'guide', serviceName: `Throughout Guide — ${language}`, isPerPax: false }, noGuideRateMessage)
+        listUnpricedLine({ id: `day${day.day}-guide`, dayNumber: day.day, serviceType: 'guide', serviceName: `Throughout Guide — ${language}`, isPerPax: false }, dayNoGuideMessage(day, noGuideRateMessage))
       } else {
-        listUnpricedLine({ id: `day${day.day}-guide`, dayNumber: day.day, serviceType: 'guide', serviceName: `Throughout Guide — ${language} (meet/assist day)`, isPerPax: false }, noMeetGreetRateMessage)
+        listUnpricedLine({ id: `day${day.day}-guide`, dayNumber: day.day, serviceType: 'guide', serviceName: `Throughout Guide — ${language} (meet/assist day)`, isPerPax: false }, meetGreetGuideRate ? dayNoGuideMessage(day, noMeetGreetRateMessage) : noMeetGreetRateMessage)
       }
     } else if (hasSightseeing && !todaysGuide) {
-      listUnpricedLine({ id: `day${day.day}-guide`, dayNumber: day.day, serviceType: 'guide', serviceName: `${language} Speaking Guide`, isPerPax: false }, noGuideRateMessage)
+      listUnpricedLine({ id: `day${day.day}-guide`, dayNumber: day.day, serviceType: 'guide', serviceName: `${language} Speaking Guide`, isPerPax: false }, dayNoGuideMessage(day, noGuideRateMessage))
     } else if (hasSightseeing && todaysGuide) {
       fixedCosts += todaysGuide.dailyRate
       services.push({
@@ -4445,7 +4456,7 @@ export async function calculateDayBasedPricing(
         })
       } else {
         // The hole was recorded once per meal type above.
-        listUnpricedLine(line, noMealRateMessage(meal))
+        listUnpricedLine(line, noMealRateMessage(meal, day.city ? [day.city] : []))
       }
     }
   }

@@ -18,7 +18,7 @@ import { quoteRefsInOrg, quoteRefNotFound, partnerIsInactive, inactivePartnerRes
 import { getExchangeRate, type ExchangeRates } from '@/lib/currency-service'
 import { parseFrozenFx, frozenToExchangeRates } from '@/lib/itinerary-fx'
 import { fetchRunExchangeRates } from '@/lib/rates/fx-source'
-import { rateServesMeal } from '@/lib/meals/meal-rate-meals'
+import { mealCostForGroup, pickMealRate } from '@/lib/pricing/service-rates'
 
 // ============================================
 // B2B QUOTE FROM ITINERARY API
@@ -301,23 +301,19 @@ export async function POST(request: NextRequest) {
 
     // 4. Re-price each service using B2B rate tables
     // Meal rates fetched ONCE here (was a query per meal service inside the
-    // loop) and resolved by meal_type/base_rate_eur — the shape the meals
-    // rates UI writes — with the legacy lunch/dinner columns as fallback.
+    // loop). ONE restaurant's rate for the day's city, the trip's tier and
+    // date (lib/pricing/service-rates pickMealRate), as the engine prices it.
+    // It averaged every restaurant of every city and tier; no restaurant in
+    // the day's city now keeps the line's stored cost (owner, 2026-11-19: a
+    // missing price is a gap, never another city's).
     const { data: allMealRates } = await supabaseAdmin
       .from('meal_rates')
       .select('*')
       .eq('org_id', orgId)
       .eq('is_active', true)
-    const mealRateFor = (mealType: 'lunch' | 'dinner'): number => {
-      const typed = (allMealRates || []).filter(
-        (r: any) => rateServesMeal(r, mealType) && (r.base_rate_eur || 0) > 0
-      )
-      if (typed.length > 0) {
-        return typed.reduce((sum: number, r: any) => sum + (r.base_rate_eur || 0), 0) / typed.length
-      }
-      const legacyCol = mealType === 'lunch' ? 'lunch_rate_eur' : 'dinner_rate_eur'
-      const legacy = (allMealRates || []).find((r: any) => (r[legacyCol] || 0) > 0)
-      return legacy ? legacy[legacyCol] : 0
+    const mealRateFor = (mealType: 'lunch' | 'dinner', city: string | null | undefined): number => {
+      const picked = pickMealRate(((allMealRates || []) as Record<string, any>[]).filter(r => !r.tier || r.tier === tier), { mealType, city, date: departureDate })
+      return picked ? mealCostForGroup(picked, numPax) / Math.max(numPax, 1) : 0
     }
 
     // A kept line's cost in the rate currency. itinerary_services.total_cost is
@@ -461,7 +457,7 @@ export async function POST(request: NextRequest) {
 
         // Meals
         if (serviceType === 'meal') {
-          const mealRate = mealRateFor(serviceName.toLowerCase().includes('dinner') ? 'dinner' : 'lunch')
+          const mealRate = mealRateFor(serviceName.toLowerCase().includes('dinner') ? 'dinner' : 'lunch', day.city || day.overnight_location)
           if (mealRate > 0) {
             unitCost = mealRate
             lineTotal = unitCost * numPax

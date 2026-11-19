@@ -24,11 +24,17 @@ describe('pickGuideRate (#5, #6)', () => {
   })
   const ask = { language: 'Japanese', grade: 'egyptologist', duration: 'full_day' as const, mode: 'spot' }
 
-  it("prefers a guide who works in the day's city, then an every-city guide, then another city's — never database order", () => {
+  it("prefers a guide who works in the day's city, then an every-city guide — never database order", () => {
     const rows = [g('lxr', { guide_cities: ['Luxor'] }), g('any', { guide_cities: [] }), g('cai', { guide_cities: ['Cairo'] })]
     expect(pickGuideRate(rows, { ...ask, city: 'cairo' })?.id).toBe('cai')
     expect(pickGuideRate(rows, { ...ask, city: 'Aswan' })?.id).toBe('any')
-    expect(pickGuideRate([g('lxr', { guide_cities: ['Luxor'] })], { ...ask, city: 'Aswan' })?.id).toBe('lxr')
+  })
+
+  it("another city's guide never prices the day: a gap (owner 2026-11-19)", () => {
+    // OLD: a Luxor-only guide priced an Aswan day. NEW: no rate for Aswan.
+    expect(pickGuideRate([g('lxr', { guide_cities: ['Luxor'] })], { ...ask, city: 'Aswan' })).toBeNull()
+    // With no city asked, any guide still serves.
+    expect(pickGuideRate([g('lxr', { guide_cities: ['Luxor'] })], { ...ask })?.id).toBe('lxr')
   })
 
   it("a guide who works several cities matches each of them (operator 2026-11-13: the cities are the guide's)", () => {
@@ -88,6 +94,16 @@ describe('pickMealRate and the group cost (#7)', () => {
     const rows = [m('a', { city: 'Cairo', base_rate_eur: 10 }), m('b', { city: 'Cairo', base_rate_eur: 30, is_preferred: true }), m('c', { city: 'Luxor', is_preferred: true })]
     expect(pickMealRate(rows, { mealType: 'lunch', city: 'Cairo' })?.rate).toBe(30)
     expect(pickMealRate(rows, { mealType: 'dinner', city: 'Cairo' })).toBeNull()
+  })
+
+  it("another city's restaurant never prices the meal: a gap (owner 2026-11-19)", () => {
+    // OLD: a Luxor restaurant priced a Cairo lunch when Cairo had none. NEW: none.
+    const rows = [m('lxr', { city: 'Luxor', base_rate_eur: 25 })]
+    expect(pickMealRate(rows, { mealType: 'lunch', city: 'Cairo' })).toBeNull()
+    // A restaurant rate with no city still serves every city, as before.
+    expect(pickMealRate([m('any', { city: null })], { mealType: 'lunch', city: 'Cairo' })?.rate).toBe(20)
+    // The legacy lunch_rate_eur columns follow the same rule.
+    expect(pickMealRate([{ id: 'old', city: 'Luxor', lunch_rate_eur: 15, is_active: true }], { mealType: 'lunch', city: 'Cairo' })).toBeNull()
   })
 
   it('a picked rate id wins outright', () => {
