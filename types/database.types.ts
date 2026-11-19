@@ -269,6 +269,7 @@ export interface Database {
           room_type: string | null
           board_basis: string | null
           city: string | null
+          zone: string | null
           base_rate_eur: number | null
           base_rate_non_eur: number | null
           season: string | null
@@ -357,6 +358,7 @@ export interface Database {
           room_type?: string | null
           board_basis?: string | null
           city?: string | null
+          zone?: string | null
           base_rate_eur?: number | null
           base_rate_non_eur?: number | null
           season?: string | null
@@ -445,6 +447,7 @@ export interface Database {
           room_type?: string | null
           board_basis?: string | null
           city?: string | null
+          zone?: string | null
           base_rate_eur?: number | null
           base_rate_non_eur?: number | null
           season?: string | null

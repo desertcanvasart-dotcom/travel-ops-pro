@@ -7,6 +7,7 @@ import { sanitizeSupplements } from '@/lib/rates/supplements'
 import { validateRatePayload } from '@/lib/rate-validation'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
+import { checkHotelZone, syncHotelZone } from '@/lib/rates/hotel-zone'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { ownSupplierFilterId } from '@/lib/suppliers/supplier-org'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
@@ -75,6 +76,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: supplierCheck.error }, { status: supplierCheck.status })
     }
 
+    // The hotel's area within its city (20270124): one of the city's zones,
+    // required when the city has any.
+    const zoneCheck = await checkHotelZone(supabaseAdmin, orgId, body.city, body.zone)
+    if (!zoneCheck.choice.ok) return NextResponse.json({ success: false, error: zoneCheck.choice.error }, { status: 400 })
+    const zone = zoneCheck.choice.zone
+
     // Supplier-HAS-properties (Phase 2): link the rate to its hotel, creating
     // the property under the supplier when it does not exist yet. The
     // property's canonical name wins over the payload spelling.
@@ -94,6 +101,7 @@ export async function POST(request: NextRequest) {
       ...(hotelProp.property_id ? { property_id: hotelProp.property_id } : {}),
       property_type: body.property_type || 'hotel',
       city: body.city || null,
+      ...(zoneCheck.write ? { zone } : {}),
       board_basis: body.board_basis || 'BB',
       tier: body.tier || 'standard',
       supplier_id: supplierCheck.supplier_id,
@@ -208,6 +216,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
+    if (data && zoneCheck.write) await syncHotelZone(supabaseAdmin, { orgId, rowId: data.id, propertyId: data.property_id, city: data.city, zone })
     return NextResponse.json({ success: true, data, updated: false })
   } catch (error: any) {
     console.error('POST accommodation_rates catch error:', error)

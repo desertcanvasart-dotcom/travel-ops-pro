@@ -138,6 +138,7 @@ export default function ToursRatesPage() {
           <li>All amounts are per person per night: the price in a double, the single supplement, and the triple reduction off the double.</li>
           <li><strong>Duplicate</strong> (copy icon) opens a new rate pre-filled. It saves when the hotel name, city, tier, board basis, hotel company or Rate Card Validity differs from every existing rate; otherwise the save is refused and names that key.</li>
           <li>A rate with no tier (from an old spreadsheet import) shows <strong>No tier</strong> and is never picked automatically until it is given one.</li>
+          <li><strong>Area</strong>: in a city that has <Link href="/docs/zones" className="text-primary-600 hover:underline">Zones</Link>, the hotel&apos;s area is required (East Bank, West Bank&hellip;). The list shows it under the city, or <strong>No area yet</strong>, with a filter of that name. The spreadsheet column is <strong>Zone</strong>.</li>
         </ul>
 
         <h4 className="font-medium text-gray-900 mt-4 mb-2">How a hotel night is priced</h4>

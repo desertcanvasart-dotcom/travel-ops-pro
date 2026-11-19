@@ -3,6 +3,7 @@
 import { todayLocal } from '@/lib/today'
 import { useEffect, useState, useRef } from 'react'
 import CityOptions from '@/app/components/CityOptions'
+import { cityMatch, zoneLabel, zonesOfCity, type CityZone } from '@/lib/rates/city-zones'
 import { firstInvalidMessage } from '@/lib/form-guard'
 import { useTranslations } from 'next-intl'
 import { useTierLabel } from '@/hooks/useTierLabel'
@@ -108,6 +109,8 @@ interface AccommodationRate {
   property_name: string
   property_type?: string
   city?: string
+  /** The hotel's area in its city: a Settings → Zones key (20270124). */
+  zone?: string | null
   board_basis?: string
   rate_currency?: string | null
   // Hotel contacts
@@ -385,6 +388,9 @@ export default function HotelsContent() {
   const [viewMode, setViewMode] = useState<ViewMode>('table')
   const [toasts, setToasts] = useState<Toast[]>([])
   const [filterTier, setFilterTier] = useState<string | null>(null)
+  // The company's zones (Settings → Zones), and the "No area yet" filter.
+  const [zones, setZones] = useState<CityZone[]>([])
+  const [noAreaOnly, setNoAreaOnly] = useState(false)
 
   // Pagination state
   const [currentPage, setCurrentPage] = useState(1)
@@ -400,6 +406,7 @@ export default function HotelsContent() {
     property_id: '',
     property_type: 'hotel',
     city: '',
+    zone: '',
     board_basis: 'bb',
     rate_currency: '',
     // Hotel contacts (NEW)
@@ -504,12 +511,17 @@ export default function HotelsContent() {
     setMounted(true)
     fetchRates()
     fetchSuppliers()
+    // The zones each city's hotels choose from. None (or no table yet): no Area field.
+    fetch('/api/settings/zones')
+      .then(r => (r.ok ? r.json() : null))
+      .then(j => { if (j?.success) setZones(j.data?.zones ?? []) })
+      .catch(() => {})
   }, [])
 
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1)
-  }, [searchTerm, selectedCity, selectedSupplier, showInactive, filterTier, itemsPerPage])
+  }, [searchTerm, selectedCity, selectedSupplier, showInactive, filterTier, noAreaOnly, itemsPerPage])
 
   // Handle form changes
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => {
@@ -561,6 +573,8 @@ export default function HotelsContent() {
     setFormData(prev => ({
       ...prev,
       city,
+      // Another city's area never carries over.
+      zone: cityMatch(prev.city) === cityMatch(city) ? prev.zone : '',
       service_code: prev.service_code || generateServiceCode(city)
     }))
   }
@@ -574,6 +588,7 @@ export default function HotelsContent() {
       property_id: '',
       property_type: 'hotel',
       city: '',
+      zone: '',
       board_basis: 'bb',
       rate_currency: '',
       // Hotel contacts
@@ -656,6 +671,7 @@ export default function HotelsContent() {
       property_id: (rate as { property_id?: string | null }).property_id || '',
       property_type: rate.property_type || 'hotel',
       city: rate.city || '',
+      zone: rate.zone || '',
       board_basis: (rate.board_basis || 'bb').toLowerCase(),
       rate_currency: rate.rate_currency || '',
       // Hotel contacts
@@ -810,8 +826,10 @@ export default function HotelsContent() {
     const matchesSupplier = selectedSupplier === 'all' || rate.supplier_id === selectedSupplier
     const matchesActive = showInactive || rate.is_active
     const matchesTier = filterTier === null || rate.tier === filterTier
-  
-    return matchesSearch && matchesCity && matchesSupplier && matchesActive && matchesTier
+    // "No area yet": a hotel in a city with zones that has not been given one.
+    const matchesArea = !noAreaOnly || needsArea(rate)
+
+    return matchesSearch && matchesCity && matchesSupplier && matchesActive && matchesTier && matchesArea
   })
 
   // Pagination calculations
@@ -820,6 +838,12 @@ export default function HotelsContent() {
   const startIndex = (currentPage - 1) * itemsPerPage
   const endIndex = Math.min(startIndex + itemsPerPage, totalItems)
   const paginatedRates = filteredRates.slice(startIndex, endIndex)
+
+  // A hotel in a city with zones but no area of its own.
+  function needsArea(rate: AccommodationRate): boolean {
+    return !rate.zone && zonesOfCity(zones, rate.city).length > 0
+  }
+  const formCityZones = zonesOfCity(zones, formData.city)
 
   // Get unique cities from data
   const usedCities = Array.from(new Set(rates.map(r => r.city).filter(Boolean))).sort()
@@ -1016,6 +1040,17 @@ export default function HotelsContent() {
               <Crown className="absolute right-2 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400 pointer-events-none" />
             </div>
 
+            {zones.length > 0 && (
+              <button
+                onClick={() => setNoAreaOnly(v => !v)}
+                aria-pressed={noAreaOnly}
+                className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors ${noAreaOnly ? 'bg-amber-50 border border-amber-300 text-amber-800' : 'bg-white border border-gray-300 text-gray-700'}`}
+                title="Hotels in a city with zones that have no area yet"
+              >
+                No area yet
+              </button>
+            )}
+
             <button
               onClick={() => setShowInactive(!showInactive)}
               className={`px-3 py-2 text-sm rounded-lg font-medium transition-colors ${
@@ -1111,6 +1146,11 @@ export default function HotelsContent() {
                         <span className="px-2 py-0.5 bg-gray-100 text-gray-700 rounded text-xs font-medium">
                           {rate.city || '—'}
                         </span>
+                        {rate.zone ? (
+                          <span className="block mt-1 text-[11px] text-gray-500">{zoneLabel(zones, rate.city, rate.zone)}</span>
+                        ) : needsArea(rate) ? (
+                          <span className="block mt-1 text-[11px] text-amber-700">No area yet</span>
+                        ) : null}
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className="px-2 py-0.5 bg-blue-50 text-blue-700 rounded text-xs font-medium">
@@ -1452,6 +1492,16 @@ export default function HotelsContent() {
                   <CityOptions />
                 </select>
               </Field>
+              {formCityZones.length > 0 && (
+                <Field label="Area" required htmlFor="ht-zone" hint="The part of the city the hotel is in (Settings → Zones). Transfers are priced by it.">
+                  <select id="ht-zone" name="zone" value={formData.zone} onChange={handleChange} required className={inputClass}>
+                    <option value="">Choose the area…</option>
+                    {formCityZones.map(z => (
+                      <option key={z.key} value={z.key}>{z.label}{z.is_default ? ' (default)' : ''}</option>
+                    ))}
+                  </select>
+                </Field>
+              )}
               <Field label={t('propertyType')} required htmlFor="ht-property-type">
                 <select
                   id="ht-property-type"

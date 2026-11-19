@@ -8,6 +8,7 @@ import { isForeignKeyViolation } from '@/lib/rates/accommodation-duplicates'
 import { sanitizeSupplements } from '@/lib/rates/supplements'
 import { validateAndResolveSupplierFields } from '@/lib/suppliers/validate-supplier-fields'
 import { resolveRateProperty } from '@/lib/suppliers/resolve-property'
+import { checkHotelZone, syncHotelZone } from '@/lib/rates/hotel-zone'
 import { createActorAdminClient } from '@/lib/supabase-actor'
 import { getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { rowInOrg, notFoundInOrg } from '@/lib/api/org-scope'
@@ -74,6 +75,14 @@ export async function PUT(
       return NextResponse.json({ success: false, error: supplierCheck.error }, { status: supplierCheck.status })
     }
 
+    // The hotel's area within its city (20270124), when the form sends it: one
+    // of the city's zones, required when the city has any. A caller that does
+    // not send it leaves the stored area as it is.
+    const zoneCheck = 'zone' in body ? await checkHotelZone(supabaseAdmin, orgId, body.city, body.zone) : null
+    if (zoneCheck && !zoneCheck.choice.ok) return NextResponse.json({ success: false, error: zoneCheck.choice.error }, { status: 400 })
+    const zone = zoneCheck?.choice.ok ? zoneCheck.choice.zone : null
+    const writeZone = Boolean(zoneCheck?.write)
+
     const hotelProp = await resolveRateProperty(supabaseAdmin, {
       propertyType: 'hotel',
       supplierId: supplierCheck.supplier_id,
@@ -88,6 +97,7 @@ export async function PUT(
       ...(hotelProp.property_id ? { property_id: hotelProp.property_id } : {}),
       property_type: body.property_type || 'hotel',
       city: body.city || null,
+      ...(writeZone ? { zone } : {}),
       ...('rate_currency' in body ? { rate_currency: body.rate_currency || null } : {}),
       board_basis: body.board_basis || 'BB',
       tier: body.tier || 'standard',
@@ -181,6 +191,7 @@ export async function PUT(
       return NextResponse.json({ success: false, error: clientMessage(error, 'Internal server error') }, { status: 500 })
     }
 
+    if (data && writeZone) await syncHotelZone(supabaseAdmin, { orgId, rowId: data.id, propertyId: data.property_id, city: data.city, zone })
     return NextResponse.json({ success: true, data })
   } catch (error: any) {
     console.error('PUT accommodation_rates catch error:', error)

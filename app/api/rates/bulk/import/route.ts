@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { requireRole, getCurrentOrgId, noOrgResponse } from '@/lib/auth/current-org'
 import { createServerClient } from '@/lib/supabase-server'
+import { loadCityZones } from '@/lib/rates/hotel-zone'
+import { resolveZoneChoice } from '@/lib/rates/city-zones'
 import { RATE_TABLE_CONFIGS, validateImportData, isExampleRow, transportationConfigFor, vehicleColumnSpecsFor, resolveImportTier, accommodationImportFill } from '@/lib/bulk-rate-service'
 import { stripVehicleFields, vehiclesFromFlatRow } from '@/lib/rates/vehicle-bands'
 import { vocabularyItemsForCurrentOrg } from '@/lib/vocabulary-server'
@@ -238,6 +240,11 @@ export async function POST(request: NextRequest) {
       const keptRows = preview.parsedValidRows ?? []
       const rowErrors: ValidationError[] = []
       const dropped = new Set<Record<string, any>>()
+      // A hotel's Zone cell is one of its city's zones (20270124), by name or
+      // key. A blank cell never reaches here, so the stored area stays.
+      const hotelZones = config.tableName === 'accommodation_rates' && keptRows.some(r => 'zone' in r)
+        ? await loadCityZones(supabase, orgId)
+        : null
       keptRows.forEach((row, idx) => {
         const rowNum = sheetRowOf.get(row) ?? idx + 2
         const key = row[uniqueKeyColumn]
@@ -245,6 +252,15 @@ export async function POST(request: NextRequest) {
           rowErrors.push({ row: rowNum, column: uniqueKeyColumn, message: `${uniqueKeyColumn} is required` })
           dropped.add(row)
           return
+        }
+        if (hotelZones && 'zone' in row) {
+          const choice = resolveZoneChoice(hotelZones, row.city, row.zone)
+          if (!choice.ok) {
+            rowErrors.push({ row: rowNum, column: 'zone', message: choice.error })
+            dropped.add(row)
+            return
+          }
+          row.zone = choice.zone
         }
         let candidate: Record<string, any> = row
         if (vehicleSpecs) {
