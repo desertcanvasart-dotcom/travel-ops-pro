@@ -25,6 +25,50 @@ export type Json =
 export interface Database {
   public: {
     Tables: {
+      city_zones: {
+        Row: {
+          id: string
+          org_id: string
+          city: string
+          key: string
+          label: string
+          is_default: boolean
+          rank: number
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          org_id: string
+          city: string
+          key: string
+          label: string
+          is_default?: boolean
+          rank?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          org_id?: string
+          city?: string
+          key?: string
+          label?: string
+          is_default?: boolean
+          rank?: number
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "city_zones_org_id_fkey"
+            columns: ["org_id"]
+            isOneToOne: false
+            referencedRelation: "organizations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       dashboard_attention_dismissals: {
         Row: {
           id: string
