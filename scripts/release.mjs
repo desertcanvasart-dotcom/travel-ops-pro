@@ -38,6 +38,8 @@ import { isReleaseVersion } from '../lib/support/bundle-core.mjs'
 const ROOT = path.join(path.dirname(fileURLToPath(import.meta.url)), '..')
 const PKG = path.join(ROOT, 'package.json')
 const APPLY = process.argv.includes('--yes')
+/** The workflow whose result gates a release (.github/workflows/ci.yml). */
+const CI_WORKFLOW = 'ci.yml'
 
 const sh = (cmd, allowFail = false) => {
   try {
@@ -85,11 +87,16 @@ async function main() {
 
   // CI green on exactly this commit. `gh` is how this project already gates
   // merges; if it is not available, say so rather than assuming green.
+  //
+  // Only the CI workflow counts. Without --workflow, `--limit 1` takes the
+  // newest run of ANY workflow on the commit — a manual "Production database
+  // migrations" run that failed on a stale secret blocked a release of code
+  // CI had passed (2026-11-20).
   const conclusion = sh(
-    `gh run list --commit ${sha} --limit 1 --json conclusion --jq '.[0].conclusion'`,
+    `gh run list --workflow ${CI_WORKFLOW} --commit ${sha} --limit 1 --json conclusion --jq '.[0].conclusion'`,
     true,
   )
-  if (!check('CI green on this commit', conclusion === 'success', conclusion ?? 'could not read CI status')) fail()
+  if (!check('CI green on this commit', conclusion === 'success', `${CI_WORKFLOW}: ${conclusion || 'could not read CI status'}`)) fail()
 
   const tags = (sh('git tag --list', true) ?? '').split('\n').filter(Boolean)
   const today = new Date().toISOString().slice(0, 10).replace(/-/g, '.')
