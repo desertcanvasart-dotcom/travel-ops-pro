@@ -5,7 +5,7 @@
 // The version format is the contract between the release script, /api/version
 // and the support bundle, so it is defined once and tested once.
 import { describe, it, expect } from 'vitest'
-import { readFileSync } from 'node:fs'
+import { existsSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { isReleaseVersion } from '@/lib/support/bundle-core.mjs'
 import { nextVersion } from '@/scripts/release.mjs'
@@ -64,7 +64,15 @@ describe('the release procedure is enforced, not just documented', () => {
   it('refuses to tag a commit CI has not passed', () => {
     // A tag on a red commit is a promise we did not keep.
     expect(src).toContain('CI green on this commit')
-    expect(src).toMatch(/gh run list --commit/)
+    expect(src).toMatch(/gh run list --workflow \$\{CI_WORKFLOW\} --commit/)
+  })
+
+  it('reads the CI workflow only, not the newest run of any workflow', () => {
+    // A failed manual production-migrate run on the same commit once blocked
+    // a release CI had passed.
+    expect(src).toContain("const CI_WORKFLOW = 'ci.yml'")
+    expect(existsSync(join(process.cwd(), '.github/workflows/ci.yml'))).toBe(true)
+    expect(src).not.toMatch(/gh run list --commit/)
   })
 
   it('refuses a dirty tree, a non-main branch, and being out of sync', () => {
