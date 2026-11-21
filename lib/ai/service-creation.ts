@@ -28,6 +28,36 @@ import {
   type ItemizedTippingRates,
 } from '@/lib/tipping-utils'
 import { rateServesMeal } from '@/lib/meals/meal-rate-meals'
+import { chooseTransportRate } from '@/lib/pricing/transport-choice'
+import { orderTransportRows } from '@/lib/auto-pricing-service'
+import { pickGuideRate, pickMealRate, todayIso } from '@/lib/pricing/service-rates'
+
+/**
+ * The ONE transport rate of a city for a service, by the engine's rule
+ * (lib/pricing/transport-choice): valid today, the starred one, else one
+ * company's cheapest for the group; several companies and none starred is
+ * none. It took the first row the database returned (`.limit(1)`), and with
+ * none for the day's city, the main city's vehicle (owner, 2026-11-19: a
+ * missing price is a gap, never a guess). `rows` are this city's rows of
+ * this service, in the rate currency.
+ */
+export function chooseCityTransportRow<T extends Record<string, any>>(rows: readonly T[] | null | undefined, pax: number): T | null {
+  const valid = orderTransportRows([...(rows ?? [])], todayIso())
+  return valid.length ? chooseTransportRate(valid, pax).rate : null
+}
+
+/**
+ * A transport line priced at nothing because no rate fits: said on the line and
+ * in the warnings, never a silent €0.
+ */
+function flagUnpricedTransport(list: Array<Record<string, any>>, dayNumber: number, warnings: string[]): void {
+  for (const svc of list) {
+    if (svc.service_type !== 'transportation' || Number(svc.total_cost) > 0) continue
+    if (/included|package|cruise/i.test(`${svc.notes ?? ''} ${svc.service_name ?? ''}`)) continue
+    svc.notes = `No rate: add it in Rates → Transportation. ${svc.notes ?? ''}`.trim()
+    warnings.push(`Day ${dayNumber}: no rate for "${svc.service_name}"${svc.notes ? ` (${String(svc.notes).replace(/^No rate: add it in Rates → Transportation\. ?/, '')})` : ''}. It is €0 until the rate is added in Rates → Transportation.`)
+  }
+}
 
 // ============================================
 // ALIAS RESOLUTION: DB-backed + hardcoded fallback
@@ -278,7 +308,6 @@ export async function fetchAllPricingRates(
   }
 ): Promise<PricingRates> {
   const { tier, effectiveCity, totalPax, isEuroPassport, language, hotelName, includeAccommodation } = params
-  const orgId = params.orgId ?? null
   const rateNormalizer = createRateNormalizer(params.rateCurrency ?? DEFAULT_RATE_CURRENCY)
   const orgScope = params.orgId ?? NO_ORG
 
@@ -303,8 +332,7 @@ export async function fetchAllPricingRates(
       .eq('org_id', orgScope)
       .eq('is_active', true)
       .eq('service_type', 'day_tour')
-      .ilike('city', effectiveCity)
-      .limit(1),
+      .ilike('city', effectiveCity),
     // Transfer rate: transportation_rates for airport_transfer service type
     supabase
       .from('transportation_rates')
@@ -312,8 +340,7 @@ export async function fetchAllPricingRates(
       .eq('org_id', orgScope)
       .eq('is_active', true)
       .eq('service_type', 'airport_transfer')
-      .ilike('city', effectiveCity)
-      .limit(1),
+      .ilike('city', effectiveCity),
     // Guides PRIORITY 1: guide_rates table (managed via Rates > Tour Guides UI)
     supabase
       .from('guide_rates')
@@ -361,64 +388,41 @@ export async function fetchAllPricingRates(
     console.warn(`⚠️ [Service Creation] Rate ${miss.id ?? ''} in ${miss.table} is entered in ${miss.currency} and no exchange rate was available — treated as missing`)
   }
 
-  const transportResult = transportRates?.length ? getTransportRateForPax(transportRates[0], totalPax, isEuroPassport) : null
+  const transportRow = chooseCityTransportRow(transportRates, totalPax)
+  const transferRow = chooseCityTransportRow(transferRates, totalPax)
+  const transportResult = transportRow ? getTransportRateForPax(transportRow, totalPax, isEuroPassport) : null
   if (!transportResult) {
     console.warn(`⚠️ No transportation rate found for ${effectiveCity}, ${totalPax} pax — transport will be €0`)
   }
   const vehiclePerDay = transportResult ? (isEuroPassport ? transportResult.rateEur : transportResult.rateNonEur) : 0
   const vehicleTypeName = transportResult ? transportResult.vehicleType : 'Vehicle'
-  const vehicleServiceCode = transportRates?.[0]?.id || 'TRANS'
-  const vehicleSupplierName = transportRates?.[0]?.supplier_name || null
-  const vehicleSupplierId = transportRates?.[0]?.supplier_id || null
+  const vehicleServiceCode = transportRow?.id || 'TRANS'
+  const vehicleSupplierName = transportRow?.supplier_name || null
+  const vehicleSupplierId = transportRow?.supplier_id || null
 
   // Transfer rate (query batched above)
-  const transferResult = transferRates?.length ? getTransportRateForPax(transferRates[0], totalPax, isEuroPassport) : null
+  const transferResult = transferRow ? getTransportRateForPax(transferRow, totalPax, isEuroPassport) : null
   const transferRate = transferResult ? (isEuroPassport ? transferResult.rateEur : transferResult.rateNonEur) : 0
   if (!transferResult) {
     console.warn(`⚠️ No airport transfer rate found for ${effectiveCity}, ${totalPax} pax — transfer will be €0`)
   }
 
-  // Guides — check guide_rates table first (where rates are managed via UI),
-  // then fall back to guides table (supplier contacts with daily_rate)
+  // Guides: Rates → Guides only, picked by the engine's rule
+  // (lib/pricing/service-rates pickGuideRate): the language, a guide who works
+  // in the city (or every city), never another city's guide. It took the
+  // first row of the language, and with none the old guides list down to ANY
+  // guide (owner, 2026-11-19: a missing price is a gap, never a guess).
   let guidePerDay = 0
-  let selectedGuide: any = null
-
-  // PRIORITY 1: guide_rates table (query batched above)
-  if (guideRates?.length) {
-    guidePerDay = toNumber(guideRates[0].base_rate_eur, 0)
+  let selectedGuide: { name: string; id: string; supplierId: string | null; rate_currency: string | null } | null = null
+  const pickedGuide = pickGuideRate(guideRates ?? [], { language, grade: 'egyptologist', duration: 'full_day', mode: 'spot', city: effectiveCity })
+  if (pickedGuide) {
+    guidePerDay = toNumber(pickedGuide.base_rate_eur, 0)
     selectedGuide = {
-      name: guideRates[0].guide_name || `${language} Speaking Guide`,
-      id: guideRates[0].id,
-      // Phase 3 step 1: capture FK to suppliers when the rate row carries it.
-      // The fallback `guides` table (PRIORITY 2) is a separate registry with
-      // no supplier_id column — selectedGuide.supplierId stays undefined
-      // there, which the push site treats as a legitimate NULL.
-      supplierId: guideRates[0].supplier_id || null,
-      rate_currency: guideRates[0].rate_currency ?? null,
+      name: pickedGuide.guide_name || `${language} Speaking Guide`,
+      id: pickedGuide.id,
+      supplierId: pickedGuide.supplier_id || null,
+      rate_currency: pickedGuide.rate_currency ?? null,
     }
-    console.log(`✅ Guide rate from guide_rates: €${guidePerDay}/day (${language})`)
-  }
-
-  // PRIORITY 2: Fall back to guides table (supplier contacts) — the pricing
-  // company's guides only.
-  if (!guidePerDay && orgId) {
-    const { data: guides } = await supabase.from('guides').select('*').eq('org_id', orgId).eq('is_active', true).eq('tier', tier).contains('languages', [language]).limit(5)
-    selectedGuide = guides?.[0]
-    if (!selectedGuide) {
-      const { data: fallbackGuides } = await supabase.from('guides').select('*').eq('org_id', orgId).eq('is_active', true).contains('languages', [language]).limit(1)
-      selectedGuide = fallbackGuides?.[0]
-    }
-    if (!selectedGuide) {
-      const { data: anyTierGuides } = await supabase.from('guides').select('*').eq('org_id', orgId).eq('is_active', true).eq('tier', tier).limit(1)
-      selectedGuide = anyTierGuides?.[0]
-      if (selectedGuide) console.warn(`⚠️ No ${language}-speaking guide found — using ${selectedGuide.name || 'generic'} guide rate`)
-    }
-    if (!selectedGuide) {
-      const { data: anyGuides } = await supabase.from('guides').select('*').eq('org_id', orgId).eq('is_active', true).limit(1)
-      selectedGuide = anyGuides?.[0]
-      if (selectedGuide) console.warn(`⚠️ No guide found for ${language}/${tier} — using ${selectedGuide.name || 'generic'} as last resort`)
-    }
-    guidePerDay = selectedGuide ? toNumber(selectedGuide.daily_rate, 0) : 0
   }
 
   if (!guidePerDay) console.warn(`⚠️ No guide rate found at all — guide will be €0`)
@@ -533,11 +537,12 @@ export async function fetchAllPricingRates(
     vehicleSupplierName,
     vehicleSupplierId,
     transferRate,
-    transferServiceCode: transferRates?.[0]?.id || vehicleServiceCode,
-    transferSupplierName: transferRates?.[0]?.supplier_name || vehicleSupplierName,
-    transferSupplierId: transferRates?.[0]?.supplier_id || vehicleSupplierId,
-    vehicleRateCurrency: transportResult ? transportRates?.[0]?.rate_currency ?? null : null,
-    transferRateCurrency: transferResult ? transferRates?.[0]?.rate_currency ?? null : null,
+    // The transfer's own row (never the day-tour vehicle's supplier).
+    transferServiceCode: transferRow?.id || 'TRANSFER',
+    transferSupplierName: transferRow?.supplier_name || null,
+    transferSupplierId: transferRow?.supplier_id || null,
+    vehicleRateCurrency: transportResult ? transportRow?.rate_currency ?? null : null,
+    transferRateCurrency: transferResult ? transferRow?.rate_currency ?? null : null,
     hotelServiceRateCurrency: hotelSvcRow?.rate_currency ?? null,
     guidePerDay,
     selectedGuide,
@@ -601,40 +606,36 @@ async function getTransportRatesForCity(
 
   const { getTransportRateForPax } = await import('@/lib/transport-rate-utils')
 
-  // Day tour vehicle for this city
-  const { data: dayTourRates } = await supabase
-    .from('transportation_rates')
-    .select('*')
-    .eq('org_id', orgScope)
-    .eq('is_active', true)
-    .eq('service_type', 'day_tour')
-    .ilike('city', city)
-    .limit(1)
+  // This city's rates only (lib/ai/service-creation chooseCityTransportRow):
+  // with none, the line is €0 and flagged, never the main city's vehicle.
+  const cityRows = async (serviceType: string) => {
+    const { data } = await supabase
+      .from('transportation_rates')
+      .select('*')
+      .eq('org_id', orgScope)
+      .eq('is_active', true)
+      .eq('service_type', serviceType)
+      .ilike('city', city)
+    const rows = data ? await primaryRates.rateNormalizer.normalize('transportation_rates', data) : data
+    return chooseCityTransportRow(rows as Record<string, any>[] | null, totalPax)
+  }
 
-  const normDayTour = dayTourRates ? await primaryRates.rateNormalizer.normalize('transportation_rates', dayTourRates) : dayTourRates
-  const dayTourResult = normDayTour?.length ? getTransportRateForPax(normDayTour[0], totalPax, isEuroPassport) : null
-  const vehiclePerDay = dayTourResult ? (isEuroPassport ? dayTourResult.rateEur : dayTourResult.rateNonEur) : primaryRates.vehiclePerDay
-  const vehicleTypeName = dayTourResult ? dayTourResult.vehicleType : primaryRates.vehicleTypeName
-  const vehicleServiceCode = dayTourRates?.[0]?.id || primaryRates.vehicleServiceCode
-  const vehicleSupplierName = dayTourRates?.[0]?.supplier_name || primaryRates.vehicleSupplierName
-  const vehicleSupplierId = dayTourRates?.[0]?.supplier_id || primaryRates.vehicleSupplierId
+  // Day tour vehicle for this city
+  const dayTourRow = await cityRows('day_tour')
+  const dayTourResult = dayTourRow ? getTransportRateForPax(dayTourRow, totalPax, isEuroPassport) : null
+  const vehiclePerDay = dayTourResult ? (isEuroPassport ? dayTourResult.rateEur : dayTourResult.rateNonEur) : 0
+  const vehicleTypeName = dayTourResult ? dayTourResult.vehicleType : 'Vehicle'
+  const vehicleServiceCode = dayTourRow?.id || 'TRANS'
+  const vehicleSupplierName = dayTourRow?.supplier_name || null
+  const vehicleSupplierId = dayTourRow?.supplier_id || null
 
   // Airport transfer for this city
-  const { data: transferRates } = await supabase
-    .from('transportation_rates')
-    .select('*')
-    .eq('org_id', orgScope)
-    .eq('is_active', true)
-    .eq('service_type', 'airport_transfer')
-    .ilike('city', city)
-    .limit(1)
-
-  const normTransfer = transferRates ? await primaryRates.rateNormalizer.normalize('transportation_rates', transferRates) : transferRates
-  const transferResult = normTransfer?.length ? getTransportRateForPax(normTransfer[0], totalPax, isEuroPassport) : null
+  const transferRow = await cityRows('airport_transfer')
+  const transferResult = transferRow ? getTransportRateForPax(transferRow, totalPax, isEuroPassport) : null
   const transferRate = transferResult ? (isEuroPassport ? transferResult.rateEur : transferResult.rateNonEur) : 0
-  const transferServiceCode = transferRates?.[0]?.id || primaryRates.transferServiceCode
-  const transferSupplierName = transferRates?.[0]?.supplier_name || primaryRates.transferSupplierName
-  const transferSupplierId = transferRates?.[0]?.supplier_id || primaryRates.transferSupplierId
+  const transferServiceCode = transferRow?.id || 'TRANSFER'
+  const transferSupplierName = transferRow?.supplier_name || null
+  const transferSupplierId = transferRow?.supplier_id || null
 
   const result: CityTransportRates = {
     vehiclePerDay,
@@ -646,8 +647,8 @@ async function getTransportRatesForCity(
     transferServiceCode,
     transferSupplierName,
     transferSupplierId,
-    vehicleRateCurrency: dayTourResult ? normDayTour?.[0]?.rate_currency ?? null : primaryRates.vehicleRateCurrency,
-    transferRateCurrency: transferResult ? normTransfer?.[0]?.rate_currency ?? null : null,
+    vehicleRateCurrency: dayTourResult ? dayTourRow?.rate_currency ?? null : null,
+    transferRateCurrency: transferResult ? transferRow?.rate_currency ?? null : null,
   }
   cache.set(cacheKey, result)
   return result
@@ -899,14 +900,6 @@ export async function createLandItineraryServices(
   const findMealRate = (city: string, mealType: 'lunch' | 'dinner'): { rate: number; name: string; code: string; supplierName: string | null; warning: string | null; rate_currency?: string | null } => {
     const mealLabel = mealType.charAt(0).toUpperCase() + mealType.slice(1)
     const allMeals = rates.allMealRates || []
-    const typeMatches = allMeals.filter(r => rateServesMeal(r, mealType))
-
-    // Helper: from a list of candidates, pick preferred first, then any
-    const pickBest = (candidates: MealRateRecord[]): MealRateRecord | undefined => {
-      const valid = candidates.filter(r => r.base_rate_eur > 0)
-      return valid.find(r => r.is_preferred) || valid[0]
-    }
-
     const formatResult = (match: MealRateRecord) => ({
       rate: match.base_rate_eur,
       name: `${mealLabel} - ${match.restaurant_name || city}`,
@@ -916,28 +909,18 @@ export async function createLandItineraryServices(
       warning: null
     })
 
-    // --- CITY-SCOPED LOOKUP ONLY ---
-
-    // 1. Best: city + meal_type + tier (prefer preferred)
-    const cityTierCandidates = typeMatches.filter(r =>
-      r.city?.toLowerCase() === city.toLowerCase() && r.tier?.toLowerCase() === tier
-    )
-    const cityTierMatch = pickBest(cityTierCandidates)
-    if (cityTierMatch) return formatResult(cityTierMatch)
-
-    // 2. City + meal_type, any tier (prefer preferred)
-    const cityCandidates = typeMatches.filter(r => r.city?.toLowerCase() === city.toLowerCase())
-    const cityMatch = pickBest(cityCandidates)
-    if (cityMatch) return formatResult(cityMatch)
-
-    // 3. NO cross-city fallback — use generic flat rate and warn
-    const fallback = mealType === 'lunch' ? rates.lunchRate : rates.dinnerRate
+    // ONE restaurant of the day's city (or a rate with no city) at the trip's
+    // tier: the engine's pick (lib/pricing/service-rates pickMealRate). It
+    // fell back to any tier, then to the average of every restaurant of every
+    // city (owner, 2026-11-19: a missing price is a gap, never a guess).
+    const picked = pickMealRate(allMeals.filter(r => (r.tier ?? '').toLowerCase() === tier) as Record<string, any>[], { mealType, city })
+    if (picked) return formatResult(picked.row as MealRateRecord)
     return {
-      rate: fallback,
+      rate: 0,
       name: `${mealLabel} - ${city}`,
       code: mealType.toUpperCase(),
       supplierName: null,
-      warning: `No ${mealType} restaurant found for ${city} (${tier} tier) — using generic rate €${fallback}`
+      warning: `No ${tier} ${mealType} rate in ${city}: the meal is €0 until one is added in Rates → Meals`,
     }
   }
 
@@ -1270,6 +1253,7 @@ export async function createLandItineraryServices(
         }
       }
 
+      flagUnpricedTransport(departureServices, dayNumber, warnings)
       // Insert all departure services (with multi-currency tracking)
       console.log(`📦 Day ${dayNumber} (departure): inserting ${departureServices.length} services for day_id=${day.id}`)
       const departureRows = await withPaidFields(departureServices.map(svc => ({
@@ -1760,58 +1744,20 @@ export async function createLandItineraryServices(
       let dayTransferRateCurrency = rates.transferRateCurrency
 
       if (dayCity.toLowerCase() !== effectiveCity.toLowerCase()) {
-        // Fetch city-specific transport rates
-        const { getTransportRateForPax: getCityTransportRate } = await import('@/lib/transport-rate-utils')
-        const { data: rawCityDayTourRates } = await supabase
-          .from('transportation_rates')
-          .select('*')
-          .eq('org_id', orgScope)
-          .eq('is_active', true)
-          .eq('service_type', 'day_tour')
-          .ilike('city', dayCity)
-          .limit(1)
-        // In the rate currency, like every other rate here (lib/rates/rate-currency):
-        // an EGP row was priced as that many of the rate currency.
-        const cityDayTourRates = rawCityDayTourRates ? await rates.rateNormalizer.normalize('transportation_rates', rawCityDayTourRates) : rawCityDayTourRates
-
-        if (cityDayTourRates?.length) {
-          const result = getCityTransportRate(cityDayTourRates[0], totalPax, isEuroPassport)
-          if (result) {
-            dayTransportRate = isEuroPassport ? result.rateEur : result.rateNonEur
-            dayTransportName = result.vehicleType
-            dayTransportCode = cityDayTourRates[0].id || rates.vehicleServiceCode
-            dayTransportSupplier = cityDayTourRates[0].supplier_name || null
-            dayTransportSupplierId = cityDayTourRates[0].supplier_id || null
-            dayTransportRateCurrency = cityDayTourRates[0].rate_currency ?? null
-            console.log(`🚗 Day ${dayNumber} (${dayCity}): Using city-specific transport rate €${dayTransportRate}`)
-          }
-        } else {
-          console.warn(`⚠️ Day ${dayNumber}: No transport rate found for ${dayCity} — using ${effectiveCity} rate €${dayTransportRate}`)
-        }
-
-        // Also fetch city-specific transfer rate
-        const { data: rawCityTransferRates } = await supabase
-          .from('transportation_rates')
-          .select('*')
-          .eq('org_id', orgScope)
-          .eq('is_active', true)
-          .eq('service_type', 'airport_transfer')
-          .ilike('city', dayCity)
-          .limit(1)
-        // In the rate currency, like every other rate here (lib/rates/rate-currency):
-        // an EGP row was priced as that many of the rate currency.
-        const cityTransferRates = rawCityTransferRates ? await rates.rateNormalizer.normalize('transportation_rates', rawCityTransferRates) : rawCityTransferRates
-
-        if (cityTransferRates?.length) {
-          const result = getCityTransportRate(cityTransferRates[0], totalPax, isEuroPassport)
-          if (result) {
-            dayTransferRate = isEuroPassport ? result.rateEur : result.rateNonEur
-            dayTransferCode = cityTransferRates[0].id || rates.transferServiceCode
-            dayTransferSupplier = cityTransferRates[0].supplier_name || null
-            dayTransferSupplierId = cityTransferRates[0].supplier_id || null
-            dayTransferRateCurrency = cityTransferRates[0].rate_currency ?? null
-          }
-        }
+        // That city's own rates (getTransportRatesForCity): with none, the
+        // line is €0 and flagged, never the main city's rate.
+        const city = await getTransportRatesForCity(cityTransportCache, supabase, dayCity, totalPax, isEuroPassport, rates)
+        dayTransportRate = city.vehiclePerDay
+        dayTransportName = city.vehicleTypeName
+        dayTransportCode = city.vehicleServiceCode
+        dayTransportSupplier = city.vehicleSupplierName
+        dayTransportSupplierId = city.vehicleSupplierId
+        dayTransportRateCurrency = city.vehicleRateCurrency
+        dayTransferRate = city.transferRate
+        dayTransferCode = city.transferServiceCode
+        dayTransferSupplier = city.transferSupplierName
+        dayTransferSupplierId = city.transferSupplierId
+        dayTransferRateCurrency = city.transferRateCurrency
       }
 
       const transportRate = (isTransferOnly && !isIntercityTransfer) ? dayTransferRate : dayTransportRate
@@ -1858,33 +1804,15 @@ export async function createLandItineraryServices(
 
       // Fetch city-specific day tour rate if sightseeing is in a different city than the base
       if (flightSightseeingCity.toLowerCase() !== effectiveCity.toLowerCase()) {
-        const { getTransportRateForPax: getFlightCityRate } = await import('@/lib/transport-rate-utils')
-        const { data: rawFlightCityRates } = await supabase
-          .from('transportation_rates')
-          .select('*')
-          .eq('org_id', orgScope)
-          .eq('is_active', true)
-          .eq('service_type', 'day_tour')
-          .ilike('city', flightSightseeingCity)
-          .limit(1)
-        // In the rate currency, like every other rate here (lib/rates/rate-currency):
-        // an EGP row was priced as that many of the rate currency.
-        const flightCityRates = rawFlightCityRates ? await rates.rateNormalizer.normalize('transportation_rates', rawFlightCityRates) : rawFlightCityRates
-
-        if (flightCityRates?.length) {
-          const result = getFlightCityRate(flightCityRates[0], totalPax, isEuroPassport)
-          if (result) {
-            flightDayTourRate = isEuroPassport ? result.rateEur : result.rateNonEur
-            flightDayTourName = result.vehicleType
-            flightDayTourCode = flightCityRates[0].id || rates.vehicleServiceCode
-            flightDayTourSupplier = flightCityRates[0].supplier_name || null
-            flightDayTourSupplierId = flightCityRates[0].supplier_id || null
-            flightDayTourRateCurrency = flightCityRates[0].rate_currency ?? null
-            console.log(`🚗 Day ${dayNumber} (${flightSightseeingCity}): Using city-specific transport rate €${flightDayTourRate} for domestic flight sightseeing`)
-          }
-        } else {
-          console.warn(`⚠️ Day ${dayNumber}: No transport rate found for ${flightSightseeingCity} — using ${effectiveCity} rate €${flightDayTourRate}`)
-        }
+        // That city's own day-tour vehicle: with none, €0 and flagged, never
+        // the main city's (getTransportRatesForCity).
+        const city = await getTransportRatesForCity(cityTransportCache, supabase, flightSightseeingCity, totalPax, isEuroPassport, rates)
+        flightDayTourRate = city.vehiclePerDay
+        flightDayTourName = city.vehicleTypeName
+        flightDayTourCode = city.vehicleServiceCode
+        flightDayTourSupplier = city.vehicleSupplierName
+        flightDayTourSupplierId = city.vehicleSupplierId
+        flightDayTourRateCurrency = city.vehicleRateCurrency
       }
 
       services.push({
@@ -2303,6 +2231,7 @@ export async function createLandItineraryServices(
       landCruiseTransportAdded = true
     }
 
+    flagUnpricedTransport(services, dayNumber, warnings)
     // Insert all services (with multi-currency tracking + currency conversion)
     console.log(`📦 Day ${dayNumber}: inserting ${services.length} services for day_id=${day.id}`)
     let insertedCount = 0
