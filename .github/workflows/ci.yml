@@ -22,7 +22,7 @@ jobs:
       # Tests/tsc don't use Puppeteer's bundled browser — skip the slow download.
       PUPPETEER_SKIP_DOWNLOAD: 'true'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -90,7 +90,7 @@ jobs:
       # Same memory headroom the type-check needs; the default heap OOMs.
       NODE_OPTIONS: --max-old-space-size=4096
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - uses: actions/setup-node@v4
         with:
@@ -133,7 +133,7 @@ jobs:
       E2E_EMAIL: ${{ secrets.E2E_EMAIL }}
       E2E_PASSWORD: ${{ secrets.E2E_PASSWORD }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       # Secrets are absent on fork PRs — GitHub withholds them by design — so
       # skip cleanly there instead of failing on a server that can't boot.
