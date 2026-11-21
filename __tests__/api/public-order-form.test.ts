@@ -33,6 +33,16 @@ const notifyOrgManagers = vi.fn(async () => ({ created: 2, failed: 0 }))
 vi.mock('@/lib/notify-managers', () => ({ notifyOrgManagers: (...a: unknown[]) => notifyOrgManagers(...(a as [])) }))
 
 import { POST } from '@/app/api/public/order-form/route'
+import { clearWebsitePageCache } from '@/lib/intake/website-page'
+import { OPTIONAL_PAGE, TOUR_PAGE } from '../fixtures/website-pages'
+
+// The website the buttons come from, and what it serves.
+const ORIGIN = 'https://tour.example.jp'
+const fetchMock = vi.fn(async (url: string) => {
+  if (url.startsWith(`${ORIGIN}/detail.php?id=2297504`)) return new Response(TOUR_PAGE, { status: 200 })
+  if (url.startsWith(`${ORIGIN}/opt_detail.php?id=104`)) return new Response(OPTIONAL_PAGE, { status: 200 })
+  return new Response('not found', { status: 404 })
+})
 
 const PAYLOAD = {
   inquiryType: '申込み',
@@ -68,11 +78,22 @@ const rows = async (t: string) => (await (createMockClient().from(t) as any).sel
 
 beforeEach(() => {
   vi.clearAllMocks()
+  clearWebsitePageCache()
+  process.env.ORDER_WEBSITE_ORIGIN = ORIGIN
+  vi.stubGlobal('fetch', fetchMock)
   setMockTables({
-    tour_templates: [{ id: 'tpl-803', template_code: 'NEK803-CR-ABS', template_name: 'NEK803 8 days', duration_days: 8, is_active: true, tour_type: 'cruise' }],
+    organizations: [{ id: 'org-1' }],
+    tour_templates: [
+      { id: 'tpl-803', org_id: 'org-1', template_code: 'NEK803-CR-ABS', template_name: 'NEK803 8 days', duration_days: 8, is_active: true, tour_type: 'cruise' },
+      { id: 'tpl-502', org_id: 'org-1', template_code: 'NEK502-GL', template_name: 'Giza & Luxor 5 days', duration_days: 5, is_active: true, tour_type: 'package', website_url: `${ORIGIN}/detail.php?id=2297504` },
+      { id: 'tpl-mus', org_id: 'org-1', template_code: 'CAI-MUS-01', template_name: 'Three museums day tour', duration_days: 1, is_active: true, tour_type: 'day_tour', website_url: `${ORIGIN}/opt_detail.php?id=104` },
+    ],
     tour_variations: [],
     clients: [],
     tour_quotes: [],
+    web_order_intakes: [],
+    tour_departures: [], departure_bookings: [],
+    itineraries: [], itinerary_days: [], itinerary_services: [],
   })
 })
 
@@ -83,7 +104,10 @@ describe('POST /api/public/order-form', () => {
     expect(json.success).toBe(true)
     const quotes = await rows('tour_quotes')
     expect(quotes).toHaveLength(1)
-    expect(json.reference).toBe(quotes[0].quote_number)
+    expect(json.reference ?? undefined).toBe(quotes[0].quote_number ?? undefined)
+    // Recorded like an emailed order: one intake row, linked to the quote.
+    const [intake] = await rows('web_order_intakes')
+    expect(intake).toMatchObject({ org_id: 'org-1', outcome: 'quote_created', quote_id: quotes[0].id, tour_code: 'NEK803-ABCR', email_message_id: null })
     // The operator's numbers must NOT leave through this door.
     const flat = JSON.stringify(json)
     expect(flat).not.toContain('margin')
@@ -97,7 +121,7 @@ describe('POST /api/public/order-form', () => {
     expect((notifyOrgManagers.mock.calls[0] as any[])[2].link).toBe(`/b2b/quotes/${quotes[0].id}`)
   })
 
-  it('an unknown tour code is NOT bounced: received + manager notification with the paste link', async () => {
+  it('an unknown tour code is NOT bounced: received + manager notification with the intake to finish', async () => {
     const { status, json } = await post({ ...PAYLOAD, tourCode: 'ZZZ999-XX' })
     expect(status).toBe(200)
     expect(json.success).toBe(true)
@@ -105,11 +129,12 @@ describe('POST /api/public/order-form', () => {
     expect(await rows('tour_quotes')).toEqual([])
     expect(notifyOrgManagers).toHaveBeenCalledTimes(1)
     const notice = (notifyOrgManagers.mock.calls[0] as any[])[2]
-    expect(notice.link).toMatch(/^\/intake\/order\?text=/)
-    // The link carries the whole order in the canonical document shape.
-    const text = Buffer.from(decodeURIComponent(notice.link.split('text=')[1]), 'base64').toString('utf8')
-    expect(text).toContain('ツアーコード：ZZZ999-XX')
-    expect(text).toContain('お名前：姓 YAMADA 名 TARO')
+    const [intake] = await rows('web_order_intakes')
+    expect(notice.link).toBe(`/intake/order?intake=${intake.id}`)
+    expect(intake.outcome).toBe('needs_attention')
+    // The stored text is the website's notification shape, read back whole.
+    expect(intake.order_text).toContain('●ツアーコード：ZZZ999-XX')
+    expect(intake.order_text).toContain('　お名前：YAMADA TARO')
   })
 
   it('the honeypot swallows a bot without writing anything', async () => {
@@ -136,5 +161,80 @@ describe('POST /api/public/order-form', () => {
     }
     const { status } = await post(PAYLOAD, ip)
     expect(status).toBe(429)
+  })
+
+  it('a website button (page id + date): code, title and fare come from the page, the browser\'s price is ignored', async () => {
+    const { tourCode: _c, tourTitle: _t, ...rest } = PAYLOAD
+    const { status, json } = await post({ ...rest, pageId: '2297504', departureDate1: '2026-11-22', departureDate2: '2026-11-23', websiteSubtotalJpy: 1, websiteBaseFare1: { adultJpy: 1 } })
+    expect(status).toBe(200)
+    expect(json.success).toBe(true)
+    expect(fetchMock).toHaveBeenCalledWith(`${ORIGIN}/detail.php?id=2297504&d=ALL&hf=1`, expect.anything())
+    const [intake] = await rows('web_order_intakes')
+    expect(intake.tour_code).toBe('NEK502')
+    expect(intake.order_data).toMatchObject({
+      tourCode: 'NEK502', tourTitle: '★国内線で楽々★エジプト5日間 ギザ＆ルクソール', productKind: 'tour',
+      websiteUrl: `${ORIGIN}/detail.php?id=2297504`,
+      websiteBaseFare1: { adultJpy: 364000, childJpy: 254800, infantJpy: 32000 },
+      websiteBaseFare2: { adultJpy: 364000, childJpy: 254800, infantJpy: 32000 },
+    })
+    expect(intake.order_data.websiteSubtotalJpy).toBeUndefined()
+    // Matched by its website page, priced at the website's fare (2 × 364,000).
+    const [quote] = await rows('tour_quotes')
+    expect(quote).toMatchObject({ currency: 'JPY', selling_price: 728000, travel_date: '2026-11-22' })
+    expect(quote.trip_name).toBe('Giza & Luxor 5 days')
+  })
+
+  it('a family: a child (2–11) at 70% of the adult fare, an infant (under 2) at the flight-only fare', async () => {
+    const { tourCode: _c, tourTitle: _t, ...rest } = PAYLOAD
+    await post({ ...rest, pageId: '2297504', departureDate1: '2026-11-22', adults: 2, children: 1, infants: 1 })
+    const [quote] = await rows('tour_quotes')
+    expect(quote).toMatchObject({ currency: 'JPY', selling_price: 2 * 364000 + 254800 + 32000 })
+    const [intake] = await rows('web_order_intakes')
+    expect(intake.order_data).toMatchObject({ adults: 2, children: 1, infants: 1 })
+    expect(intake.order_text).toContain('●第1希望日基本旅行代金：大人 364,000円、子供 254,800円、幼児 32,000円')
+  })
+
+  it('the same order submitted twice is one order', async () => {
+    await post(PAYLOAD)
+    const { json } = await post(PAYLOAD)
+    expect(json.success).toBe(true)
+    expect(await rows('tour_quotes')).toHaveLength(1)
+    expect((await rows('web_order_intakes')).map(r => r.outcome)).toEqual(['quote_created', 'duplicate'])
+  })
+
+  it('an optional-tour cart: each line is its own order, priced at the page\'s fares', async () => {
+    const { tourCode: _c, tourTitle: _t, departureDate1: _d, ...rest } = PAYLOAD
+    const { status, json } = await post({
+      ...rest, kind: 'optional',
+      items: [
+        { pageId: '104', date: '2027-02-24', adults: 2, children: 1, infants: 1 },
+        { pageId: '104', date: '2027-02-26', adults: 1, children: 0 },
+      ],
+    })
+    expect(status).toBe(200)
+    expect(json.success).toBe(true)
+    const intakes = await rows('web_order_intakes')
+    expect(intakes).toHaveLength(2)
+    expect(intakes[0].order_data).toMatchObject({ productKind: 'optional', tourCode: 'CAI-10046-MUS', infants: 1, websiteSubtotalJpy: 2 * 38500 + 29000, departureDate1: '2027-02-24' })
+    expect(intakes[1].order_data).toMatchObject({ websiteSubtotalJpy: 38500, departureDate1: '2027-02-26' })
+    expect(intakes[0].order_text).toContain('●オプショナルコード：CAI-10046-MUS')
+    expect(await rows('tour_quotes')).toHaveLength(2)
+  })
+
+  it('an empty cart or a line with no date is a 400', async () => {
+    expect((await post({ ...PAYLOAD, kind: 'optional', items: [] })).status).toBe(400)
+    expect((await post({ ...PAYLOAD, kind: 'optional', items: [{ pageId: '104', adults: 1 }] })).status).toBe(400)
+  })
+
+  it('the website down: the order still goes in by the page it came from', async () => {
+    fetchMock.mockImplementationOnce(async () => { throw new Error('timeout') })
+    const { tourCode: _c, ...rest } = PAYLOAD
+    const { json } = await post({ ...rest, pageId: '2297504', departureDate1: '2026-11-22' })
+    expect(json.success).toBe(true)
+    const [intake] = await rows('web_order_intakes')
+    expect(intake.order_data).toMatchObject({ tourCode: 'WEB-2297504', websiteUrl: `${ORIGIN}/detail.php?id=2297504` })
+    expect(intake.order_data.websiteBaseFare1).toBeUndefined()
+    // Still the right programme — found by its page.
+    expect((await rows('tour_quotes'))[0].trip_name).toBe('Giza & Luxor 5 days')
   })
 })

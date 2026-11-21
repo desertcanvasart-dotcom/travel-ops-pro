@@ -29,8 +29,9 @@ export function isWebsitePriced(record: { source?: string | null; currency?: str
 export interface WebsiteFareOrder {
   adults: number
   children: number
+  infants?: number
   websiteSubtotalJpy?: number
-  websiteBaseFare1?: { adultJpy?: number; childJpy?: number }
+  websiteBaseFare1?: { adultJpy?: number; childJpy?: number; infantJpy?: number }
 }
 
 /**
@@ -44,9 +45,13 @@ export function websiteOrderPriceJpy(order: WebsiteFareOrder): number | null {
   if (!fare) return null
   const adults = Math.max(0, order.adults || 0)
   const children = Math.max(0, order.children || 0)
+  const infants = Math.max(0, order.infants || 0)
   if (adults > 0 && !(fare.adultJpy && fare.adultJpy > 0)) return null
   if (children > 0 && !(fare.childJpy && fare.childJpy > 0)) return null
-  const total = adults * (fare.adultJpy ?? 0) + children * (fare.childJpy ?? 0)
+  // An infant (under 2) pays the flight only — its own fare, which may be
+  // 0 but must be KNOWN: an infant is not priced free by default.
+  if (infants > 0 && !(typeof fare.infantJpy === 'number' && fare.infantJpy >= 0)) return null
+  const total = adults * (fare.adultJpy ?? 0) + children * (fare.childJpy ?? 0) + infants * (fare.infantJpy ?? 0)
   return total > 0 ? total : null
 }
 

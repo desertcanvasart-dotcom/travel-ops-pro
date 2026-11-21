@@ -168,7 +168,9 @@ function baseFare(v: string | undefined): WebsiteBaseFare | undefined {
     const n = m ? Number(m[1].replace(/,/g, '')) : NaN
     return Number.isFinite(n) && n > 0 ? n : undefined
   }
-  const fare = { adultJpy: yen('大人'), childJpy: yen('子供') }
+  const fare: WebsiteBaseFare = { adultJpy: yen('大人'), childJpy: yen('子供') }
+  const infant = v.match(/幼児\s*:?\s*([\d,]+)\s*円/)
+  if (infant) fare.infantJpy = Number(infant[1].replace(/,/g, ''))
   return fare.adultJpy || fare.childJpy ? fare : undefined
 }
 
@@ -299,4 +301,62 @@ export function emailOrderText(bodyText: string | null | undefined, bodyHtml: st
     .replace(/&nbsp;/g, ' ')
     .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'")
     .replace(/[ \t]+\n/g, '\n')
+}
+
+const slash = (iso: string) => iso.replace(/-/g, '/')
+const fareLine = (f: WebsiteBaseFare | undefined) =>
+  f ? [
+    f.adultJpy ? `大人 ${f.adultJpy.toLocaleString('en-US')}円` : null,
+    f.childJpy ? `子供 ${f.childJpy.toLocaleString('en-US')}円` : null,
+    typeof f.infantJpy === 'number' ? `幼児 ${f.infantJpy.toLocaleString('en-US')}円` : null,
+  ].filter(Boolean).join('、') : ''
+
+/**
+ * An order written as the website's own notification — the shape
+ * parseTupMail reads back field for field, kind, page, infants and the
+ * website's fare included. The hosted form's orders are stored this way
+ * (web_order_intakes.order_text), so one the pipeline could not finish
+ * opens on /intake/order exactly as an emailed one does. Round trip pinned
+ * in __tests__/lib/tup-mail.test.ts.
+ */
+export function formatAsTupMail(o: TourUpOrder): string {
+  const optional = o.productKind === 'optional'
+  const lines: (string | null)[] = [
+    optional ? 'オプショナルツアーのお申込みがありました。' : 'ツアーのお申込みがありました。',
+    '',
+    `●問合せ種別：${o.inquiryType || '申込み'}`,
+    `${optional ? '●オプショナルコード' : '●ツアーコード'}：${o.tourCode}`,
+    o.tourTitle ? `●ツアータイトル：${o.tourTitle}` : null,
+    `●区分：${optional ? 'オプショナルツアー' : 'パッケージツアー'}`,
+    o.websiteUrl ?? null,
+    '',
+    `${optional ? '●希望利用日' : '●希望出発日(第1希望)'}：${slash(o.departureDate1)}`,
+    o.departureDate2 ? `${optional ? '●希望利用日(第2希望)' : '●希望出発日(第2希望)'}：${slash(o.departureDate2)}` : null,
+    o.websiteBaseFare1 ? `●第1希望日基本旅行代金：${fareLine(o.websiteBaseFare1)}` : null,
+    o.websiteBaseFare2 ? `●第2希望日基本旅行代金：${fareLine(o.websiteBaseFare2)}` : null,
+    o.departureAirport ? `●出発地：${o.departureAirport}` : null,
+    `●参加人数：大人 ${o.adults}人、子供 ${o.children}人、幼児 ${o.infants ?? 0}人`,
+    o.websiteSubtotalJpy ? `●小計：${o.websiteSubtotalJpy.toLocaleString('en-US')}円` : null,
+    o.priceNotes ? `●料金備考：${o.priceNotes}` : null,
+    '',
+    `●メールアドレス：${o.email}`,
+    o.phone ? `●電話番号：${o.phone}` : null,
+    o.contactMethod ? `●希望の連絡方法：${o.contactMethod === 'phone' ? '電話' : 'メール'}` : null,
+    '',
+    o.lead.lastNameKanji || o.lead.firstNameKanji ? `●お名前(漢字)：${[o.lead.lastNameKanji, o.lead.firstNameKanji].filter(Boolean).join(' ')}` : null,
+    o.lead.lastNameKana || o.lead.firstNameKana ? `●お名前(カナ)：${[o.lead.lastNameKana, o.lead.firstNameKana].filter(Boolean).join(' ')}` : null,
+    o.postalCode || o.prefecture || o.address ? `●ご住所：〒 ${o.postalCode ?? ''}\n　${o.prefecture ?? ''}${o.address ?? ''}`.trimEnd() : null,
+    o.requests ? `●ご要望・質問など：${o.requests}` : null,
+    '',
+    '●代表者',
+    `　お名前：${o.lead.lastNameRomaji} ${o.lead.firstNameRomaji}`,
+    o.lead.birthDate ? `　生年月日：${slash(o.lead.birthDate)}` : null,
+    o.lead.gender ? `　性別：${o.lead.gender === 'female' ? '女性' : '男性'}` : null,
+  ]
+  o.companions.forEach((c, i) => {
+    lines.push('', `●同行者${i + 1}`, `　お名前：${c.lastNameRomaji} ${c.firstNameRomaji}`)
+    if (c.birthDate) lines.push(`　生年月日：${slash(c.birthDate)}`)
+    if (c.gender) lines.push(`　性別：${c.gender === 'female' ? '女性' : '男性'}`)
+  })
+  return lines.filter(l => l !== null).join('\n') + '\n'
 }

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest'
-import { emailOrderText, looksLikeTupMail, parseTupMail, websitePageKey } from '@/lib/intake/tup-mail'
+import { emailOrderText, formatAsTupMail, looksLikeTupMail, parseTupMail, websitePageKey } from '@/lib/intake/tup-mail'
+import type { TourUpOrder } from '@/lib/intake/tour-up-order'
 import { looksLikeTourUpOrder, parseTourUpOrder } from '@/lib/intake/tour-up-order'
 
 import { OPTIONAL_TOUR_MAIL, PACKAGE_TOUR_MAIL, REAL_TOUR_MAIL } from '../fixtures/tup-mails'
@@ -164,5 +165,37 @@ describe('T-UP notification email (the website → the office)', () => {
     expect(websitePageKey('http://www.tour.ats-hj.com/opt_detail.php?ref=x&id=67')).toBe('opt_detail.php?id=67')
     expect(websitePageKey('not a url')).toBeNull()
     expect(websitePageKey(null)).toBeNull()
+  })
+})
+
+// The hosted form's orders are stored as the website's own notification, so
+// one the pipeline could not finish reopens on /intake/order exactly as an
+// emailed one does — kind, page, infants and the website's fare included.
+describe('formatAsTupMail (the hosted form → the stored order text)', () => {
+  const base: TourUpOrder = {
+    inquiryType: '申込み', tourCode: 'NEK502', tourTitle: '★国内線で楽々★エジプト5日間', departureDate1: '2026-11-22', departureDate2: '2026-11-23',
+    departureAirport: '成田空港', adults: 2, children: 1, contactMethod: 'email', email: 'taro@example.jp', phone: '090-1234-5678',
+    lead: { lastNameRomaji: 'YAMADA', firstNameRomaji: 'TARO', lastNameKanji: '山田', firstNameKanji: '太郎', lastNameKana: 'ヤマダ', firstNameKana: 'タロウ', gender: 'male', birthDate: '1960-01-02' },
+    postalCode: '150-0001', prefecture: '東京都', address: '渋谷区1-2-3', requests: '窓側の部屋を希望します。',
+    companions: [{ lastNameRomaji: 'YAMADA', firstNameRomaji: 'HANAKO', gender: 'female', birthDate: '1962-03-04' }],
+    productKind: 'tour', websiteUrl: 'https://tour.example.jp/detail.php?id=2297504',
+    websiteBaseFare1: { adultJpy: 364000 }, websiteBaseFare2: { adultJpy: 364000 },
+  }
+
+  it('a programme reads back field for field', () => {
+    const text = formatAsTupMail(base)
+    expect(looksLikeTupMail(text)).toBe(true)
+    expect(parseTourUpOrder(text)).toEqual(base)
+  })
+
+  it('an optional tour reads back with its kind, infants and subtotal', () => {
+    const opt: TourUpOrder = {
+      ...base, tourCode: 'CAI-10046-MUS', tourTitle: '3大博物館めぐり', departureDate2: undefined, departureAirport: undefined,
+      websiteBaseFare1: undefined, websiteBaseFare2: undefined,
+      productKind: 'optional', websiteUrl: 'https://tour.example.jp/opt_detail.php?id=104', infants: 1, websiteSubtotalJpy: 106000,
+    }
+    const back = parseTourUpOrder(formatAsTupMail(opt))!
+    expect(back).toMatchObject({ ...opt, departureDate2: undefined, departureAirport: undefined })
+    expect(back.productKind).toBe('optional')
   })
 })

@@ -656,6 +656,10 @@ export async function middleware(request: NextRequest, event: NextFetchEvent) {
     // honeypot, validates every field with hard caps, and answers the
     // customer with received-or-not only — never the operator's numbers.
     '/api/public/order-form',
+    // The same form's look-up of the website page it was opened from: code,
+    // title and the website's own public fares. EXACT route; rate-limited;
+    // takes a numeric page id only and reads only the configured website.
+    '/api/public/website-page',
     // The guest survey load/submit. The visitor is a customer with no session;
     // the route is token-gated, rate-limited, and sanitizes every field.
     '/api/public/survey/',
