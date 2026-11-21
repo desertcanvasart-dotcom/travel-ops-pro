@@ -113,6 +113,25 @@ describe('codeFromFilename', () => {
     expect(codeFromFilename('日程表 MSN1002－ABCR with Menu.docx')).toBe('MSN1002-ABCR')
   })
 
+  it('reads the Kansai airport letter (KEK802 is not EK802)', () => {
+    expect(codeFromFilename('KEK802-ABS.docx')).toBe('KEK802-ABS')
+    expect(codeFromFilename('KEK802-ABS 日程表.docx')).toBe('KEK802-ABS')
+    expect(codeFromFilename('KEK802-ABS_日程表.docx')).toBe('KEK802-ABS')
+    expect(codeFromFilename('1.KEK802-ABS_日程表.docx')).toBe('KEK802-ABS')
+    // EgyptAir Kansai, both orders the canon tolerates.
+    expect(codeFromFilename('日程表 KMS805-CR.docx')).toBe('KMS805-CR')
+    expect(codeFromFilename('MSK805-CR.docx')).toBe('MSK805-CR')
+  })
+
+  it('still reads the Narita, carrier-first and airport-less codes', () => {
+    expect(codeFromFilename('日程表NEK806-CR.docx')).toBe('NEK806-CR')
+    expect(codeFromFilename('NEK 901 日程表.docx')).toBe('NEK901')
+    expect(codeFromFilename('MSN1005-CR 日程表.docx')).toBe('MSN1005-CR')
+    expect(codeFromFilename('MSN-601.docx')).toBe('MSN-601')
+    expect(codeFromFilename('MSBZ805-CR.docx')).toBe('MSBZ805-CR')
+    expect(codeFromFilename('EK802-ABS.docx')).toBe('EK802-ABS')
+  })
+
   it('returns null when there is no code to read', () => {
     expect(codeFromFilename('notes.docx')).toBeNull()
   })

@@ -95,4 +95,20 @@ describe('tour-up.jp order form', () => {
     expect(matchTemplateCode('NEK803', [...T, { template_code: 'NEK803-LND' }])).toBeNull()
     expect(matchTemplateCode('XYZ1-AB', T)).toBeNull()
   })
+
+  it('keeps the airport letter in the stem: Kansai KEK802 is not EK802', () => {
+    const T = [{ template_code: 'KEK802-ABS' }, { template_code: 'NEK803-CR-ABS' }]
+    expect(matchTemplateCode('KEK802-ABS', T)?.template_code).toBe('KEK802-ABS')
+    expect(matchTemplateCode('kek802', T)?.template_code).toBe('KEK802-ABS')
+    expect(matchTemplateCode('EK802-ABS', T)).toBeNull()
+    expect(matchTemplateCode('KEK802-ABS', [{ template_code: 'EK802-ABS' }])).toBeNull()
+    expect(matchTemplateCode('NEK803-ABCR', T)?.template_code).toBe('NEK803-CR-ABS')
+    expect(matchTemplateCode('MSN1005', [{ template_code: 'MSN1005-CR' }])?.template_code).toBe('MSN1005-CR')
+  })
+
+  it('reads a hyphen after the prefix as part of the stem (MSN-601 is MSN601)', () => {
+    const T = [{ template_code: 'MSN-601' }, { template_code: 'MSN-602' }]
+    expect(matchTemplateCode('MSN601', T)?.template_code).toBe('MSN-601')
+    expect(matchTemplateCode('MSN-602-LND', T)?.template_code).toBe('MSN-602')
+  })
 })
